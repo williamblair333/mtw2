@@ -1,0 +1,37 @@
+# The 1080 grand campaign with historic rulers: the author plays England; six LLM rulers;
+# everyone else is the game's own AI. Personas come from personas/historic-1080.toml.
+# Claude seats run in parallel; Gemini (agy) seats take turns one at a time (~15 s each).
+game_id = "historic-1080"
+turn_root = "~/.steam/steam/steamapps/common/Medieval II Total War/parley_turns"
+save_dir = "~/.steam/steam/steamapps/common/Medieval II Total War/saves"
+seat_timeout = 120
+
+[humans]
+england = "your_discord_name"
+
+[discord]
+guild = "My Parley Server"
+
+[seats.france]
+brain = "claude:sonnet"
+persona = "@philip-i-of-france"
+
+[seats.hre]
+brain = "claude:sonnet"
+persona = "@henry-iv-hre"
+
+[seats.scotland]
+brain = "claude:sonnet"
+persona = "@malcolm-canmore"
+
+[seats.venice]
+brain = "agy:gemini-3.8-flash-low"
+persona = "@domenico-selvo"
+
+[seats.sicily]
+brain = "agy:gemini-3.8-flash-low"
+persona = "@robert-guiscard"
+
+[seats.papal_states]
+brain = "agy:gemini-3.8-flash-low"
+persona = "@gregory-vii"

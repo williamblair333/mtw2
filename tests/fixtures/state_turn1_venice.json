@@ -1,0 +1,24 @@
+{
+  "protocol": 1,
+  "game_id": "test",
+  "turn": 1,
+  "year": 1080,
+  "faction": "venice",
+  "treasury": 5000,
+  "income": 1200,
+  "settlements": [
+    {"id": "venice", "name": "Venice", "region": "Veneto", "garrison_strength": 800, "population": 9000, "buildings": ["stone_wall", "market"]},
+    {"id": "ragusa", "name": "Ragusa", "region": "Dalmatia", "garrison_strength": 300, "population": 3000, "buildings": ["wooden_pallisade"]}
+  ],
+  "armies": [
+    {"id": "a1", "leader": "Doge Enrico", "x": 120, "y": 88, "strength": 1400, "units": 9, "in_settlement": "venice"}
+  ],
+  "factions": [
+    {"id": "milan", "name": "Milan", "stance": "peace"},
+    {"id": "hre", "name": "Holy Roman Empire", "stance": "war"}
+  ],
+  "visible_enemies": [
+    {"id": "e1", "leader": "Heinrich", "x": 110, "y": 70, "strength": 1100, "units": 7, "in_settlement": null}
+  ],
+  "last_results": []
+}

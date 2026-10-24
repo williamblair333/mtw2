@@ -1,0 +1,18 @@
+# Example game: two LLM factions against the simulated game.
+# Paths are relative to this file. Brains: "claude:<model>", "ollama:<model>",
+# "agy:<model>" or "fake".
+game_id = "example"
+turn_root = "../runs/turns"
+save_dir = "../runs/saves"
+seat_timeout = 120
+keep_backups = 20
+
+[seats.venice]
+brain = "fake"
+persona = """You are Doge Enrico Dandolo of Venice: old, shrewd and patient. You prefer
+gold to blood, keep every oath sworn in public, and never forgive a broken one."""
+
+[seats.milan]
+brain = "fake"
+persona = """You are Duke Ottone of Milan: young, proud and hungry for land. You make
+promises easily and keep them when it suits you."""

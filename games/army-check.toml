@@ -1,0 +1,9 @@
+# Live check of army orders: Venice's first field general marches on Milan, besieges it,
+# then withdraws to Venice. The author plays England in a NEW grand campaign.
+game_id = "army-check"
+turn_root = "~/.steam/steam/steamapps/common/Medieval II Total War/parley_turns"
+save_dir = "~/.steam/steam/steamapps/common/Medieval II Total War/saves"
+
+[seats.venice]
+brain = "script:games/army-check.json"
+persona = "Scripted check."

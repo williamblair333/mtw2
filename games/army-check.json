@@ -1,0 +1,12 @@
+{
+  "0": [
+    {"type": "march_on", "army": "$general", "target_settlement": "Milan"}
+  ],
+  "1": [
+    {"type": "set_stance", "to": "milan", "stance": "war"},
+    {"type": "besiege", "army": "$general", "settlement": "Milan"}
+  ],
+  "2": [
+    {"type": "withdraw", "army": "$general", "to_settlement": "Venice"}
+  ]
+}

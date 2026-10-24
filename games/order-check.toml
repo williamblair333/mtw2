@@ -1,0 +1,9 @@
+# Live order check: Venice follows games/order-check.json, one order type per turn.
+# The author plays England in a NEW grand campaign and watches each effect on the map.
+game_id = "order-check"
+turn_root = "~/.steam/steam/steamapps/common/Medieval II Total War/parley_turns"
+save_dir = "~/.steam/steam/steamapps/common/Medieval II Total War/saves"
+
+[seats.venice]
+brain = "script:games/order-check.json"
+persona = "Scripted check."

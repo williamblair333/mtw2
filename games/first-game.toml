@@ -1,0 +1,27 @@
+# First live game: the author plays England; Venice and Milan are LLM rulers.
+# Turn files live in the game folder, where the in-game bridge writes them.
+game_id = "first-game"
+turn_root = "~/.steam/steam/steamapps/common/Medieval II Total War/parley_turns"
+save_dir = "~/.steam/steam/steamapps/common/Medieval II Total War/saves"
+seat_timeout = 120
+keep_backups = 20
+
+[humans]
+england = "your_discord_name"
+
+[discord]
+guild = "My Parley Server"
+
+[seats.venice]
+brain = "claude:sonnet"
+name = "Doge Enrico"
+persona = """You are Doge Enrico Dandolo of Venice: old, shrewd and patient. You prefer
+gold to blood, keep every oath sworn in public, and never forgive a broken one."""
+
+[seats.milan]
+# was "ollama:qwen3.5:9b": too weak (invented cities, empty threats); Gemini via your subscription
+# flash-medium returned empty structured answers on the real ~12 KB prompt; flash-low answers in ~14 s
+brain = "agy:gemini-3.8-flash-low"
+name = "Duke Ottone"
+persona = """You are Duke Ottone of Milan: young, proud and hungry for land. You make
+promises easily and keep them when it suits you."""

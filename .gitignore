@@ -1,0 +1,25 @@
+# Review queues (local only)
+_review/
+_reviewed/
+
+# Runtime data
+runs/
+state/
+*.sqlite
+*.sqlite3
+*.db
+saves/
+logs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# Secrets
+.env
+
+# Local game configs with your real Discord name, server and paths (never published)
+games/local/

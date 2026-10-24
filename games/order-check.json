@@ -1,0 +1,25 @@
+{
+  "0": [
+    {"type": "set_stance", "to": "england", "stance": "alliance"},
+    {"type": "send_gold", "to": "england", "amount": 1000}
+  ],
+  "1": [
+    {"type": "cede_settlement", "settlement": "Ragusa", "to": "england"}
+  ],
+  "2": [
+    {"type": "march_on", "army": "Captain Pascal", "target_settlement": "Milan"}
+  ],
+  "3": [
+    {"type": "set_stance", "to": "milan", "stance": "war"},
+    {"type": "besiege", "army": "Captain Pascal", "settlement": "Milan"}
+  ],
+  "4": [
+    {"type": "withdraw", "army": "Captain Pascal", "to_settlement": "Venice"}
+  ],
+  "5": [
+    {"type": "send_gold", "to": "england", "amount": 999999},
+    {"type": "set_stance", "to": "atlantis", "stance": "war"},
+    {"type": "cede_settlement", "settlement": "Milan", "to": "england"},
+    {"type": "set_stance", "to": "milan", "stance": "peace"}
+  ]
+}
