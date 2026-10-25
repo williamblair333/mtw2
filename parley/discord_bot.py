@@ -28,6 +28,9 @@ class Table(Protocol):
     async def ensure_pair(self, a: str, b: str, humans: list[str]) -> str | None:
         """Make sure the private thread exists; return a clickable mention of it."""
         ...
+    async def ensure_adviser(self, faction: str, username: str | None) -> str | None:
+        """Make sure the ruler's thread with its adviser exists; return a mention of it."""
+        ...
 
 
 def format_line(name: str, faction_display: str, text: str) -> str:
@@ -50,7 +53,8 @@ def acquire_bot_lock(turn_root: Path):
 
 
 async def pump_outbox(store: Store, table: Table, game_id: str, names: dict[str, str],
-                      humans: dict[str, str], attempts: dict[int, int] | None = None) -> int:
+                      humans: dict[str, str], attempts: dict[int, int] | None = None,
+                      advisers: dict[str, str] | None = None) -> int:
     """Post unposted rows in order; returns how many were posted.
 
     Stops at the first failure so order is kept. A row that has failed MAX_ATTEMPTS pumps is
@@ -63,6 +67,9 @@ async def pump_outbox(store: Store, table: Table, game_id: str, names: dict[str,
             if m.channel.startswith("pair:"):
                 a, b = m.channel.removeprefix("pair:").split("|")
                 await table.ensure_pair(a, b, [humans[f] for f in (a, b) if f in humans])
+            elif m.channel.startswith("adviser:"):
+                faction = m.channel.removeprefix("adviser:")
+                await table.ensure_adviser(faction, (advisers or {}).get(faction))
             if m.sender == "parley":  # system notices (turn cues, transfers), posted plain
                 await table.send(m.channel, m.text[:DISCORD_LIMIT])
             else:
@@ -82,9 +89,14 @@ async def pump_outbox(store: Store, table: Table, game_id: str, names: dict[str,
 
 
 async def handle_incoming(responder, humans: dict[str, str], author: str, is_bot: bool,
-                          channel: str | None, text: str) -> None:
+                          channel: str | None, text: str, advisers: dict[str, str] | None = None) -> None:
     """A Discord message from `author` in store channel `channel` (None if not ours)."""
     if is_bot or channel is None:
+        return
+    if channel.startswith("adviser:"):  # only the ruler's own adviser speaks there
+        faction = channel.removeprefix("adviser:")
+        if (advisers or {}).get(faction) == author:
+            await responder.on_incoming(channel, f"adviser:{faction}", text[:DISCORD_LIMIT])
         return
     faction = next((f for f, user in humans.items() if user == author), None)
     if faction is None:
@@ -110,6 +122,17 @@ async def private_command(table: Table, humans: dict[str, str], seats: set[str],
     a, b = sorted((me, other))
     link = await table.ensure_pair(a, b, [humans[f] for f in (a, b) if f in humans])
     return f"Private thread **{a} ↔ {b}** is open: {link or ''} (only the two of you read it)."
+
+
+async def adviser_command(table: Table, advisers: dict[str, str], author: str, text: str) -> str | None:
+    """'!adviser' from an adviser: open (or reuse) their thread with each ruler they advise."""
+    if text.strip().lower() != "!adviser":
+        return None
+    mine = sorted(f for f, user in advisers.items() if user == author)
+    if not mine:
+        return None
+    links = [f"**adviser ↔ {f}**: {await table.ensure_adviser(f, author) or ''}" for f in mine]
+    return "Your counsel is welcome (only you and the ruler read these):\n" + "\n".join(links)
 
 
 class DiscordTable:
@@ -150,7 +173,9 @@ class DiscordTable:
         self.table = self.chronicle
         if self.table.id != self.lobby.id:
             for t in list(self.table.threads) + [t async for t in self.table.archived_threads(private=True)]:
-                if " ↔ " in t.name:
+                if t.name.startswith("adviser ↔ "):
+                    self._remember(f"adviser:{t.name.removeprefix('adviser ↔ ')}", t)
+                elif " ↔ " in t.name:
                     a, b = t.name.split(" ↔ ")
                     self._remember(f"pair:{a}|{b}", t)
 
@@ -178,6 +203,24 @@ class DiscordTable:
             else:
                 log.warning("Discord user %s not found in %s", username, self.guild.name)
         self._remember(channel, thread)
+        return thread.mention
+
+    async def ensure_adviser(self, faction: str, username: str | None) -> str | None:
+        import discord
+        channel = f"adviser:{faction}"
+        thread = self.threads.get(channel)
+        if thread is None:
+            thread = await self.table.create_thread(
+                name=f"adviser ↔ {faction}", type=discord.ChannelType.private_thread, invitable=False)
+            self._remember(channel, thread)
+        # (re)add the adviser every time: an adopted thread, or one made before they joined the
+        # server, may not have them yet; adding an existing member is harmless
+        member = username and (discord.utils.get(self.guild.members, name=username)
+                               or await self._fetch_member(username))
+        if member:
+            await thread.add_user(member)
+        else:
+            log.warning("adviser %s for %s not found in %s", username, faction, self.guild.name)
         return thread.mention
 
     async def _fetch_member(self, username: str):
@@ -221,7 +264,8 @@ def run_bot(config: GameConfig) -> None:
         attempts: dict[int, int] = {}
         while True:
             try:
-                await pump_outbox(store, table, config.game_id, names, config.humans, attempts)
+                await pump_outbox(store, table, config.game_id, names, config.humans, attempts,
+                                  advisers=config.advisers())
             except Exception:  # e.g. SQLite busy: log and keep pumping
                 log.exception("outbox pump failed; retrying")
             await asyncio.sleep(PUMP_SECONDS)
@@ -239,11 +283,12 @@ def run_bot(config: GameConfig) -> None:
     async def on_message(message):
         if not message.author.bot and table.channel_for(message) == "lobby":
             reply = await private_command(table, config.humans, set(config.seats),
-                                          message.author.name, message.content)
+                                          message.author.name, message.content) \
+                or await adviser_command(table, config.advisers(), message.author.name, message.content)
             if reply is not None:
                 await message.reply(reply, allowed_mentions=discord.AllowedMentions.none())
                 return
         await handle_incoming(responder, config.humans, message.author.name, message.author.bot,
-                              table.channel_for(message), message.content)
+                              table.channel_for(message), message.content, advisers=config.advisers())
 
     client.run(token, log_handler=None)

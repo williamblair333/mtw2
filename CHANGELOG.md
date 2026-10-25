@@ -6,6 +6,92 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Reading popups:** EOP can't read a popup's text, so under autoplay the turn loop screenshots
+  each game message (X11: `xdotool` and `import`) while the bridge holds it.
+  - Claude Haiku reads the screenshot: missions with target, reward and deadline, riots, news.
+    The text goes into the ruler's next prompt as *game messages*.
+  - **Marriage offers are the ruler's decision.** He gets the suitor's real age, stats and traits
+    (from `onOfferedForMarriage`) plus the reading. The turn loop clicks his accept or decline in
+    the window, then puts the mouse back.
+- `just tell <faction> <game> "…"`: a game note to a ruler, in his adviser thread and next prompt.
+- **Ships:**
+  - The report marks fleets and what they carry, and armies at sea with their fleet.
+  - New orders `board` (an army or agent onto a fleet), `land` (ashore onto a land tile) and
+    `blockade` (a foreign port).
+  - Fleets sail with `move_army`, and only onto water. `attack` works fleet against fleet.
+  - All through `moveToTile` and EOP's blockade call; untested live.
+- Control file `lua <line>` runs one line of Lua in the game and logs what it returns, for live
+  probes, like EOP's console.
+- **Agent outcomes:** the game's mission events (bribery, assassination, spying, sabotage, marriage,
+  …) report how each mission went, with the odds where the event provides them. They go in the
+  ruler's next report. "Done" on an order only ever meant issued.
+- **Recruiting from the recruitment pools:** the ruler pays the cost, the unit comes out of the
+  town's pool, and it joins the garrison when trained. `full` control includes recruiting again.
+- Income is regular earnings; one-off spending (buildings, recruits, bribes) is reported apart.
+- Game messages (missions, riots, news, proposals) are cleared with `clear_messages`.
+- Rulers are asked to write notes in plain sentences and short paragraphs.
+
+### Fixed
+- Orders to build something already in a town's queue are refused, and the prompt says not to.
+
+### Added (earlier today)
+- **Hot reload.** The bridge reads `parley_turns/control.txt` each tick (`reload`, `save <name>`).
+  `just reload-bridge` installs, saves and reloads the bridge in the running game
+  (`M2TWEOP.restartLua`). A `reloaded.txt` marker keeps this turn's settled orders from being applied
+  twice. `just restart-loop <game>` restarts only the turn loop.
+- The diplomacy screen left open after an answered offer is closed: likely close buttons are tried
+  in turn, and the screen is scanned once so the log shows what it holds.
+- `just play` prints the right hint for autoplay games.
+- `just follow <faction> <game>`: a ruler's messages and turn notes, live (`--once` for watchers).
+- Autoplay presses decision buttons it finds on screen (auto-resolve, decline offer, keep siege,
+  occupy, ransom), catching popups no event announces. AI-turn stuck detection now waits 45 s,
+  down from 120 s.
+- Stuck turns write `parley_turns/ui_scan-*.txt`: every UI element that's open, found by trying the
+  exe's UI names (`install_bridge.sh` writes `ui_names.txt`).
+
+### Fixed
+- A general inside a settlement now leads its garrison in the report and in orders. Before, EOP's
+  leaderless settlement stack made him vanish and every order fail.
+- The prompt says the treasury is from the end of the last turn, before this turn's income.
+
+### Added (observer play)
+- Orders `merge_armies` (a garrison with no general can join an army), `move_agent` and `marry`
+  (a princess and a foreign general in sight). Scratch asked for all three in his first game.
+- **Popups:** under autoplay every game popup is pressed after 3 s with a set default per kind
+  (auto-resolve, decline AI offers, keep sieges, occupy, ransom, else OK or close). Each is
+  logged with its button names, and the human slot's ruler gets a *game popups* list.
+  Scrolls a watcher opens are left alone.
+- `besiege` takes `"assault": true` to storm at once, and the siege scroll then gets assault.
+
+### Fixed
+- Tests use a private Gemini lock, so a live game holding the machine's lock can't stall them.
+
+### Added (earlier)
+- **Observer mode.** An LLM can play your campaign faction start to finish while you watch.
+  - **Per-ruler control:** `diplomat`, `ruler` (default) or `full`, or a list of areas: diplomacy,
+    armies, agents, build, recruit, taxes. The prompt, the checker and the bridge all follow it.
+  - **New orders:** `build`, `recruit`, `set_tax`, `move_army`, `attack`, with build and recruit
+    options, the queue, tax, public order, troops and moves in the report.
+  - **Under autoplay on your faction:** governors take the areas the ruler doesn't command, battles
+    auto-resolve, stuck popups are tried, the camera follows the faction and the Parley window
+    shows its plan.
+  - **Adviser:** a private Discord thread, opened with `!adviser`, where you counsel a ruler that
+    may overrule you.
+  - `new-game --control FACTION=… --adviser FACTION[=USER]`.
+- **Unattended games.** `just new-game … --autoplay [--until N] [--wait S]`: the bridge clicks End
+  Turn itself (from EOP's per-frame `draw` hook) once every ruler has answered, or after the
+  wait. It shows a status window, retries and logs `stuck?` if a popup blocks the turn, and stops
+  at turn N. The human's own ruler can now answer during its turn. Autoplay games have no humans.
+- `just report <game>`: campaign report (answers, lateness, treasury and settlements over time,
+  order coverage, failure reasons, order types never tried).
+- `games/soak-test.json`: a scripted plan that tries every order type. Script seats now fill
+  `$assassin`, `$spy`, `$diplomat`, `$foreign_character`, `$foreign_settlement` and
+  `$last_settlement` from the prompt.
+- **Sight and agents.** The report lists the ruler's own agents, plus foreign armies, agents
+  and settlements within 10 tiles of anything it has on the map (nearest 12 each, with
+  distance), and its net income from the game. New orders: `assassinate`, `sabotage`, `spy`,
+  `bribe`, checked against what the ruler can see, then re-checked by the bridge in the live
+  game before anything native is called.
 - Repo scaffold: README, CHANGELOG, HANDOFF, ROADMAP, CLAUDE.md, justfile, .gitignore
   (`_review/` and `_reviewed/` stay local).
 - Design draft: `docs/superpowers/specs/2026-10-23-llm-diplomacy-design.md`.

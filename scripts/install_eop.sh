@@ -23,12 +23,24 @@ cat > "$MOD/parley.cfg" <<EOF
 mod = mods/parley
 
 [video]
+# no logos, intro or campaign movies, and no event/agent movies mid-game (they interrupt autoplay)
+movies = 0
+splashes = 0
+event_movies = 0
+assassination_movies = 0
+infiltration_movies = 0
+sabotage_movies = 0
 # Launch through Steam (launch-option swap): fullscreen mode switches crash Wine's X11
 # driver (xvidmode assertion) under protontricks-launch, but not under Steam's Proton.
-# A stretched window breaks mouse mapping, so render at the screen's resolution.
-windowed = 0
-campaign_resolution = ${PARLEY_RES:-1920 1080}
-battle_resolution = ${PARLEY_RES:-1920 1080}
+# A stretched window breaks mouse mapping: fullscreen renders at the screen's resolution;
+# PARLEY_WINDOWED=1 gives a window smaller than the screen (default 1600x900) instead.
+windowed = ${PARLEY_WINDOWED:-0}
+campaign_resolution = ${PARLEY_RES:-$([ "${PARLEY_WINDOWED:-0}" = 1 ] && echo "1600 900" || echo "1920 1080")}
+battle_resolution = ${PARLEY_RES:-$([ "${PARLEY_WINDOWED:-0}" = 1 ] && echo "1600 900" || echo "1920 1080")}
+
+[game]
+# don't show the AI factions' moves: their turns run without the camera following each one
+ai_factions = skip
 
 [log]
 to = mods/parley/logs/system.log.txt

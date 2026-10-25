@@ -1,12 +1,17 @@
 """Claude via the `claude` CLI in print mode, on your subscription. No tools, no MCP."""
 
 import json
+import re
+import shutil
 import subprocess
 
 from parley.protocol import Orders
-import shutil
+from parley.seats.base import SeatError, SeatLimit, empty_workdir, safe_env, schema_text, to_orders
 
-from parley.seats.base import SeatError, empty_workdir, safe_env, schema_text, to_orders
+# the CLI's words when the subscription is used up ("Claude AI usage limit reached",
+# "You've hit your limit", "You've hit your session limit", "5-hour limit reached");
+# anything else stays a plain SeatError
+LIMIT = re.compile(r"usage limit|hit your (session |weekly )?limit|limit reached|rate.?limit|quota", re.I)
 
 
 class ClaudeCodeSeat:
@@ -35,7 +40,10 @@ class ClaudeCodeSeat:
         except json.JSONDecodeError as e:
             raise SeatError(f"claude exit {proc.returncode}: {proc.stderr.strip()[-300:]}") from e
         if not isinstance(result, dict) or result.get("is_error"):
-            raise SeatError(f"claude failed: {str(result)[:300]}")
+            text = str(result.get("result") or result) if isinstance(result, dict) else str(result)
+            if LIMIT.search(text):
+                raise SeatLimit(f"claude usage limit: {text[:200]}")
+            raise SeatError(f"claude failed: {text[:300]}")
         return result, proc.stdout
 
     def decide(self, prompt: str, *, game_id: str, turn: int, faction: str,

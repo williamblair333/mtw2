@@ -169,3 +169,10 @@ def test_chat_prompt_labels_where_and_who(tmp_path):
     assert "private thread with england" in p
     assert "Duke Ottone (milan): Milan fears no one." in p
     assert "Ally with me?" in p and "600" in p
+
+
+def test_adviser_replies_dont_promise_orders():
+    # live: three chat replies promised a march north; no turn ordered one
+    msg = Message(1, "g", 162, "adviser:england", "adviser:england", "why isn't your house in order", 0)
+    p = chat_prompt("p", "england", [], msg, {"england": "Scratch", "adviser:england": "lord"})
+    assert "don't promise orders" in p and "must keep anything you do promise" in p

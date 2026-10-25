@@ -17,6 +17,7 @@ from parley.seats import (
 
 FIX = Path(__file__).parent / "fixtures"
 IDS = dict(game_id="g", turn=3, faction="venice", timeout=5)
+PARSE_IDS = {k: v for k, v in IDS.items() if k != "timeout"}  # to_orders takes no timeout
 ORDERS = {"protocol": 1, "game_id": "x", "turn": 99, "faction": "milan",
           "orders": [{"type": "send_gold", "to": "milan", "amount": 100}], "note": "why"}
 
@@ -109,11 +110,12 @@ def test_identity_fields_overwritten(monkeypatch):
     assert (orders.game_id, orders.turn, orders.faction) == ("g", 3, "venice")
 
 
-def test_schema_violation_raises_seat_error(monkeypatch):
-    bad = {**ORDERS, "orders": [{"type": "teleport"}]}
+def test_schema_violation_drops_the_order_not_the_turn(monkeypatch):
+    bad = {**ORDERS, "orders": [{"type": "teleport"}, ORDERS["orders"][0]]}
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(_claude_stdout(bad)))
-    with pytest.raises(SeatError):
-        ClaudeCodeSeat().decide("prompt", **IDS)
+    orders, _ = ClaudeCodeSeat().decide("prompt", **IDS)
+    assert [o.type for o in orders.orders] == ["send_gold"]
+    assert orders.malformed[0].type == "teleport" and orders.note == "why"
 
 
 def test_fake_seat_plays_script():
@@ -185,9 +187,11 @@ def test_agy_empty_response_is_reported_as_timeout(monkeypatch):
         AgySeat().decide("prompt", **IDS)
 
 
-def test_agy_calls_are_serialized(monkeypatch):
+@pytest.mark.parametrize("slots, threads_n, expected_peak", [(1, 3, 1), (2, 4, 2)])
+def test_agy_calls_limited_to_the_slots(monkeypatch, slots, threads_n, expected_peak):
     import threading
     import time
+    monkeypatch.setattr("parley.seats.agy.SLOTS", slots)
     active, peak, lock = [0], [0], threading.Lock()
 
     def slow_run(*a, **k):
@@ -199,12 +203,42 @@ def test_agy_calls_are_serialized(monkeypatch):
             active[0] -= 1
         return _proc(_agy_stdout(ORDERS))
     monkeypatch.setattr(subprocess, "run", slow_run)
-    threads = [threading.Thread(target=AgySeat().decide, args=("p",), kwargs=IDS) for _ in range(3)]
+    threads = [threading.Thread(target=AgySeat().decide, args=("p",), kwargs=IDS) for _ in range(threads_n)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
-    assert peak[0] == 1
+    assert peak[0] == expected_peak
+
+
+# --- salvaging a sloppy answer (Gemini Flash ignores the schema now and then) -------------
+
+def test_common_key_slips_are_repaired():
+    from parley.seats.base import to_orders
+    o = to_orders({"orders": [{"action": "set_stance", "to": "milan", "stance": "peace"}],
+                   "messages": [{"content": "Peace, brother.", "to": "milan"}]}, **PARSE_IDS)
+    assert o.orders[0].type == "set_stance" and o.messages[0].text == "Peace, brother."
+
+
+def test_one_bad_order_does_not_sink_the_turn():
+    from parley.seats.base import to_orders
+    o = to_orders({"orders": [{"type": "march_on", "army": "X"},  # no target_settlement
+                              {"type": "set_stance", "to": "milan", "stance": "peace"},
+                              {"type": "teleport"}],
+                   "messages": [{"to": "milan"}, {"to": "lobby", "text": "Hail."}],
+                   "note": "plan"}, **PARSE_IDS)
+    assert [x.type for x in o.orders] == ["set_stance"] and o.source_index == [1]
+    assert [(r.index, r.type) for r in o.malformed] == [(0, "march_on"), (2, "teleport"), (0, "say")]
+    assert "target_settlement" in o.malformed[0].reason
+    assert [m.text for m in o.messages] == ["Hail."] and o.note == "plan"
+
+
+def test_not_a_json_object_still_fails():
+    import pytest
+
+    from parley.seats.base import to_orders
+    with pytest.raises(SeatError):
+        to_orders("[1, 2]", **PARSE_IDS)
 
 
 def test_script_seat_plays_orders_by_turn(tmp_path):
@@ -229,6 +263,30 @@ def test_script_seat_resolves_general_placeholder(tmp_path, venice_report):
     ]})
     orders, _ = make_seat(f"script:{plan}").decide(build_prompt(report, "p"), **{**IDS, "turn": 1})
     assert orders.orders[0].army == "Captain Dardi"
+
+
+def test_script_seat_resolves_agent_and_sight_placeholders(tmp_path, venice_report):
+    from parley.prompt import build_prompt
+    from parley.protocol import Agent, Army, ForeignSettlement
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"1": [
+        {"type": "assassinate", "agent": "$assassin", "target": "$foreign_character"},
+        {"type": "spy", "agent": "$spy", "target": "$foreign_settlement"},
+        {"type": "bribe", "agent": "$diplomat", "target": "$foreign_character"},
+        {"type": "cede_settlement", "settlement": "$last_settlement", "to": "milan"},
+    ]}))
+    report = venice_report.model_copy(update={
+        "agents": [Agent(id="Iacopo", kind="assassin", x=1, y=1), Agent(id="Marco", kind="spy", x=1, y=1)],
+        "visible_enemies": [Army(id="Heinrich#2", faction="hre", leader="Heinrich", x=1, y=1,
+                                 strength=1, units=1, distance=3)],
+        "nearby_settlements": [ForeignSettlement(id="Innsbruck", name="Innsbruck", faction="hre", x=1, y=1)],
+    })
+    orders, _ = make_seat(f"script:{plan}").decide(build_prompt(report, "p"), **{**IDS, "turn": 1})
+    o = orders.orders
+    assert (o[0].agent, o[0].target) == ("Iacopo", "Heinrich#2")
+    assert (o[1].agent, o[1].target) == ("Marco", "Innsbruck")
+    assert (o[2].agent, o[2].target) == ("$diplomat", "Heinrich#2")  # no diplomat: left, so it's rejected
+    assert o[3].settlement == report.settlements[-1].id
 
 
 def test_claude_chat_parses_result(monkeypatch):
@@ -321,9 +379,15 @@ def test_agy_busy_lock_times_out(monkeypatch):
     import time
     from parley.seats import agy
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(_agy_stdout(ORDERS)))
-    with open(agy.LOCK_PATH, "a") as held:
-        fcntl.flock(held, fcntl.LOCK_EX)
+    monkeypatch.setattr(agy, "SLOTS", 2)
+    held = [open(agy.LOCK_PATH.with_name(f"{agy.LOCK_PATH.stem}.{k}{agy.LOCK_PATH.suffix}"), "a") for k in range(2)]
+    try:
+        for f in held:  # every slot taken by other Gemini calls
+            fcntl.flock(f, fcntl.LOCK_EX)
         start = time.monotonic()
         with pytest.raises(SeatError, match="busy"):
             AgySeat().decide("p", **{**IDS, "timeout": 0.5})
         assert time.monotonic() - start < 2
+    finally:
+        for f in held:
+            f.close()

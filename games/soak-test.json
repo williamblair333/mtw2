@@ -1,0 +1,55 @@
+{
+  "1": [
+    {"type": "set_stance", "to": "milan", "stance": "peace"},
+    {"type": "send_gold", "to": "milan", "amount": 100}
+  ],
+  "2": [
+    {"type": "march_on", "army": "$general", "target_settlement": "Milan"}
+  ],
+  "3": [
+    {"type": "withdraw", "army": "$general", "to_settlement": "Venice"}
+  ],
+  "4": [
+    {"type": "assassinate", "agent": "$assassin", "target": "$foreign_character"},
+    {"type": "spy", "agent": "$spy", "target": "$foreign_settlement"},
+    {"type": "bribe", "agent": "$diplomat", "target": "$foreign_character"}
+  ],
+  "5": [
+    {"type": "sabotage", "agent": "$assassin", "settlement": "$foreign_settlement"}
+  ],
+  "6": [
+    {"type": "set_stance", "to": "milan", "stance": "war"},
+    {"type": "besiege", "army": "$general", "settlement": "Milan"}
+  ],
+  "7": [
+    {"type": "set_stance", "to": "milan", "stance": "peace"},
+    {"type": "withdraw", "army": "$general", "to_settlement": "Venice"}
+  ],
+  "8": [
+    {"type": "cede_settlement", "settlement": "$last_settlement", "to": "milan"}
+  ],
+  "9": [
+    {"type": "send_gold", "to": "milan", "amount": 999999},
+    {"type": "set_stance", "to": "atlantis", "stance": "war"},
+    {"type": "cede_settlement", "settlement": "Rome", "to": "milan"},
+    {"type": "assassinate", "agent": "Nobody", "target": "Nobody"}
+  ],
+  "10": [
+    {"type": "assassinate", "agent": "$assassin", "target": "$foreign_character"},
+    {"type": "spy", "agent": "$spy", "target": "$foreign_character"},
+    {"type": "bribe", "agent": "$diplomat", "target": "$foreign_settlement"}
+  ],
+  "11": [
+    {"type": "sabotage", "agent": "$assassin", "settlement": "$foreign_settlement"}
+  ],
+  "15": [
+    {"type": "assassinate", "agent": "$assassin", "target": "$foreign_character"},
+    {"type": "spy", "agent": "$spy", "target": "$foreign_settlement"},
+    {"type": "bribe", "agent": "$diplomat", "target": "$foreign_character"}
+  ],
+  "20": [
+    {"type": "assassinate", "agent": "$assassin", "target": "$foreign_character"},
+    {"type": "spy", "agent": "$spy", "target": "$foreign_character"},
+    {"type": "bribe", "agent": "$diplomat", "target": "$foreign_settlement"}
+  ]
+}

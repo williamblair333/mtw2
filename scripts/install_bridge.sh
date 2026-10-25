@@ -14,4 +14,10 @@ if [ -f "$dest/luaPluginScript.lua" ] && ! grep -q "parley" "$dest/luaPluginScri
 fi
 cp "$src/luaPluginScript.lua" "$src/parley_bridge.lua" "$src/vendor/json.lua" "$dest/"
 mkdir -p "$GAME/parley_turns"
+# UI-like names in the game's exe: when an autoplay turn sticks, the bridge tries each against
+# the game's UI lookup and writes what's open to parley_turns/ui_scan-*.txt
+if command -v strings >/dev/null && [ -f "$GAME/medieval2.exe" ]; then
+    strings "$GAME/medieval2.exe" | grep -E '^[a-z][a-z0-9_]{3,48}$' | grep _ | sort -u \
+        > "$GAME/parley_turns/ui_names.txt"
+fi
 echo "bridge installed in $dest; turn files in $GAME/parley_turns"

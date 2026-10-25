@@ -13,27 +13,39 @@ import shutil
 
 from parley.seats.base import SeatError, empty_workdir, safe_env, schema_text, to_orders
 
-# agy slows to a crawl and returns empty answers when called concurrently, even from
-# separate processes, so every Gemini seat on this machine waits its turn on a lock file.
+# Gemini calls on this machine share a few slots (lock files), across processes. On
+# 2026-10-23 three concurrent calls hung and came back empty, so they ran one at a time; on
+# 2026-10-24, with every call in its own empty working directory, six concurrent calls all
+# answered (46 s wall, ~30 s each). One at a time starved ten rulers of a 120 s budget.
 LOCK_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "parley-agy.lock"
+SLOTS = int(os.environ.get("PARLEY_AGY_SLOTS", "4"))
 
 
 @contextlib.contextmanager
 def _agy_lock(deadline: float):
-    """Wait for the lock until the deadline; the seat's time budget includes the wait."""
-    with open(LOCK_PATH, "a") as f:
-        while True:
-            try:
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
+    """Wait for a free slot until the deadline; the seat's time budget includes the wait."""
+    files = [open(LOCK_PATH.with_name(f"{LOCK_PATH.stem}.{k}{LOCK_PATH.suffix}"), "a") for k in range(SLOTS)]
+    try:
+        held = None
+        while held is None:
+            for f in files:
+                try:
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    held = f
+                    break
+                except BlockingIOError:
+                    continue
+            if held is None:
                 if time.monotonic() >= deadline:
-                    raise SeatError("agy busy: another Gemini call held it for the whole turn budget")
+                    raise SeatError(f"agy busy: all {SLOTS} Gemini slots were taken for the whole turn budget")
                 time.sleep(0.1)
         try:
             yield
         finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+            fcntl.flock(held, fcntl.LOCK_UN)
+    finally:
+        for f in files:
+            f.close()
 
 
 class AgySeat:

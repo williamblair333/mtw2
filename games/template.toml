@@ -1,0 +1,101 @@
+# Parley game template: every playable faction, ready to edit.
+#
+# Copy it once to games/local/template.toml (gitignored) and set your Discord username and
+# server there. Then make games with `just new-game <name> [options]`; see
+# `just new-game --help` for many examples. The template itself is never played directly:
+# new-game turns it into games/local/<name>.toml with the rivals picked.
+
+turn_root = "~/.steam/steam/steamapps/common/Medieval II Total War/parley_turns"
+save_dir = "~/.steam/steam/steamapps/common/Medieval II Total War/saves"
+seat_timeout = 120
+
+# Which factions are LLM rulers this game (humans are never picked):
+#   play = ["france", "hre", "venice"]   exactly these
+#   play = "random 6"                    6 random factions
+#   play = "all"                         every faction (spectator mode)
+play = "random 6"
+
+# Whose personalities:
+#   "template"    as written below, per faction (default)
+#   "historic"    each faction's 1080 ruler
+#   "archetypes"  permanent archetypes (rules lawyer, zealot, ...), all different
+#   "random"      a mix of both
+personas = "template"
+
+# true: one random rival is secretly Old Scratch (the Moriarty archetype), masked under
+# its normal ruler's name. Only games/local/<name>.hidden.toml says which.
+secret_scratch = false
+
+[humans]
+england = "your_discord_name"   # faction = your Discord username; add more lines for friends
+
+[discord]
+guild = "My Parley Server"
+
+[defaults]
+brain = "claude:sonnet"   # or "claude:opus", "agy:gemini-3.8-flash-low", "ollama:qwen3.5:9b"
+
+# One block per faction. Edit persona (a library "@id" or your own text), name, or brain.
+[factions.england]
+persona = "@william-the-conqueror"
+
+[factions.france]
+persona = "@philip-i-of-france"
+
+[factions.hre]
+persona = "@henry-iv-hre"
+
+[factions.spain]
+persona = "@alfonso-vi"
+
+[factions.venice]
+persona = "@domenico-selvo"
+brain = "agy:gemini-3.8-flash-low"
+
+[factions.sicily]
+persona = "@robert-guiscard"
+brain = "agy:gemini-3.8-flash-low"
+
+[factions.milan]
+persona = "@archbishop-tedald"
+brain = "agy:gemini-3.8-flash-low"
+
+[factions.scotland]
+persona = "@malcolm-canmore"
+
+[factions.byzantium]
+persona = "@alexios-komnenos"
+
+[factions.russia]
+persona = "@vsevolod-of-kiev"
+brain = "agy:gemini-3.8-flash-low"
+
+[factions.moors]
+persona = "@yusuf-ibn-tashfin"
+brain = "agy:gemini-3.8-flash-low"
+
+[factions.turks]
+persona = "@malik-shah"
+
+[factions.egypt]
+persona = "@badr-al-jamali"
+brain = "agy:gemini-3.8-flash-low"
+
+[factions.denmark]
+persona = "@canute-the-holy"
+brain = "agy:gemini-3.8-flash-low"
+
+[factions.portugal]
+persona = "@henry-of-burgundy"
+brain = "agy:gemini-3.8-flash-low"
+
+[factions.poland]
+persona = "@wladyslaw-herman"
+brain = "agy:gemini-3.8-flash-low"
+
+[factions.hungary]
+persona = "@saint-ladislaus"
+brain = "agy:gemini-3.8-flash-low"
+
+[factions.papal_states]
+persona = "@gregory-vii"

@@ -15,16 +15,34 @@ Build log: [`docs/JOURNAL.md`](docs/JOURNAL.md).
 ## Quick start (after the one-time install in the guide)
 
 ```sh
-just run games/historic-1080.toml       # the turn loop
-just discord games/historic-1080.toml   # the Discord bot (in your own terminal)
+cp games/template.toml games/local/template.toml   # once: then set your Discord name + server in it
+just new-game game3 --rivals 6 --scratch   # 6 random rivals, one secretly Old Scratch
+just play game3          # start the turn loop + Discord bot for it
 # Steam: Play → Run Mod → new Grand Campaign as England
-just notes                              # god view: rulers' private notes
+just status              # what's running
+just notes               # god view: rulers' private notes
+just stop                # stop everything
 ```
+
+More setups (`just new-game --help` prints the full list, and the guide §5a explains them):
+
+```sh
+just new-game game4 --play france hre papal_states            # exactly these rivals
+just new-game game5 --rivals 5 --personas archetypes          # 5 different archetypes
+just new-game game6 --rivals 5 --personas historic            # 5 rivals as their 1080 rulers
+just new-game game7 --play all --brain flash                  # every faction, all on Gemini
+just new-game game8 --play venice --seat venice=@rules-lawyer:opus
+just new-game game9 --ask                                     # answer questions instead
+```
+
+To mod a faction, edit its block in `games/local/template.toml`: `persona`, `name`, `brain`.
 
 ## Recipes
 
 | Recipe | What it does |
 |---|---|
+| `just new-game <name> [options]` | make a game from your template (`--help` for examples) |
+| `just play <name>` / `stop` / `status` / `logs <name>` | run, stop and inspect a game |
 | `just setup` | install Python dependencies |
 | `just test` | run the test suite (includes the Lua bridge in LuaJIT) |
 | `just install-eop` / `install-bridge` | install EOP 3.3.1 and the bridge into the game |

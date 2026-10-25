@@ -38,6 +38,11 @@ def pair_channel(a: str, b: str) -> str:
     return f"pair:{x}|{y}"
 
 
+def adviser_channel(faction: str) -> str:
+    """A ruler's private thread with its adviser (a human who isn't a player)."""
+    return f"adviser:{faction}"
+
+
 def _row(r) -> Message:
     return Message(*r[:7])
 
@@ -67,11 +72,11 @@ class Store:
             rows = db.execute(
                 "SELECT id, game_id, turn, channel, sender, text, ts FROM messages "
                 # exact prefix/suffix compares: LIKE would treat '_' in faction ids as a wildcard
-                "WHERE game_id = ? AND (channel = 'lobby' "
+                "WHERE game_id = ? AND (channel = 'lobby' OR channel = ? "
                 "OR substr(channel, 1, length(?)) = ? OR substr(channel, -length(?)) = ?) "
                 "ORDER BY id DESC LIMIT ?",
-                (game_id, f"pair:{faction}|", f"pair:{faction}|", f"|{faction}", f"|{faction}",
-                 limit)).fetchall()
+                (game_id, adviser_channel(faction), f"pair:{faction}|", f"pair:{faction}|",
+                 f"|{faction}", f"|{faction}", limit)).fetchall()
         return [_row(r) for r in reversed(rows)]
 
     def queue(self, game_id: str, turn: int, channel: str, sender: str, text: str,

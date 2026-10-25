@@ -18,6 +18,26 @@ run game="games/example.toml":
 discord game="games/first-game.toml":
     set -a; [ -f .env ] && . ./.env; set +a; uv run python -m parley discord {{game}}
 
+# Restart only the turn loop for <name> (picks up new Python code; the bot keeps running)
+restart-loop name:
+    bash scripts/game.sh restart-loop {{name}}
+
+# Install the bridge, then reload it inside the running game (no relaunch needed)
+reload-bridge:
+    bash scripts/game.sh reload-bridge
+
+# Post a game note to a ruler in games/local/<name>.toml (its adviser thread and next turn prompt)
+tell faction name text:
+    uv run python -m parley tell games/local/{{name}}.toml {{faction}} {{quote(text)}}
+
+# Follow one ruler live in games/local/<name>.toml: its messages and turn notes (Ctrl-C stops)
+follow faction name:
+    uv run python -m parley follow games/local/{{name}}.toml {{faction}}
+
+# Campaign report for games/local/<name>.toml: who answered, order coverage, why orders failed
+report name:
+    uv run python -m parley report games/local/{{name}}.toml
+
 # God view: rulers' private notes, orders and messages (e.g. just notes venice 3)
 notes faction="" last="" game="games/first-game.toml":
     uv run python -m parley notes {{game}} {{ if faction != "" { "--faction " + faction } else { "" } }} {{ if last != "" { "--last " + last } else { "" } }}
@@ -25,6 +45,26 @@ notes faction="" last="" game="games/first-game.toml":
 # Simulated game for the example config (no Medieval II needed)
 fake-game turns="3":
     uv run python tools/fake_game.py --root runs/turns --game example --factions venice,milan --turns {{turns}}
+
+# Make a new game from your template; just new-game --help shows every option with examples
+new-game *args:
+    bash scripts/game.sh new-game {{args}}
+
+# Stop anything running, then start the turn loop and the Discord bot for <name>
+play name:
+    bash scripts/game.sh play {{name}}
+
+# Stop the turn loop and the Discord bot
+stop:
+    bash scripts/game.sh stop
+
+# What's running, and for which game
+status:
+    bash scripts/game.sh status
+
+# Latest output from the turn loop and the bot for <name>
+logs name:
+    bash scripts/game.sh logs {{name}}
 
 # Install the pinned M2EX release into the game folder (backs up what it replaces)
 install-m2ex:

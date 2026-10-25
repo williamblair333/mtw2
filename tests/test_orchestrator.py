@@ -28,6 +28,64 @@ def _orders(*items):
     return Orders(protocol=1, game_id="x", turn=0, faction="x", orders=list(items))
 
 
+def test_popup_decisions_go_to_the_decider_brain_when_set(tmp_path):
+    # live: a cheap seat declined a 4-star general; family offers and votes can use a stronger brain
+    cfg = _config(tmp_path, ("venice", "milan"))
+    from parley.config import AutoplayConfig
+    cfg.autoplay = AutoplayConfig()
+    cfg.seats["venice"].brain = "agy:cheap"  # the seats are handed in; only the names differ
+    cfg.seats["venice"].decider = "fake"
+    seats = {"venice": FakeSeat(), "milan": FakeSeat()}
+    orch = Orchestrator(cfg, seats)
+    assert orch.popups.seats["venice"] is not seats["venice"]
+    assert orch.popups.seats["milan"] is seats["milan"]
+
+
+def test_a_failing_decider_falls_back_to_the_seats_own_brain():
+    # live: the Opus decider hit a session limit; the decisions were declined unanswered
+    import pytest
+    from parley.orchestrator import Fallback
+    from parley.seats.base import SeatLimit
+
+    class Seat:
+        def __init__(self, answer):
+            self.answer = answer
+
+        def chat(self, prompt, *, timeout):
+            if isinstance(self.answer, Exception):
+                raise self.answer
+            return self.answer
+
+    limited = Seat(SeatLimit("claude usage limit: You've hit your session limit"))
+    assert Fallback(limited, Seat("ACCEPT. Own brain."), "england").chat("p", timeout=1) == "ACCEPT. Own brain."
+    assert Fallback(Seat("DECLINE"), Seat("ACCEPT"), "england").chat("p", timeout=1) == "DECLINE"
+    with pytest.raises(SeatLimit):  # both at their limit: the game pauses as before
+        Fallback(limited, limited, "england").chat("p", timeout=1)
+
+
+def test_the_session_limit_wording_counts_as_a_usage_limit():
+    from parley.seats.claude_code import LIMIT
+    assert LIMIT.search("You've hit your session limit · resets 4pm (America/Indiana/Indianapolis)")
+    assert LIMIT.search("You've hit your limit") and LIMIT.search("Claude AI usage limit reached")
+    assert not LIMIT.search("claude exit 1: model not found")
+
+
+def test_settlements_seen_on_earlier_turns_are_remembered(tmp_path, venice_state_dict):
+    # the adviser, live: "have you fully explored Ireland and England?"
+    from parley.protocol import StateReport
+    cfg = _config(tmp_path)
+    cork = {"id": "Cork", "name": "Cork", "faction": "slave", "x": 80, "y": 160, "garrison_strength": 400}
+    d = _pending(cfg, "venice", {**venice_state_dict, "turn": 3, "nearby_settlements": [cork]}, turn=3)
+    (d / "orders.json").write_text("{}")
+    now = StateReport.model_validate({**venice_state_dict, "turn": 5, "nearby_settlements": []})
+    orch = Orchestrator(cfg, {"venice": FakeSeat()})
+    [seen] = orch._remembered(now)
+    assert (seen.id, seen.seen_turn, seen.garrison_strength) == ("Cork", 3, 400)
+    in_sight = now.model_copy(update={"nearby_settlements": [StateReport.model_validate(
+        {**venice_state_dict, "nearby_settlements": [cork]}).nearby_settlements[0]]})
+    assert orch._remembered(in_sight) == []  # in sight now: listed there, not here
+
+
 def test_answers_each_pending_once(tmp_path, venice_state_dict):
     cfg = _config(tmp_path, ("venice", "milan"))
     for f in ("venice", "milan"):
@@ -52,6 +110,61 @@ def test_seat_error_still_ends_turn(tmp_path, venice_state_dict):
     Orchestrator(cfg, {"venice": FakeSeat([SeatError("down")])}).run_once()
     orders = Orders.model_validate_json((d / "orders.json").read_text())
     assert orders.orders == [] and "down" in orders.note
+
+
+def test_a_usage_limit_pauses_the_game_and_keeps_the_turn_open(tmp_path, venice_state_dict):
+    # live: every Claude seat failed for an hour; autoplay ended turns with silent rulers
+    from parley.seats.base import SeatLimit
+    cfg = _config(tmp_path)
+    d = _pending(cfg, "venice", venice_state_dict)
+    orch = Orchestrator(cfg, {"venice": FakeSeat([SeatLimit("claude usage limit: reached")])})
+    assert orch.run_once() == 0
+    assert not (d / "orders.json").exists()
+    assert "usage limit" in (cfg.turn_root / "paused.txt").read_text()
+    assert orch.run_once() == 0  # waits out the retry period
+    orch._retry_at = 0
+    assert orch.run_once() == 1  # the seat answers again
+    assert (d / "orders.json").exists() and not (cfg.turn_root / "paused.txt").exists()
+
+
+def test_army_order_results_say_how_the_armies_stand_now(venice_report):
+    from parley.orchestrator import _armies_now
+    from parley.protocol import Army, MergeArmies
+    paul = Army(id="Paul", leader="Paul", x=100, y=130, strength=200, units=1)
+    caen = Army(id="garrison:Caen", x=104, y=134, strength=3000, units=15, in_settlement="Caen")
+    r = venice_report.model_copy(update={"armies": [paul, caen]})
+    merge = MergeArmies(army="garrison:Caen", into="Paul")
+    assert _armies_now(merge, r, {"Paul", "garrison:Caen"}) == (
+        "garrison:Caen has 15 units, in Caen; Paul has 1 units, at (100,130)")
+    gone = r.model_copy(update={"armies": [paul.model_copy(update={"units": 16})]})
+    assert "garrison:Caen is no longer one of your armies" in _armies_now(merge, gone, {"Paul", "garrison:Caen"})
+
+
+def test_attack_result_shows_the_target_as_it_stands(venice_report):
+    # live: "attack: done" with no battle; Henry had been three tiles off with 2 moves left
+    from parley.orchestrator import _armies_now
+    from parley.protocol import Army, Attack
+    henry = Army(id="Henry", leader="Henry", x=102, y=168, strength=8153, units=16)
+    canmore = Army(id="Canmore", leader="Canmore", faction="scotland", x=101, y=169, strength=5784,
+                   units=18, distance=1)
+    r = venice_report.model_copy(update={"armies": [henry], "visible_enemies": [canmore]})
+    text = _armies_now(Attack(army="Henry", target="Canmore"), r, {"Henry"})
+    assert "Henry has 16 units, at (102,168)" in text
+    assert "Canmore has 18 units, at (101,169), 1 tiles from you" in text
+
+
+def test_a_plan_with_no_orders_is_asked_again(tmp_path, venice_state_dict):
+    # live: Opus wrote ten orders into its note and returned an empty orders list
+    cfg = _config(tmp_path)
+    d = _pending(cfg, "venice", venice_state_dict)
+    plan = "Recruit knights in York, merge the garrison into Henry, attack Geoffrey. " * 6
+    empty = Orders(protocol=1, game_id="test", turn=3, faction="venice", orders=[], note=plan)
+    full = Orders(protocol=1, game_id="test", turn=3, faction="venice",
+                  orders=[SetStance(to="milan", stance="war")], note=plan)
+    seat = FakeSeat([empty, full])
+    Orchestrator(cfg, {"venice": seat}).run_once()
+    orders = Orders.model_validate_json((d / "orders.json").read_text())
+    assert [o.type for o in orders.orders] == ["set_stance"]
 
 
 def test_invalid_orders_filtered_and_recorded(tmp_path, venice_state_dict):
@@ -205,6 +318,50 @@ def test_bridge_config_published(tmp_path):
     Orchestrator(cfg, {}).publish_bridge_config()
     lines = (cfg.turn_root / "bridge.txt").read_text().splitlines()
     assert lines == ["game_id=test", "faction=milan", "faction=venice"]
+
+
+def test_malformed_orders_reported_in_the_rulers_own_numbering(tmp_path, venice_state_dict):
+    from parley.seats.base import to_orders
+
+    class Sloppy(FakeSeat):
+        def decide(self, prompt, *, game_id, turn, faction, timeout):
+            return to_orders({"orders": [
+                {"type": "march_on", "army": "X"},                         # 0: malformed
+                {"type": "send_gold", "to": "milan", "amount": 999999},   # 1: valid, too costly
+                {"type": "set_stance", "to": "milan", "stance": "peace"},  # 2: kept
+            ]}, game_id=game_id, turn=turn, faction=faction), "{}"
+
+    cfg = _config(tmp_path, ("venice", "milan"))
+    d = _pending(cfg, "venice", venice_state_dict)
+    Orchestrator(cfg, {"venice": Sloppy()}).run_once()
+    rejected = {r["index"]: r for r in json.loads((d / "rejected.json").read_text())}
+    assert "target_settlement" in rejected[0]["reason"] and "treasury" in rejected[1]["reason"]
+    assert json.loads((d / "index_map.json").read_text()) == [2]
+
+
+def test_seat_control_reaches_prompt_checker_and_bridge(tmp_path, venice_state_dict):
+    from parley.protocol import MarchOn
+    cfg = _config(tmp_path, ("venice", "milan"))
+    cfg.seats["venice"] = cfg.seats["venice"].model_copy(update={"control": "diplomat"})
+    d = _pending(cfg, "venice", venice_state_dict)
+    seat = FakeSeat([_orders(SetStance(to="milan", stance="peace"),
+                             MarchOn(army="Doge Enrico", target_settlement="Milan"))])
+    orch = Orchestrator(cfg, {"venice": seat})
+    orch.run_once()
+    assert "You command: diplomacy." in (d / "prompt.txt").read_text()
+    assert [o["type"] for o in json.loads((d / "orders.json").read_text())["orders"]] == ["set_stance"]
+    assert "not yours to command" in (d / "rejected.json").read_text()
+    orch.publish_bridge_config()
+    lines = (cfg.turn_root / "bridge.txt").read_text().splitlines()
+    assert "control=venice:diplomacy" in lines and not any(l.startswith("control=milan") for l in lines)
+
+
+def test_bridge_config_carries_autoplay(tmp_path):
+    from parley.config import AutoplayConfig
+    cfg = _config(tmp_path, ("venice",)).model_copy(update={"autoplay": AutoplayConfig(wait=90, until_turn=30)})
+    Orchestrator(cfg, {}).publish_bridge_config()
+    lines = (cfg.turn_root / "bridge.txt").read_text().splitlines()
+    assert lines[-3:] == ["autoplay=1", "autoplay_wait=90", "autoplay_until=30"]
 
 
 def test_turn_dirs_prepared_ahead(tmp_path, venice_state_dict):

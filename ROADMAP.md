@@ -11,6 +11,21 @@
 - [ ] Scenarios: teams, co-op goals and win conditions set in the lobby
 - [x] Per-turn saves and backups (newest save copied before each poll, last 20 kept)
 
+## Next
+- [ ] Every LLM faction can do what the human slot's ruler does (the author: the LLMs they'll play against
+      must match Scratch). Rule: the LLM knows everything, decides, and its decisions take effect by
+      direct EOP writes wherever possible, each following the game's rules (cost, slots, buildings,
+      time); screen clicks only as a last resort for the human slot. Gaps for an AI-run seat today:
+      family offers, papal votes and AI offers (the game decides them silently), retraining (screen
+      only), game messages and news (human slot only). Measured on France.
+- [ ] Freeze each LLM faction's game AI once its decision coverage is complete (docs/decision-inventory.md)
+- [ ] Fix Gemini seats (agy), then use Gemini's Sonnet-level model or better, not Flash. Live, scratch
+      turns 77, 80, 88: `gemini-3.8-flash-low` timed out at 120 s and 240 s and returned empty answers
+      on England's full report, and misread the stats behind a 4-star general. To do: find agy's
+      stronger models (`agy --help` / model list), measure one full ruler turn on each (time, valid
+      JSON, sensible orders), fix the empty-answer cause (timeout vs schema vs headless tool denial),
+      then switch seats back from `claude:sonnet` when a model passes.
+
 ## Later
 - [ ] Richer report: foreign armies and settlements nearby, real income
 - [ ] Human /send and /cede commands (with Plan 3 ledger)

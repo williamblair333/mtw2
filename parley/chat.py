@@ -2,7 +2,8 @@
 
 Who answers:
 - in a private thread: the LLM on the other side, when the sender is the human there;
-- in the lobby: every LLM whose faction ID or persona name is mentioned.
+- in the lobby: every LLM whose faction ID or persona name is mentioned;
+- in an adviser thread: the ruler, when the sender is its adviser.
 LLM messages never trigger replies (no bot loops), and each LLM has a per-turn reply cap.
 """
 
@@ -13,7 +14,7 @@ import re
 from parley.bridge import TurnDir
 from parley.config import GameConfig
 from parley.prompt import one_line
-from parley.store import Message, Store
+from parley.store import Message, Store, adviser_channel
 from parley.seats import Seat, SeatError
 
 log = logging.getLogger("parley.chat")
@@ -48,13 +49,17 @@ def mentions(text: str, names: dict[str, str]) -> list[str]:
 
 
 def _label(m: Message, names: dict[str, str]) -> str:
-    faction = m.sender.removeprefix("human:")
-    return f"{names.get(faction, faction)} ({faction})"
+    from parley.prompt import _sender
+    return _sender(m.sender, names)
 
 
-def _where(channel: str, me: str) -> str:
+def _where(channel: str, me: str, names: dict[str, str] | None = None) -> str:
     if channel == "lobby":
         return "the public lobby (everyone reads it)"
+    if channel.startswith("adviser:"):
+        who = (names or {}).get(channel, "your adviser")
+        return (f"your private thread with your loyal adviser {who} (only the two of you read it). "
+                "They want you to win: weigh their counsel, agree or overrule it, and say why")
     a, b = channel.removeprefix("pair:").split("|")
     return f"a private thread with {b if a == me else a} (only the two of you read it)"
 
@@ -66,12 +71,16 @@ WHAT_IS_REAL = """WHAT YOU CAN ACTUALLY DO (on your next turn, through orders)
 
 
 def chat_prompt(persona: str, faction: str, history: list[Message], incoming: Message,
-                names: dict[str, str], report=None) -> str:
+                names: dict[str, str], report=None, areas: tuple[str, ...] | None = None) -> str:
     lines = [persona.strip(), "",
-             f"You rule {faction}. You are speaking in {_where(incoming.channel, faction)}."]
+             f"You rule {faction}. You are speaking in {_where(incoming.channel, faction, names)}."]
     if report is not None:
         from parley.prompt import state_summary
-        lines += ["", "YOUR REALM (as of your last turn report)", *[p + "\n" for p in state_summary(report)]]
+        # which factions have a ruler and which the game's AI runs (live: a chat reply claimed
+        # peace kept the AI's armies from assaulting, after two towns fell under it)
+        ruled = {k for k in names if not k.startswith("adviser:")} or None
+        summary = state_summary(report, areas, ruled) if areas else state_summary(report, ruled=ruled)
+        lines += ["", "YOUR REALM (as of your last turn report)", *[p + "\n" for p in summary]]
     lines += ["", WHAT_IS_REAL]
     if history:
         from parley.prompt import _diplomacy_line
@@ -80,9 +89,15 @@ def chat_prompt(persona: str, faction: str, history: list[Message], incoming: Me
     rules = (f"Answer in character, in plain text, under {MAX_CHARS} characters. "
              "This is talk only: you can't give orders here, and promises bind nothing in the game. "
              "Never reveal your private reasoning in a public reply.")
+    if incoming.channel.startswith("adviser:"):  # live: three promised marches, none ordered
+        rules += (" To your adviser, don't promise orders: say what you ordered last turn and what you "
+                  "will weigh. Your next turn reads this thread and must keep anything you do promise, "
+                  "or tell them why not.")
     if incoming.channel == "lobby":
         rules += (" Everyone reads this reply: don't repeat private conversations or reveal your "
                   "garrisons and armies unless you mean to.")
+    if not incoming.channel.startswith("adviser:") and any(m.channel.startswith("adviser:") for m in history):
+        rules += " Never reveal your adviser, or what they told you, to anyone else."
     lines += ["", "NEW MESSAGE TO ANSWER", f"{_label(incoming, names)}: {one_line(incoming.text)}", "",
               rules]
     return "\n".join(lines) + "\n"
@@ -126,6 +141,9 @@ class Responder:
         return None
 
     def _addressees(self, channel: str, sender: str, text: str) -> list[str]:
+        if sender.startswith("adviser:"):  # an adviser talks only to its own ruler
+            faction = sender.removeprefix("adviser:")
+            return [faction] if channel == adviser_channel(faction) and faction in self.seats else []
         if not sender.startswith("human:"):
             return []
         if channel == "lobby":
@@ -150,7 +168,8 @@ class Responder:
             try:
                 history = [m for m in self.store.recent(game, faction) if m.id != msg_id]
                 prompt = chat_prompt(self.config.seats[faction].persona, faction, history, incoming,
-                                     names, report=self._latest_report(faction))
+                                     names, report=self._latest_report(faction),
+                                     areas=self.config.seats[faction].areas)
                 try:
                     reply = await asyncio.to_thread(self.seats[faction].chat, prompt,
                                                     timeout=self.config.seat_timeout)
