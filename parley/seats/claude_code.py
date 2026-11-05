@@ -27,7 +27,7 @@ class ClaudeCodeSeat:
             cmd += ["--json-schema", schema_text()]
         workdir = empty_workdir()  # no repo, no env file; and no secrets in the environment
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+            proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=timeout,
                                   env=safe_env(), cwd=workdir)
         except subprocess.TimeoutExpired as e:
             raise SeatError(f"claude timed out after {timeout}s") from e

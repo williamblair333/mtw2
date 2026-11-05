@@ -69,7 +69,7 @@ Tip for players: untick **Show CPU Moves** on the campaign setup screen, or ever
 
 ## 2026-10-23: Gitea
 
-- The private repo was created through two one-use `write:user` tokens, because the stored token can't create repos.
+- The private repo `author/mtw2` was created through two one-use `write:user` tokens, because the stored token can't create repos.
 - Those tokens must be revoked in the UI: the Gitea CLI can't delete tokens, and the API needs the account password.
 - `main` is protected by a local push guard, so all changes land through PRs.
 
@@ -276,7 +276,7 @@ The author asked for a ruler modelled on Moriarty in TNG's "Elementary, Dear Dat
 
 ## 2026-10-24: unattended games (autoplay) and the campaign report
 
-- **The goal** (the author): run a whole game unattended that tests everything, while they watch.
+- **The goal** (the author): run a whole game unattended that tests everything, while he watches.
 - **Ending a turn without a human:** EOP has no end-turn call. But `medieval2.exe` has the campaign script commands `select_ui_element` and `simulate_mouse_click`, and its End Turn button is the UI element `end_turn`. EOP 3.3.1 runs a global Lua `draw(pDevice)` every frame (`graphicsEvents.cpp`, wrapped in `tryLua`).
   - The bridge checks every 2 s, on the human's turn only.
   - It ends the turn once every LLM ruler that reported last turn has answered, or after the wait.
@@ -306,7 +306,7 @@ The author asked for a ruler modelled on Moriarty in TNG's "Elementary, Dear Dat
 
 ## 2026-10-24: first observer game, Old Scratch as England (live fixes)
 
-The author watched Old Scratch (Claude Opus, full control) play England while advising them in Discord. Every problem below came from that game.
+The author watched Old Scratch (Claude Opus, full control) play England while advising him in Discord. Every problem below came from that game.
 
 - **Gold is charged at queueing.** The treasury log showed `10896 -> 9696` for London's market, which settled an open question.
 - **Popups stall autoplay.** These turned up:
@@ -317,7 +317,7 @@ The author watched Old Scratch (Claude Opus, full control) play England while ad
   - HRE's diplomat making an offer during HRE's turn
 
   What was done about them, in order:
-  1. Popups get pressed 3 s after they open: decision popups get a set default, the rest get OK or close. Scratches the author opens themselves are left alone. Each popup is logged, and Scratch is told what popped up.
+  1. Popups get pressed 3 s after they open: decision popups get a set default, the rest get OK or close. Scratches the author opens himself are left alone. Each popup is logged, and Scratch is told what popped up.
   2. `besiege` gained `"assault": true` (York was a village with no walls and two turns of food). The siege popup then gets *assault*.
   3. Event messages don't live in any scroll we knew about. On a stuck turn, the bridge now checks every UI-like name in `medieval2.exe` (about 4,000) against the game's own lookup and writes what's open to `ui_scan-*.txt`. Its first catch was the diplomacy scroll with its accept, counter and decline buttons.
   4. That lookup finds popup buttons directly by name. So autoplay now watches for the decision buttons every 2 s (auto-resolve, decline offer, keep siege, occupy, ransom). That catches popups no event announces. AI-turn stuck detection dropped from 120 s to 45 s.
@@ -600,3 +600,414 @@ The author watched Old Scratch (Claude Opus, full control) play England while ad
   command) is standing, and which army he leads", the convention working as meant. Each
   living family member in the roster now shows the army he leads, the settlement he's in, or
   his tile.
+
+## 2026-10-25: the strategy primer and a standing plan
+
+- **Rulers played like beginners:** gold hoarded for 30 turns "for a larger host against
+  Edinburgh", no agents, next-turn steps ("merge the knights next turn") forgotten the next turn.
+  Two fixes, both drafted by Gemini (gemini-4-argon-high) and reviewed here.
+- **The primer** (`parley/primer.md`) now sits in every turn prompt. Gemini's draft had rules
+  wrong in ways a ruler would act on: "keep order at 100%" (riots start near 70%, which our own
+  tax help already says), "no storming on the first turn without artillery" (a ram or ladders
+  can be built and used the first turn), diplomats "executed on failed bribes", and a few
+  "(unsure)" hedges. Fixed before wiring.
+- **The standing plan:** a new `plan` field in the answer, shown in full every turn. Gemini's
+  code forgot that the seats rebuild `Orders` field by field (`to_orders`), so the plan would
+  have been dropped from every real answer while its own tests passed. Caught in review; a test
+  now covers it.
+
+## 2026-10-25: agents recruited by the game's rules
+
+- Rulers never recruited agents: nothing let them. A live probe last session showed the game's
+  `spawn_character` script command makes one (a merchant appeared at York). The rest had to follow
+  the game: which settlement can train which agent, how many the faction may have, and the price.
+- EOP 3.3.1 has the first two (`settlement:getAgentCapability(type)`,
+  `getAgentLimitCapability(type)`), but not the price. Gemini guessed it was hardcoded in the exe
+  and gave prices with "50%" confidence. A web search settled it: the prices are per culture in
+  `descr_cultures.txt` (spy 350, assassin 500, diplomat 250, merchant 550, priest 200), the same
+  for every vanilla culture. EOP reads them into its culture struct but doesn't export them to
+  Lua, even in master: an upstream candidate.
+- The order pays at once and the agent spawns next turn, through the same training file as units.
+  A spawn is never retried: if the count misses a real spawn, a retry would make two agents. It's
+  logged as UNCONFIRMED instead, for the first live watch.
+
+## 2026-10-25: lessons that outlive a game, and Gemini seats back
+
+- **Lessons:** a ruler forgot everything at a game's end. Now every 20 turns his own brain reviews
+  his last 20 turns and keeps up to 3 lessons, each with turn evidence and the code version, per
+  persona. The review prompt forbids lessons about our software: many of Scratch's "failures" were
+  our bugs, and he'd have learned superstitions. Gemini (argon-high) wrote the store module from a
+  spec; Claude wired it in. Tried on Scratch's real turns 141–160, it found what the author had
+  spotted by hand: 30,000 florins banked "for a larger host" while Inverness fell, peace resets
+  that never lifted a siege, and French assassins left unanswered.
+- **Gemini seats:** measured offline on England's real 45 KB turns. Gemini 4 Argon medium answered
+  in 28–95 s with no rejected or malformed orders, and saw that peace with an AI-run faction
+  doesn't lift its sieges. Argon high ran past 300 s and came back empty, like Flash did on turns
+  77–88: the "empty answers" were always timeouts.
+
+## 2026-10-25 (afternoon): crashes traced, EOP master tried and parked, Gemini as a ruler
+
+- **The first live checks.** Agent recruiting failed at once: EOP 3.3.1's agent-capability reads
+  return garbage (London, with a cathedral and a great market, read 0 for every agent). The game's
+  own building file has the rules, so the bridge reads it now; the next turn England trained a spy.
+  The primer and the standing plan showed up and carried over, and the lessons review ran at 180.
+- **The author caught the numbers.** "Does he really have 12k and 13k troops?" No: EOP's totalStrength
+  is a strength rating. York held 961 men. Every army and garrison now gives units and men.
+- **Scratch caught a merge.** His merge "went through" twice and nothing moved: the walking merge
+  opened the game's exchange screen and our popup handler closed it.
+- **Gemini as a ruler.** argon-medium hung on 6 of 18 turns. Gemini read its own CLI logs and found
+  it: agy answered in 26-46 s, then deadlocked in teardown. Fixed (take the answer when it streams
+  in, kill the process group), but then Argon's weekly quota ran out (~5 days). Flash couldn't
+  hold a seat: it called our MCP tools instead of answering; told not to, it answered with no
+  orders. Every seat is on Claude until Argon is back.
+- **Scratch ended at turn 226** (victory conditions failed). scratch2: The author plays HRE himself,
+  Scratch plays England as a non-player faction, Philip plays France.
+- **A crash a turn.** Each one was a bridge call the engine doesn't guard: an instant merge into a
+  besieging army, a siege ordered from 10 and 16 tiles away, a spy already inside a settlement
+  spying on it again. Taking orders out of the replay one kind at a time isolated each. EOP's
+  calls check no range, so the bridge now does, as the game's own click would.
+- **EOP master, tried live.** The official CI build (b525628) went in as `mods/parley`. The
+  bridge needed one change by name (land crossings), and master runs the game from the mod folder
+  (a `parley_turns` link fixed it). Then it crashed at England's turn start six times with no
+  bridge orders at all, after its own "Try attack army order" log lines. Back on 3.3.1; master is
+  parked as `mods/parley-master` for a test on a save copy.
+
+## 2026-10-25 (night): finding the EOP master crash by playing it myself
+
+- Scratch's England, now a non-player faction, kept losing his moves: the game's own AI walked his
+  army off Caernarvon every turn. The author said freeze it. It worked, John reached the walls and began
+  the siege, and then England's turn never ended: a frozen AI never answers its own siege. Unfrozen,
+  the turn closed in five seconds. Freezing has to let go at the end of the faction's turn.
+- The author asked why I needed him to relaunch the game. I didn't: Steam's game URL opens the EOP
+  launcher, xdotool clicks "Run mod", Load Game and End Turn, and the engine log says when a faction's
+  turn starts. Five launches bisected the bridge: the stock script ran clean; the full bridge crashed;
+  without event handlers it still crashed; without the turn hooks it ran a full round.
+- A Lua line hook writing every executed line to a file (flushed each time) ran 64,191 lines of
+  England's turn end and stopped at one: `b:getQueueBuildingName()`. EOP master's
+  `getBuildingInQueue(i)` indexes a circular buffer from its head while its docs say 1-based, so the
+  last item is an empty slot. England had a farm queued in York; France had nothing queued, which is
+  why only England's report crashed. On master the bridge now reads the slots that exist.
+- Two rounds on a throwaway game confirmed it: reports, answers, orders applied. The author's campaign
+  moved to master at turn 27.
+
+## 2026-10-26: algorithms first, the LLM when needed (Jigsaw), and Gemini put to work
+
+- Filed the master queue bug upstream (EOP-Labs/M2TWEOP-library#88). The `youneuoy` repo I had in
+  mind turned out to be empty; EOP lives at EOP-Labs now. Reproduced against their master first.
+- The frozen-seat hang got a watchdog rather than a perfect rule: past 15 seconds, the seat's AI
+  lets go until its next turn, whatever it was waiting on.
+- Master's new calls went live: England's report showed real treaties (trade rights with four
+  factions, the HRE alliance four turns old) and London training two Town Militia. I drove the
+  game myself on a copy of the author's save, then restored his turn folders byte for byte. The author grabbed
+  the mouse once; we sorted out who drives.
+- "Any model can play, even a stupid one": Gemini audited the path from model answer to game
+  order. Real finds: an answer with prose before the JSON lost the whole turn, and a fleet could be
+  sent to besiege a city, a C++ crash no pcall catches. Both fixed.
+- The author asked about game AI algorithms (F.E.A.R.'s GOAP and the rest), then for a framework that
+  uses algorithms for everything they can do and the LLM only when needed. He named it Jigsaw.
+  Prior art: Vox Deorum (Civilization V) runs the LLM every turn at the top of the game's own AI
+  and matched it, but nobody has a gate deciding when to ask, a cheap-to-expensive cascade, or
+  learning from the log.
+- Getting every drop out of Gemini took four Refinery changes: agy couldn't run code (now an
+  offline bubblewrap sandbox; agy's own --sandbox turned out to isolate nothing), couldn't read
+  the web (its read_url doesn't exist headless; a fetch MCP server instead), wasted calls listing
+  every repo, and lost whole jobs to habits like `python3 -c` (now sandboxed shims on its PATH).
+  After that, Gemini wrote and tested about ten PRs; review caught three real bugs in them: the
+  decision log would have refused writes from Parley's seat threads and kept nothing, the
+  adoption scorer counted spies as family, and the gate could never call a two-option decision
+  close.
+- First algorithm to stand in for an LLM call: the steward answers adoption offers by rule for
+  seats that opt in, and the ruler is told. Close calls, a missing heir and unknown stars still go
+  to the ruler.
+
+## 2026-10-26 (afternoon): the steward grows, a turn gate, and Heretic takes a seat
+
+- **Marriage offers join the steward** (PR #150). Declining is the baseline (8) because an unmarried
+  princess is an asset; candidates over 60 lose 3 points; factions short on generals get +2; stakes
+  are 0.3. A Gemini job died on `which`, prompting Refinery #215 to allow habitual lookup tools.
+- **Ransom scrolls answered by rule** (PR #152). As captor, the steward ransoms by custom under 1,500
+  florins. As captive, he pays or refuses based on price versus treasury. Executions and releases
+  always escalate to the ruler.
+- **Decision reporting and outcomes.** Every steward decision now records its on-screen outcome via
+  Jigsaw's `Verdict.decision_id` (jigsaw#9, PR #154). `just decisions <game> [last]` (PR #151) queries
+  `<turn_root>/<game>.decisions.db` to show rungs, shares, outcomes, and escalation reasons.
+- **Heretic plays locally** (PR #153). Added an OpenAI-compatible seat (`heretic:local` / `openai:<model>`)
+  talking to llama-server on port 8090 with wait-and-retry for 503s. On scratch2 England turn 24, it gave
+  the best non-Claude orders (16 kept, 4 rejected, 0 malformed), but took 623 s—far past the 240 s seat
+  timeout while sharing the GPU with the game.
+- **Heretic's wake-from-sleep bug.** Heretic can abort on CUDA OOM when waking from sleep because
+  llama.cpp re-uses its boot-time memory fit (upstream ggml-org/llama.cpp#30528). Refinery #216 added
+  a retry in ask_heretic.
+- **The turn gate cuts costs** (PR #155). For `ladder = true` seats with `quiet_brain` configured, quiet
+  turns go to a cheap model. Eight triggers escalate to the ruler: messages, popups, events, enemies
+  within 8 tiles, sieges, low money, every 5th turn, and two quiet turns in a row. Each turn logs a
+  `turn_gate` decision.
+- **Benchmarking seats on turn 24.** Replaying scratch2 England's 53 KB prompt through agy: flash-low
+  took 47 s (7 kept, 0 rejected, 0 malformed); flash-medium 201 s (6/0/0); flash-high 302 s (2 kept,
+  6 malformed); gpt-oss-120b-medium 293 s (1 kept, 2 malformed). All Argon models returned status ERROR
+  due to weekly quota depletion, resetting ~2026-10-30.
+- **Upstream contributions.** Submitted PR #90 to EOP-Labs/M2TWEOP-library to fix #88 (`getBuildingInQueue`),
+  compile-tested cleanly on the Gitea Windows runner (run 2255). Also filed feature request #89 covering
+  missions list, mercenaries, diplomatic proposals, games/races, agent recruitment cost, and siege equipment.
+- **Decision inventory and repair.** Refreshed `docs/decision-inventory.md` (PR #156). Master already
+  exposes retraining (handled by direct write) and repair (via construction options + `addBuildingToQueue`).
+  Gemini built the repair order (#157): damaged buildings in the report and a `repair` order that queues the game's own repair, not yet run in game.
+- **Live play realities.** In `scratch`, England is the player slot with `ladder = true`; in `scratch2`,
+  England is AI-run, so popups never fire and the steward never acts. Neither scratch game has a decision
+  log yet because logging started after their last played turns. With Claude usage running short before
+  Wednesday, the author directed offloading all coding, tests, and docs to agy while saves can be freely
+  overwritten during solo live testing.
+- **Moves that silently don't happen (2026-10-29).** Rufus's `march_on` to England's own Nottingham, two
+  tiles away, was reported "done" while he sat at (105,156) with 72 of 72 moves. Comparing each order with
+  the next turn's report across four campaigns found 136 march_on/withdraw orders like it. The cause is
+  still unknown (EOP's `moveToTile` returns nothing), so the bridge now checks at turn end where each
+  mover stands and tells the ruler which moves didn't happen (#184). agy wrote it; its commit was blocked
+  by its own sandbox, so Claude reviewed, fixed a repeat-report bug and committed.
+- **Reading other LLM-in-strategy-game projects.** Vox Deorum (Civ V) splits the work the way Jigsaw does:
+  the LLM sets strategy every few turns and the game's algorithms execute. Its ideas went into the
+  ROADMAP; its code license (CC BY-NC-SA) rules out reuse.
+
+### 2026-10-29 (later): the first live run of fifteen unrun fixes
+
+- **Fifteen fixes, one live run.** #171-#186 had passed fixture tests and never met the game. The fresh
+  campaign surfaced three problems in its first ten turns: a stall on turn 1, false "did not happen"
+  reports, and agents sent to sea reported "done". The author asked why it was taking so long and whether the
+  project was going about things the wrong way. The process changed: one fix at a time, loaded into the
+  running game with `just reload-bridge`, checked against the turn folders, then merged.
+- **Start the turn loop before the campaign.** The first attempt ran turn 1 before the loop was up:
+  England's report had no folder to go in, France was skipped, and the bridge lost track of whose turn
+  it was. The second attempt started the loop first.
+- **The turn-1 stall was the Faction Overview.** The game opens it at a new campaign's start; while it
+  was open, Scotland's AI turn never ended, and the stuck-turn handler only reopened minimized messages.
+  Closing it by hand let every faction finish at once (#187). Opening it by hand mid-turn later didn't
+  stall anything, so the fix has not met the real case yet.
+- **Moves land seconds after the order.** `moveToTile` plays the move out on screen: a diplomat was on
+  his old tile in England's turn-end report and on his target in France's a minute later, so the turn-end
+  check called it a failed move. Checked at the next turn start instead (#188), four reports on turns
+  10-13 all matched the turn folders. A live probe through `control.txt` showed a 10-tile land move
+  starts but isn't visible in `xCoord` for several seconds.
+- **The true failures.** One was an agent sent to sea (#189). France's seat has no `freeze`, so its own
+  game AI can override the ruler's moves. And Rufus didn't move on the turn a garrison was sent to merge
+  into him (open: one case so far).
+- **Gemini's weekly cap.** Every Flash tier ran out by 13:45 UTC (reset ~10-30 18:10). Seats moved to
+  Heretic. Heretic has vision and read three captures correctly, but at 2-3 minutes a read while it plays
+  both seats it's too slow for the popup reader, so failed reads fall back to the bridge's defaults.
+
+
+## 2026-10-30: helping the small ruler (#218-#226)
+
+- **Why Heretic lost run6.** A review of turns 100-189 (`_review/2026-10-30-run6-england-loss.md`):
+  57% of its orders were refused (Sonnet in run5: 4%); for ~90 turns it marched armies and agents at
+  towns across the sea with no fleet; it stripped London's garrison again and again; London rebelled
+  at turn 186 after a tax rise at 70% order. Rough split: mechanics/prompt 40%, strategy 30%, bridge
+  bugs 20%, missing report facts 10%.
+- **A bridge bug behind it.** `besiege` from afar called `moveToTile` without the land-path check
+  `move_army` has, so an army ordered at a town across the sea got "ok, marching" and sat 36 turns.
+  Besiege and agent walks now refuse with the fleet advice, and reports mark `by_land` (#222).
+- **The author widened the rule:** offload work "SO LONG AS THE LLM'S WISHES ARE ALWAYS CARRIED OUT". The
+  steward (#225) appends a garrison recruit where the ruler's orders leave a town empty; it never
+  changes an order, and `hold_empty` turns it off for a town.
+- **Prompt:** refused orders open it, with "refused N turns running" (#221); a THREATS block; 25%
+  shorter; the primer gained rules of thumb from a strategy draft whose sources are thin (#226).
+- **Thinking:** `heretic:think` took 170-214 s on England's turn 39 against 37 s; the author turned it on for
+  both rulers, with the cut-off a minute above (300 s).
+- **A reload hung a frozen turn.** `just reload-bridge` 4 s into France's frozen turn dropped the 15 s
+  release timer with the old Lua state; the turn never ended (STUCK). Unfrozen by hand through
+  `control.txt` (`lua ... freezeFactionAI=0`); the reload command now releases first (#224).
+- **My mistakes:** `git add -A` in a worktree committed a worktree-relative `uv.lock` (#219, reverted
+  #220); a `pgrep -f` pattern matched its own shell and killed the bot restart.
+- **march_on from the next tile did nothing (run8, turn 1).** Rufus at (107,163) marched on rebel York
+  at (106,164); the move onto a town it doesn't hold went nowhere and came back "done", and the audit
+  caught him still there two reports later. From the next tile march_on now besieges an enemy or
+  rebel town (with a note) and says plainly it can't walk into one at peace or allied. Turn 2's
+  march_on and spy on "york" were refused as unknown: the validator now reads a near-miss town or
+  character name in sight as its exact id, as it already did for the ruler's own armies.
+
+### 2026-10-30 (evening): a field suite for the move orders that failed today
+
+- The day's army bugs (#261 march_on from the next tile, #263 across the sea, #267 no moves left, and
+  Robert who wouldn't leave Paris) were each found by an audit wake, hours after the fact.
+  `games/qa/field.toml` sets each one up on purpose: a spawned general (`M.qa.spawn_army`, EOP
+  `spawnArmy`) beside a free tile, a rebel town or a town across the sea, and checks where he ends up.
+- **Tired on purpose.** EOP's `character.movePoints` writes both move counts, but the game refills
+  them at turn start, before the orders apply. `M.qa.tire` empties them at setup and again at the
+  next three turn starts, and reads them back: a write that doesn't take fails the setup.
+- Not yet run live (a live QA run was in progress). The garrison case passes only if the general
+  walks out; a fail there reproduces run8's turn 18.
+
+### 2026-10-30 (evening): covert assassinate refused "not in sight"
+
+- **Run 18:19, covert 6/7.** The runner picked Edmund Canmore (a field army at (98,180), beside
+  Inverness) from the turn-45 report; the assassin spawned at (97,179) and acted on turn 46. By then
+  Canmore was gone from FOREIGN ARMIES IN SIGHT (most likely into Inverness: the bridge lists a
+  general in a town as a garrison, not a person in sight), so the validator refused the order.
+- The target was picked a turn too early. The script seat now fills `$nearest_character_to:<agent>`
+  when it writes the order, from that turn's sight lists (the ones the validator checks): the
+  character nearest the assassin, not a fleet, admiral or one on his own tile. The runner's pick
+  (where to spawn him) now takes report ids only and prefers an agent standing in a foreign town.
+- The script seat's `$foreign_character` read a foreign agent's line ("- france diplomat at
+  (103,136), 2 tiles away: Denisot") as "france diplomat at"; agent ids come last on the line.
+
+### 2026-10-30 (evening): march_on said "besieging it", the next report had no siege
+
+- **Run 18:31, field, march_on_besieges.** Ralph Gryffin (one NE Bodyguard, spawned at (89,161))
+  marched on rebel Dublin (8 units, 345 men) from the next tile; the bridge logged "so it is
+  besieging it" and the siege scroll came up and was maintained (18:31:46). By the next report
+  (18:32:02) his army was gone from `armies`, his family entry had no position or kind, and his age
+  stopped at 31 while everyone else kept ageing: he died during the end of turn. No battle popup was
+  logged (auto-resolve all battles is on) and Dublin's garrison read the same 345 men, so how he
+  died is not proven; a sally is the likeliest. The report was right; the army was gone.
+- `besiege` (and `march_on`'s siege from the next tile), after `siegeSettlement` (always called):
+  the game's `canStartSiege` said no: a failure with that reason. The army's siege (the field the
+  report reads) shows the town: "besieging it", as before. Otherwise ok, with "siege ordered; the
+  game hasn't shown it yet: the next report says whether it holds". The siege scroll came up 7 s
+  after the call live, so the field may be set late: a missing field is never a failure.
+  Assaults aren't checked (they end in a battle).
+- An army that was besieging and is gone in the next report: the "Your army X is gone" event now
+  adds which town it was besieging (a sally or relief army can destroy a besieger).
+- The QA case `march_on_besieges` now tests the siege, not the army's survival: the order's note
+  plus the game's siege scroll maintained after the order in the log. `spawn_army` makes one unit.
+- Unproven live: which of "besieging it" and "not shown yet" a real siege gets.
+
+### 2026-10-30 (evening): the QA bench relaunches a hung game
+
+- **18:34, field run.** The game froze on the papal election results scroll: bridge log silent,
+  medieval2.exe alive. The next case and the restore's `M.qa.load` each timed out after 30 s; the
+  restore stopped at "loaded" with the lock kept and the real loop stopped. The runner read "process
+  alive" as "game working", so it never relaunched; a human relaunched and ran `qa-restore`.
+- Now a game is hung when its process is alive and the bridge log hasn't grown for 240 s (crash-watch
+  uses the same idea at 480 s). A dead or hung game fails the current case with `game hung at <time>:
+  <last log line>` and ends the run; the restore relaunches it, waits for `bridge loaded campaign at
+  turn N`, then loads the kept save. A load that times out waits for the detector's verdict (the
+  incident's three minutes were under the threshold), relaunches and tries once more.
+- Not yet seen live: no hang has happened since.
+
+### 2026-10-30 (evening): the QA restore loaded the real save under the QA config
+
+- **18:38:30, restore after the field run.** `restore` loaded the kept save (England's turn 32,
+  waiting for its ruler's turn-31 orders) while `bridge.txt` still held the QA bench's config; the
+  real loop rewrote it half a second later. In that gap the bridge applied `qa-field/turn-0031`'s
+  stale empty orders to the real England, found nobody pending, and ended turn 32 unasked. England's
+  turn-32 report went to the QA folder, turn 33 marked turn 32 late, and the real ruler's turn-31
+  orders (written 18:43) were never applied. The watch fired "no england report for 15 min".
+- The turn-31 report on disk was the right one: a report is written at turn end, and the save was
+  at England's turn 32 start. Writing a fresh report on every load would have asked the ruler twice.
+- Fix: `restore` publishes the real bridge config before `M.qa.load`; when a failed load leaves the
+  game on the QA campaign (real loop kept stopped), it puts the QA config back.
+
+### 2026-10-30 (night): QA field round 2, what the 19:39-19:55 runs showed
+
+- **Spawned generals defect.** In the 19:46 field run two spawned generals (Edmund Awood at turn
+  43, Walter Baker at turn 48) were gone from England's armies a report later; at 19:49:58 the log
+  listed them as "slave: ... struck by a disaster". The game gives every general `LoyaltyStarter`
+  (Loyalty 5) on coming of age, adoption or marriage; `spawnArmy` gives none, so they stood at 0.
+  Walter Baker's case (`march_on_across_sea`) had the right refusal on the right turn (report 49's
+  `last_results`) but no army to check. Edmund Awood, now a rebel at (105,153), stood next to
+  `move_army`'s path: Toby walked (105,154) -> (104,153) and stopped with 87 of 104 moves; the
+  19:34 run took the same path to (103,152) with that tile's general still English. Fix: spawned
+  generals get `LoyaltyStarter`. The ZOC stop is inferred from the two runs, not seen directly.
+- **No target in sight, no unled town.** `march_on_besieges` and `garrison_general_leaves` now pick
+  their own scene in setup (`M.qa.hostile_town` from the whole map; `M.qa.garrison` uses the town's
+  own general, spawning one only into an unled garrison).
+- **Covert turn 48 never ended** (19:41:55-19:44:55). Message 202 (the Pope died, cardinals
+  convene) came with the End Turn click, as on turn 43 in other runs; there the papal election scroll
+  opened 4-6 s later. This time it never opened: the bridge ran `clear_messages` for message 40 at
+  19:41:57 inside that window, cleared 202 at 19:42:13, and the game raised 202 again at 19:43:17
+  and 19:44:38 while the stuck-turn retries found "no known popup open". The bench's 180 s turn wait
+  raised and dropped the case from the report; now it fails the case ("turn stuck: ...") and the
+  restore loads the kept save. The bridge side (End Turn blocked after a papal notice) is open.
+
+### 2026-10-30 (night): the crash dialog, and a relaunch onto the QA campaign
+
+- **The author saw the crash before crash-watch did.** The game crashed at 20:11:48, right after a QA
+  restore loaded the real save. Under Proton the crash is a small Wine message box titled
+  "Medieval 2" ("encountered an unspecified error and will now exit", OK button), and
+  medieval2.exe stays alive until OK. crash-watch fired only after 483 s of bridge-log silence.
+  Fix: `scripts/crash_dialog.sh` looks for a visible "Medieval 2" window between 150x60 and
+  800x400 (the dialog is ~330x110; the game is 1600x900). crash-watch checks it every 30 s poll,
+  the QA runner on every `game_trouble` check. A false positive would kill a healthy game, so it
+  counts only when seen twice: on two polls in a row in crash-watch, two sightings 5 s apart in the
+  runner. crash-watch skips the check for 120 s after its own relaunch (start-up windows). The
+  log-silence check stays as the fallback.
+- **The relaunch continued the QA game.** Continue Campaign loads the newest save, and right
+  after a restore that is the QA game's autosave until the real game autosaves again: the real
+  loop came back on turn 45, not 41, and the real save had to be loaded by hand. Fix: after the
+  Continue click, when `qa.last_restore` exists, relaunch_game.sh runs
+  `python -m parley.qa after-relaunch`. If no save is newer than the restore's `newest_save_mtime`
+  (and no `qa.lock` is held), it waits for `bridge loaded campaign at turn N` (N > 0) and loads the
+  newest `parley_keep_*.restored-*.sav`. Otherwise it does nothing.
+
+### 2026-10-30 (night): QA round 4, what the 21:55-22:08 runs showed
+
+- **playtest_funds failed on a full treasury.** The bridge tops up only a treasury below the
+  target, and the field run's turn-55 treasury was 50723 against 50000, so no "topped up" line was
+  logged in the case's window. The case now passes on either the line or a report treasury at least
+  `$playtest_funds` (the runner's `QA_PLAYTEST_FUNDS`, written into the QA seat). The checker gained
+  `at_least` (a numeric state comparison) and `any_of`; an `any_of` with an `order_ok` alternative
+  still can't pass a case alone.
+- **assassinate: the victim was never in sight, not across the water.** The bench's rebel victim
+  Esau spawned at (106,144) and the assassin at (105,143), adjacent and on one landmass
+  (`free_tile` already checks the walk). England's sight lists never held Esau over six reports
+  (nor Captain Simon, another rebel in London province), so `$nearest_character_to:` filled the
+  order with the next nearest: (179,172) on turn 1, the HRE agent at (108,128) in France on turn 2,
+  both refused as across the sea. Why England didn't see a stack next to its own assassin is open
+  (getTileVisibility on that tile, or a hidden stack). The victim now goes on a tile England sees
+  (`M.qa.seen_tile`), setup fails unless England's sight lists hold it (`M.qa.sees`, which binds its
+  sight id), and the orders name that id instead of the nearest character.
+
+### 2026-10-31: covert and field converted to instant cases
+
+- **Why.** Both suites were turn cases from 10-30: field 9 turns, covert up to 4 per case, each up
+  to 240 s, on a world that moved between setup and order. With the bench save (#307: England's
+  turn 1, every AI frozen) and `M.qa.order` (an order through the real apply() in-turn), most of
+  what they checked shows in the turn it is ordered in.
+- **field:** 9 instant cases and 1 turn case. The turn case (`turn_start_orders`) keeps what needs a
+  turn start: march_on applied there and the siege scroll after it (popups aren't handled in a held
+  turn), tire() at the refill, the report's last_results and the tired army's tile. withdraw goes
+  into `$garrison_town`, so it no longer needs a town without a general.
+- **covert:** 4 instant cases and 1 turn case. assassinate and sabotage pass on "ok" plus the game's
+  mission line, any outcome (as envoys' bribes); `M.qa.news` shows the line kept for agent_results.
+  The #255 spy report stays a turn case with `chance = true`, now also checking agent_results.
+- **The old flakes.** Spawns a tile off: `M.qa.spawn_army` now refuses a taken tile and fails when
+  the army lands anywhere else. Spawns absorbed into Nottingham's garrison during AI turns: instant
+  cases play no AI turn; the one field turn case spawns by the hostile town and checks the tile.
+  Covert's assassinate victim walking off: the order runs in the turn the victim is spawned, rebels
+  frozen. The stuck popup turns: turn 1 save and one turn per suite instead of many.
+- **Found on the way:** an agent of the wrong kind was refused as "a assassin"; now "an assassin".
+- Not yet run live. Guesses: a mission resolved in a held turn logs its outcome at once (envoys
+  guesses the same); a mission result scroll for the player's agent waits harmlessly until the hold
+  lifts; stack_pos right after spawnArmy gives the spawn tile.
+
+### 2026-11-01 (morning): the quiet world's young Pope (#342)
+
+- **Why.** A papal election stalled turn 50 for hours; the #340 gate refuses turn-playing bench
+  runs until each interrupting event is held. This is the first one held.
+- **What.** `M.qa.quiet(max_age)` writes `collegeOfCardinals.pope.age` down to 45 and reads it back
+  (EOP's characterRecord.age is a 7-bit bitfield; the setter masks). The runner calls it after every
+  bench load and refuses the load when it fails; under `freeze=*` the bridge repeats it at each
+  player turn start, since turn cases play rounds.
+- **Collision.** The Uncle J session and an agy job it launched worked the same item in this
+  checkout at the same time: it switched branches under this session and overwrote its edits. Both
+  halves were kept. Lesson: delegated agy jobs with edits on must run in their own worktree.
+- **Live.** First run: the game still had the old bridge (install-bridge copies, it doesn't
+  reload); the runner refused the load ("attempt to call field 'quiet'") and restored, the refusal
+  path proven. After `just reload-bridge`: `qa: quiet ok: pope=Gregory age=42->42` on the bench
+  save. Write proven on scratch: `pope=Lanfrancus de Verde age=55->30`, read back 30.
+- **Open.** That the game's old-age death roll reads this field is still a guess; 8 other events in
+  `games/interrupts.toml` still block turn runs.
+
+### 2026-11-01 (morning): holds for succession and towns (#344, #345); the order gate (#346)
+
+- **Succession and towns.** `M.qa.quiet` also keeps each seated faction's leader and heir at 45 or
+  younger (EOP factionStruct.leader/.heir) and sets its towns' turmoil and rebel chance to 0 and
+  clears plague, all read back. Live on scratch: Rufus 54->45, Louis 49->45; 4 + 7 towns calmed.
+  EOP's campaignDb (revolt chances, marriage ages) was left alone: it's process-wide, so the bench
+  would leak it into the real campaign after the restore.
+- **The miss.** All of this is turn-case work, and phase 1 (no-click) still had a fail and two
+  inconclusives. The author asked "have you tested everything that doesn't require a click now? if not,
+  why are you doing this?" The 04:45 handoff put the quiet world first; no-clicks-first lived only
+  in a memory note, and nothing checked the holds on the bench. Uncle J's audit agreed.
+- **The fix (#346).** The `just qa` preflight gate now refuses a turn run while the newest
+  `runs/qa/*-all.md` has an unexplained fail/inconclusive, and a hold counts only when its
+  `bench` case's newest row is a pass. Against the 04:42 report it names exactly the three open
+  cases. STANDARDS gained `phase-order` and `no-clicks-first`.

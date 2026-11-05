@@ -24,28 +24,33 @@ Columns: **See** — the ruler's report shows what he needs; **Do** — an order
 **Route** — how it could be done (an EOP call, screen clicks) when Do isn't yes.
 ✅ yes · ◐ partly · ✗ no.
 
+**Routes, in order of preference (the author, 2026-10-25):** screen clicks only when nothing else can do
+it. First an EOP call or direct EOP write, then a campaign script command, then a direct memory
+read/write, then an upstream EOP change. A click route has to say why the others can't work, and it
+stays on the list to replace. Rows already done by clicks (the popup decisions) count as debt.
+
 ## Realm: settlements and economy
 
 | # | Decision | Must know | See | Do | Route |
 |---|---|---|---|---|---|
 | R1 | Queue a building | can-build list, cost, turns, effects, treasury | ✅ | ✅ build | — |
-| R2 | Cancel or reorder the building queue | queue, refund | ✅ queue | ✗ | buildingsQueue (no remove call found) / clicks |
-| R3 | Repair a damaged building | damage (hp), repair cost and time | ✗ | ✗ | building.hp; repair: clicks |
+| R2 | Cancel or reorder the building queue | queue, refund | ✅ queue | ✗ | buildingsQueue (no remove call found; master read bug #88, fix PR #90) / clicks |
+| R3 | Repair a damaged building | damage (hp), repair cost and time | ✗ | ◐ in progress (repair order) | construction options (repair) + buildingInQueue:addBuildingToQueue (types/settlement.cpp:1918, 1955; building.hp instant repair not used) |
 | R4 | Demolish a building | building, refund, what is lost | ◐ levels | ✗ | settlementStruct.destroyBuilding |
 | R5 | Convert city ↔ castle | level, cost, what is lost | ✗ | ✗ | construction option (probe) |
 | R6 | Recruit a unit | can-recruit list, pool, cost, turns, upkeep | ✅ | ✅ recruit | — |
-| R7 | Recruit an agent or ship | agent caps, cost | ◐ | ◐ recruit (if listed) | getAgentCapability, getAgentLimitCapability |
+| R7 | Recruit an agent or ship | agent caps, cost | ✅ agents: per settlement "can train agents", faction limits (not yet run live) | ◐ `recruit_agent` (direct write, spawn_character next turn; not yet run live); ships ✗ | getAgentCapability, getAgentLimitCapability; agent prices from descr_cultures.txt (not exposed to Lua: upstream #89) |
 | R8 | Cancel or reorder recruits | queue | ◐ training | ✗ | clicks |
-| R9 | Retrain (refill, re-equip) a unit | soldiers vs max, armour/weapon level, cost | ◐ soldiers | ✗ | clicks (SELECT_UNIT_TO_RETRAIN) |
+| R9 | Retrain (refill, re-equip) a unit | soldiers vs max, armour/weapon level, cost | ◐ soldiers, pool | ✅ retrain (direct write) | armour/weapon upgrades not modelled |
 | R10 | Set tax level | tax, public order, growth, income | ◐ no growth | ✅ set_tax | settlementStats |
 | R11 | Auto-manage a settlement, and its policy | the policies | ✗ | ✗ | aiProductionController.isAutoManaged / autoManagePolicy |
 | R12 | Rally point for new recruits | — | ✗ | ✗ | clicks (minor) |
-| R13 | Games and races frequency | public order, cost | ✗ | ✗ | clicks (probe) |
+| R13 | Games and races frequency | public order, cost | ✗ | ✗ | clicks (probe; upstream #89) |
 | R14 | Make a settlement the capital | distance-to-capital order penalty | ✗ | ✗ | probe |
 | R15 | Guild offer: accept or decline | guild, cost, slot | ◐ popup read | ◐ popup | popup choice |
 | R16 | Station or remove a governor | governor traits (chivalry, dread, management…) | ◐ whereabouts | ✅ move_army | namedCharacter stats, getTraits |
 | R17 | Move retinue (ancillaries) between characters | ancillary effects | ✗ | ✗ | getAncillary / addAncillary, removeAncillary |
-| R18 | Hire mercenaries | pool in region, cost, room | ✗ | ✗ | campaignTable.getMercPool, mercPool.getMercUnit; hire: clicks |
+| R18 | Hire mercenaries | pool in the army's region, cost, room | ✅ per army: `can_hire` | ◐ `hire_mercenary` (a general's army in the pool's region; direct write: pays the entry's cost, takes one from `currentPool`, joins next turn; religion, crusading and dates from descr_mercenaries.txt; not yet run live) | regionStruct.mercPool; EOP has no hire call (upstream #89) |
 | R19 | Build a fort or watchtower | cost, place | ✗ | ✗ | character.createFort, stackStruct.buildWatchTower |
 | R20 | Public order and growth breakdown (information) | order and growth causes, squalor, unrest, religion | ◐ order % | — | settlementStats |
 | R21 | Plague: keep people in or out | plagued settlements | ✗ | — | settlementStruct.plagued |
@@ -62,7 +67,7 @@ Columns: **See** — the ruler's report shows what he needs; **Do** — an order
 | W1 | Move an army, march on a settlement | moves left, terrain, land/sea | ✅ | ✅ move_army, march_on | — |
 | W2 | Attack an army | foe strength, units, general | ✅ | ✅ attack | — |
 | W3 | Besiege; siege length; holdout | walls, garrison, holdout | ✅ | ✅ besiege | — |
-| W4 | Build siege equipment (rams, ladders, towers) | build points, wall type | ✗ | ✗ | stackStruct.ladders/rams/towers read; build: clicks |
+| W4 | Build siege equipment (rams, ladders, towers) | build points, wall type | ✗ | ✗ | stackStruct.ladders/rams/towers read; build: clicks (upstream #89) |
 | W5 | Assault | equipment ready, walls | ◐ | ◐ besiege assault | needs W4 |
 | W6 | Sally out / attack from a besieged settlement | besieger strength | ◐ siege | ◐ attack | — |
 | W7 | Lift a siege, relieve an ally | — | ✅ | ✅ move_army | — |
@@ -73,7 +78,7 @@ Columns: **See** — the ruler's report shows what he needs; **Do** — an order
 | W12 | Disband units | upkeep, free upkeep | ✅ | ✅ disband | — |
 | W13 | Spy opens the gates | gates-open chance | ✗ | ✗ | settlementStruct.gatesAreOpened |
 | W14 | Crusade or jihad: join, leave, target | crusade target, deadline | ✗ | ✗ | character.crusade, campaignTable.crusade |
-| W15 | Captives: ransom, release, execute | captives, price | ✅ popup | ✅ popup choice | — |
+| W15 | Captives: ransom, release, execute | captives, price | ✅ popup | ✅ popup choice; steward rule for ladder seats | steward rule for ladder seats (captor: ransom; captive: pay/refuse by price vs treasury) |
 | W16 | General's command, traits, loyalty (information) | command, loyalty, traits | ✗ | — | namedCharacter.command, loyalty, getTraits |
 | W17 | Garrison, leave or take a fort | fort, its garrison | ✗ forts | ◐ move_army | factionStruct.getFort, fortStruct |
 | W18 | Exchange units between two adjacent armies (not whole armies) | both armies' units | ✅ | ✗ | probe (stackStruct.releaseUnits?) |
@@ -117,13 +122,13 @@ Columns: **See** — the ruler's report shows what he needs; **Do** — an order
 | D1 | War and peace | stances | ✅ | ✅ set_stance | — |
 | D2 | Ceasefire | — | ✅ | ✅ set_stance peace | — |
 | D3 | Alliance; cancel alliance | — | ✅ | ✅ set_stance | — |
-| D4 | Trade rights | which ports and roads trade | ◐ | ✗ | probe (a script command?) |
-| D5 | Military access | — | ✗ | ✗ | factionStruct.hasMilitaryAccess / setMilitaryAccess |
-| D6 | Map information | — | ✗ | ✗ | probe |
-| D7 | Gift, one-off money, yearly tribute | treasury | ✅ | ◐ send_gold (no yearly) | probe |
-| D8 | Region (give, demand) | — | ✅ | ◐ cede_settlement | settlementStruct.changeOwner |
-| D9 | Protectorate | — | ✗ | ✗ | probe |
-| D10 | Demand, threaten | — | — | ✗ | none in EOP (LLM messages instead) |
+| D4 | Trade rights | which ports and roads trade | ◐ | ✗ | probe (a script command?; upstream #89) |
+| D5 | Military access | — | ✗ | ✗ | factionStruct.hasMilitaryAccess / setMilitaryAccess (upstream #89) |
+| D6 | Map information | — | ✗ | ✗ | probe (upstream #89) |
+| D7 | Gift, one-off money, yearly tribute | treasury | ✅ | ◐ send_gold (no yearly) | probe (upstream #89) |
+| D8 | Region (give, demand) | — | ✅ | ◐ cede_settlement | settlementStruct.changeOwner (demand: upstream #89) |
+| D9 | Protectorate | — | ✗ | ✗ | probe (upstream #89) |
+| D10 | Demand, threaten | — | — | ✗ | none in EOP (LLM messages instead; upstream #89) |
 | D11 | Bribe a settlement or army | cost | ✅ | ✅ bribe | — |
 | D12 | Join an attack on a third faction | — | — | ✗ | messages instead |
 | D13 | Marriage alliance | — | ◐ | ◐ popup | — |
@@ -131,7 +136,7 @@ Columns: **See** — the ruler's report shows what he needs; **Do** — an order
 | D15 | Ask to lift excommunication | papal standing | ✗ | ✗ | probe |
 | D16 | Answer a proposal from another faction | the offer, its balance | ✅ popup | ✅ popup choice | — |
 | D17 | Relations, reputation, power, wealth, priorities (information) | per faction | ◐ size | — | getFactionStanding, getFactionRanking |
-| D18 | Each proposal both ways: offer or demand (D4–D9, D12) | — | — | ✗ | as each row |
+| D18 | Each proposal both ways: offer or demand (D4–D9, D12) | — | — | ✗ | as each row (upstream #89) |
 | D19 | Cancel trade rights, military access, a protectorate, tribute | current treaties | ✗ treaties | ✗ | probe |
 | D20 | Treaties in force (information): trade rights, access, tribute paid and received, protector | per faction | ✗ | — | hasMilitaryAccess; others probe |
 
@@ -141,8 +146,8 @@ Columns: **See** — the ruler's report shows what he needs; **Do** — an order
 |---|---|---|---|---|---|
 | C1 | Papal standing (information) | standing, excommunication risk | ✗ | — | factionStruct.getFactionStanding |
 | C2 | Papal election vote | cardinals | ✅ popup | ✅ popup | — |
-| C3 | Missions: know them, their deadline and reward | every active mission | ◐ popup when issued | — | factionStruct.missions (not exposed: route 2) |
-| C4 | Marriage offers; adoption offers | suitor stats | ✅ popup | ✅ popup | — |
+| C3 | Missions: know them, their deadline and reward | every active mission | ◐ popup when issued | — | factionStruct.missions (not exposed: upstream #89) |
+| C4 | Marriage offers; adoption offers | suitor stats | ✅ popup | ✅ popup; steward rule for ladder seats | steward rule for ladder seats |
 | C5 | Heir | candidates | ◐ family | ✗ | namedCharacter.setAsHeir |
 | C6 | Family stats and traits (information) | command, loyalty, piety, traits, vices | ✗ | — | namedCharacter stats, getTraits |
 | C7 | Rebellion, riots, disasters, plague (information) | which settlement | ◐ | — | 225 event messages: onIncomingMessage eventID |
@@ -160,6 +165,7 @@ What master adds for the rows above:
 | Rows | Master adds |
 |---|---|
 | D17, D19, D20 | `campaignTable.getFactionDiplomacy` → `factionDiplomacy`: state, hasTradeRights, hasMilitaryAccess, isProtectorate, protectoratePayment, tributeAmount, tributeDuration, factionStanding, numTurnsWar/Allied/Ceasefire/Trade/Access, numEmptyThreats, isTrustWorthy |
+| R3 | construction options (repair `constructionType`) + `buildingInQueue:addBuildingToQueue` (`types/settlement.cpp:1918, 1955`; `building.hp` instant repair not used) |
 | R11 | `factionStruct.autoManageAll/Buildings/Recruitment/Taxes`; `aiProductionController.isAutoManagedTaxes`, `setExtraBias` |
 | R14 | `factionStruct.setCapital` |
 | W5, W7, N2 | `armyStruct.canStartAssault`, `liftSiege`, `liftBlockade`, `canRetreat` |
@@ -169,12 +175,15 @@ What master adds for the rows above:
 | R20, R21, W3 | `settlementStruct.publicHealth`, `plagueDuration`, `maxHoldoutTurns`, `readyToSurrender`, `canConstructBuilding` |
 | D6 | `factionStruct.revealTile`, `setTileVisibility` |
 
-Still missing in master: an active-mission list (C3; only `missionDetailsStruct` on events), retrain
-(R9), repair (R3), hiring mercenaries (R18), diplomatic proposals (D4–D10, D18), siege-equipment
-building (W4), games and races (R13). Those stay screen clicks or route 2 (direct memory reads).
+Still missing in master: an active-mission list (C3; only `missionDetailsStruct` on events), hiring
+mercenaries (R18), diplomatic proposals (D4–D10, D18), siege-equipment building (W4), games and races
+(R13) — requested upstream in EOP-Labs/M2TWEOP-library#89 (2026-10-26; agent recruit cost R7 is also
+in #89). Those stay screen clicks or route 2 (direct memory reads) until exposed.
 
 Cost of moving to master: core types are renamed (`stackStruct` → `armyStruct`, `namedCharacter` →
 `characterRecord`, and more), so the bridge needs a port, and an unreleased build is less proven.
+Building queue bug on master (`getBuildingInQueue` off by one, crashed reading slot n; #88): fix PR
+EOP-Labs/M2TWEOP-library#90.
 
 ## Scope: decisions left out on purpose
 

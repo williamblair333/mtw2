@@ -17,5 +17,5 @@ def test_tell_queues_a_note_in_the_rulers_adviser_thread(tmp_path):
 def test_a_game_note_is_labelled_plainly_in_the_turn_prompt(venice_report):
     note = Message(id=1, game_id="g", turn=3, channel="adviser:venice", sender=NOTE_SENDER,
                    text="Ships work now.", ts=0)
-    p = build_prompt(venice_report, persona="p", adviser="ann", diplomacy=[note])
+    p = build_prompt(venice_report, persona="p", adviser="author", diplomacy=[note])
     assert "Game note (from the people running this game): Ships work now." in p

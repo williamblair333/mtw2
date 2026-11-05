@@ -188,10 +188,10 @@ def test_cli_autoplay_game_has_no_humans(tmp_path):
 
 def test_control_and_adviser_options():
     from parley.setup import build_game
-    template = {"factions": {"england": {}, "france": {}, "hre": {}}, "humans": {"england": "ann"}}
+    template = {"factions": {"england": {}, "france": {}, "hre": {}}, "humans": {"england": "author"}}
     game, _ = build_game(template, "obs", personas_dir=ROOT / "personas", play="all", autoplay={},
                          control=["england=full", "france=diplomacy,armies"], adviser=["england"])
-    assert game["seats"]["england"]["control"] == "full" and game["seats"]["england"]["adviser"] == "ann"
+    assert game["seats"]["england"]["control"] == "full" and game["seats"]["england"]["adviser"] == "author"
     assert game["seats"]["france"]["control"] == ["diplomacy", "armies"]
     assert "control" not in game["seats"]["hre"]
 
@@ -211,6 +211,21 @@ def test_control_option_errors():
 
 def test_autoplay_all_includes_the_templates_human_faction():
     from parley.setup import build_game
-    template = {"factions": {"england": {}, "france": {}}, "humans": {"england": "ann"}}
+    template = {"factions": {"england": {}, "france": {}}, "humans": {"england": "author"}}
     game, _ = build_game(template, "soak", personas_dir=ROOT / "personas", play="all", autoplay={})
     assert sorted(game["seats"]) == ["england", "france"]
+
+
+def test_build_game_preserves_playtest_funds_and_amount():
+    template = {
+        "factions": {
+            "venice": {"persona": "@domenico-selvo", "playtest_funds": True, "playtest_funds_amount": 75000},
+            "milan": {"persona": "@archbishop-tedald"},
+        },
+        "humans": {},
+    }
+    game, _ = build_game(template, "g", personas_dir=ROOT / "personas", play=["venice", "milan"])
+    assert game["seats"]["venice"]["playtest_funds"] is True
+    assert game["seats"]["venice"]["playtest_funds_amount"] == 75000
+    assert "playtest_funds" not in game["seats"]["milan"]
+    assert "playtest_funds_amount" not in game["seats"]["milan"]

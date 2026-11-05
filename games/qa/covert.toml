@@ -1,0 +1,177 @@
+# Covert suite: spy, assassinate, sabotage, an agent of the wrong kind, and the #255 spy report
+# scroll closure.
+#
+# Instant cases (see instant.toml for how they run) wherever the turn it is ordered in shows the
+# behaviour: orders go through the real handlers with M.qa.order, inside one held turn. Only the
+# orders that roll no mission are instant (a refusal, a walk). The missions are turn cases (phase
+# 2), grouped last: the game's event reports each ("agent mission: england: <who>'s <mission>:
+# <outcome>"), and they pass on that line and the report's agent_results, whatever the outcome.
+#
+# Why the missions aren't instant (live 10-31, phase 1): in the held turn a diplomat's bribe reported
+# its outcome in the same second (08:13:37), but an assassin's sabotage of Bruges said "sabotage ok"
+# at 08:07:41 and no mission line came in 30 s. In played turns every English sabotage (10-30 18:19,
+# 18:57, 20:56, 21:40, 22:06, 22:22) reported 1-10 s after the order, five of six after End Turn was
+# pressed: what the game waits for in a held turn (End Turn, or the mission's own animation while
+# the bridge presses nothing) is unproven, so they run at a played turn start as a ruler's do.
+# The spy report scroll (#255) is a popup, and popups aren't handled in a held turn either.
+#
+# Placeholders from the newest report (parley/qa/runner.py pick_targets): $garrison_town (an own
+# town not under siege, with its tile).
+#
+# Skill traits come from the game's `export_descr_character_traits.txt`
+# (as found in `mods/bare_geomod/data`, vanilla-compatible):
+#   - Spies: `GoodSpy` level 5 (Subterfuge +5), `NaturalSpySkill` level 3 (+3),
+#     `GoodConspirator` level 3 (+3, spy and assassin)
+#   - Assassins: `GoodAssassin` level 5 (+5), `GoodConspirator` level 3 (+3)
+#
+# Bench helpers (lua/parley_bridge.lua M.qa), on top of those in field.toml, instant.toml and
+# siege.toml (order, last, dist):
+#   spawn_agent(faction, kind, x, y, name)  an agent on (x, y); returns his report id (the game names
+#                                           him from the faction's list, so cases use the bind)
+#   skill(agent, trait, level)              a trait added to the agent
+#   seen_tile(faction, x, y, near, far)     free_tile, on a tile the faction sees now
+#   sees(faction, x, y)                     the sight id of the foreign army or agent there
+#   news(faction)                           the mission outcomes kept for the faction's next report
+#
+# Old cases (turn cases until 10-31) and where they went:
+#   spy_report_closed (#255) -> spy_report_closed (turn, chance), now also checking agent_results
+#   assassinate              -> assassinate (turn; instant 10-31, back after phase 1 saw no mission
+#                               line in a held turn)
+#   sabotage                 -> sabotage (turn; the same)
+# New: wrong_agent_refused and spy_far_walks (instant, no mission rolled).
+#
+# Flakiness the old cases had (HANDOFF 10-30/31), and what this layout does about it:
+#   - assassinate: the victim walked off or out of sight before the order ran a turn later (live
+#     10-30 21:38, 22:03). The victim is spawned in England's sight (seen_tile, sees) and every AI is
+#     frozen (rebels too), so nobody moves between setup and the order at the next turn start;
+#     tire() keeps the victim's own moves at 0 besides. The mission's roll doesn't matter: any outcome
+#     line passes.
+#   - the scene around the anchor town filled up over a run (live 10-31: no free tile England saw
+#     3-4 tiles from London after 25 cases): every case starts on the bench save as recorded
+#     (isolation "fresh", the default; the runner reloads it).
+#   - a covert turn that never ended (19:41, the papal notice at End Turn): the bench save is
+#     England's turn 1, and the suite ends one turn instead of four.
+#
+# What can still go red without a bug (chance):
+#   - spy_report_closed needs the spy's mission to work (a max-skill spy, still a roll): a run where
+#     it fails inside max_turns is inconclusive, never fail (`chance = true`).
+#
+# Unproven live: the assassination and sabotage turn cases on the bench save (phase 2); M.qa.news.
+# Run: `just qa covert`, or `case=<name>`.
+
+name = "covert"
+faction = "england"
+
+# 1. an agent of the wrong kind is refused with what he is (no mission rolled)
+[[cases]]
+name = "wrong_agent_refused"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "spy", $at_x, $at_y, "QA Spy")', bind = "spy" },
+    { lua = 'return M.qa.free_tile($at_x, $at_y, 1, 1)', bind = "at2" },
+    { lua = 'return M.qa.spawn_agent("england", "assassin", $at2_x, $at2_y, "QA Assassin")', bind = "assassin" },
+]
+act = [
+    'return M.qa.order("england", { type = "sabotage", agent = "$spy", settlement = "$garrison_town" })',
+    'return M.qa.order("england", { type = "spy", agent = "$assassin", target = "$garrison_town" })',
+]
+expect = [
+    { lua = 'return M.qa.last("sabotage")', equals = "sabotage refused: '$spy' is a spy, not an assassin" },
+    { lua = 'return M.qa.last("spy")', equals = "spy refused: '$assassin' is an assassin, not a spy" },
+]
+
+# 2. a spy ordered on a town 3-4 tiles off walks toward it instead and says so (no mission rolled)
+[[cases]]
+name = "spy_far_walks"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 3, 4)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "spy", $at_x, $at_y, "QA Spy")', bind = "spy" },
+    { lua = 'return M.qa.dist("$spy", $hostile_at_x, $hostile_at_y)', bind = "start" },
+]
+act = ['return M.qa.order("england", { type = "spy", agent = "$spy", target = "$hostile" })']
+expect = [
+    { lua = 'return M.qa.last("spy")', match = "^spy ok: '$spy' is \\d+ tiles from $hostile: walking there instead; act from the next tile$" },
+    { lua = 'return M.qa.dist("$spy", $hostile_at_x, $hostile_at_y)', below = "$start", within = 15 },
+]
+
+# --- turn cases (phase 2) -----------------------------------------------------------------------
+
+# 3. assassinate a rebel general at the next turn start: the victim is the bench's own, a rebel army
+# spawned on a tile England sees (live 10-30 22:03: one spawned out of England's sight lists was
+# never seen and the order went to the next nearest character, across the Channel) and kept still
+# (tire), the assassin on the next tile, and the order names the victim's sight id (M.qa.sees)
+[[cases]]
+name = "assassinate"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.seen_tile("england", $garrison_town_x, $garrison_town_y, 3, 4)', bind = "victim_at" },
+    { lua = 'return M.qa.spawn_army("slave", $victim_at_x, $victim_at_y)', bind = "victim" },
+    'return M.qa.tire("slave", "$victim")',
+    { lua = 'return M.qa.free_tile($victim_at_x, $victim_at_y, 1, 1)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "assassin", $at_x, $at_y, "QA Assassin")', bind = "assassin" },
+    'return M.qa.skill("$assassin", "GoodAssassin", 5)',
+    'return M.qa.skill("$assassin", "GoodConspirator", 3)',
+    { lua = 'return M.qa.sees("england", $victim_at_x, $victim_at_y)', bind = "victim_id" },
+]
+expect = [
+    { order_ok = true },
+    { log = "agent mission: england: .*'s assassination: \\S" },
+    { state = "agent_results", equals = "'s assassination: " },
+]
+
+[cases.orders]
+1 = [{ type = "assassinate", agent = "$assassin", target = "$victim_id" }]
+
+# 4. sabotage a rebel or enemy town from the next tile, at the next turn start
+[[cases]]
+name = "sabotage"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "assassin", $at_x, $at_y, "QA Saboteur")', bind = "saboteur" },
+    'return M.qa.skill("$saboteur", "GoodAssassin", 5)',
+    'return M.qa.skill("$saboteur", "GoodConspirator", 3)',
+]
+expect = [
+    { order_ok = true },
+    { log = "agent mission: england: .*'s sabotage: \\S" },
+    { state = "agent_results", equals = "'s sabotage: " },
+]
+
+[cases.orders]
+1 = [{ type = "sabotage", agent = "$saboteur", settlement = "$hostile" }]
+
+# 5. #255: a spy's mission that works opens the spy report, and the bridge closes it before End Turn.
+# The spy spawns on a free land tile next to a rebel or enemy town (walkable from it; 1 tile, not
+# 1-2: from 2 tiles off he walks instead of acting). One order: a
+# spy whose mission works stands inside the town after it, and a second mission on that town is
+# refused (live 10-30 18:52: turn 41's spying worked, and the repeats on turns 42-44 came back
+# "'Simon Awood' is already inside Edinburgh"). The report's agent_results carries the outcome,
+# worked or not. A roll: no success inside max_turns is inconclusive (chance)
+[[cases]]
+name = "spy_report_closed"
+chance = true
+max_turns = 3
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "spy", $at_x, $at_y, "QA Spy")', bind = "spy" },
+    'return M.qa.skill("$spy", "GoodSpy", 5)',
+    'return M.qa.skill("$spy", "NaturalSpySkill", 3)',
+    'return M.qa.skill("$spy", "GoodConspirator", 3)',
+]
+expect = [
+    { order_ok = true },
+    { log = "popup enemy_settlement_info_scroll: closed the spy report after england's mission" },
+    { state = "agent_results", equals = "'s spying: " },
+]
+
+[cases.orders]
+1 = [{ type = "spy", agent = "$spy", target = "$hostile" }]

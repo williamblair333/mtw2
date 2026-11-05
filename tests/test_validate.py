@@ -12,6 +12,55 @@ def _orders(*items):
     return Orders(protocol=1, game_id="test", turn=1, faction="venice", orders=list(items))
 
 
+def _with_agents(report):
+    from parley.protocol import Agent
+    return report.model_copy(update={
+        "agents": [Agent(id="Pietro", kind="diplomat", x=1, y=1), Agent(id="Luca", kind="priest", x=1, y=1)],
+        "seen_agents": [Agent(id="Laurence Bidell", kind="diplomat", x=2, y=2, faction="england")]})
+
+
+def test_an_enemy_agent_in_the_agent_field_is_named_and_the_fields_explained(venice_report):
+    # live (2026-10-29): France put England's diplomat in "agent" for its bribe, five times
+    from parley.control import AREAS
+    from parley.protocol import Bribe
+    r = _with_agents(venice_report)
+    _, rej = validate_orders(r, _orders(Bribe(agent="Laurence Bidell", target="Pietro")), areas=AREAS)
+    assert rej[0].reason == ("'Laurence Bidell' is england's diplomat, not yours: \"agent\" is your own "
+                             "diplomat (your diplomats: Pietro) and \"target\" is who you act on")
+
+
+def test_the_wrong_kind_of_agent_names_the_right_ones(venice_report):
+    from parley.control import AREAS
+    from parley.protocol import Bribe
+    r = _with_agents(venice_report)
+    _, rej = validate_orders(r, _orders(Bribe(agent="Luca", target="Laurence Bidell")), areas=AREAS)
+    assert rej[0].reason == "'Luca' is a priest, not a diplomat (your diplomats: Pietro)"
+
+
+def test_move_agent_on_a_general_names_the_move_army_order(venice_report):
+    # live (2026-10-29, turn 138): France moved its generals by move_agent, three times
+    from parley.control import AREAS
+    from parley.protocol import MoveAgent
+    a = venice_report.armies[0]
+    r = venice_report.model_copy(update={"armies": [a.model_copy(update={"id": "Godfrey", "leader": "Godfrey"})]})
+    _, rej = validate_orders(r, _orders(MoveAgent(agent="Godfrey", x=120, y=89)), areas=AREAS)
+    assert rej[0].reason == ("'Godfrey' leads one of your armies, not an agent: move it with "
+                             '{"type": "move_army", "army": "Godfrey", "x": 120, "y": 89}')
+
+
+def test_move_agent_on_an_admiral_names_his_fleets_move_army_order(venice_report):
+    # live (2026-10-29, turn 8): England moved Admiral Nigel by move_agent; done, and he stayed put
+    from parley.control import AREAS
+    from parley.protocol import Agent, MoveAgent
+    a = venice_report.armies[0]
+    r = venice_report.model_copy(update={
+        "agents": [Agent(id="Admiral Nigel", kind="admiral", x=1, y=1)],
+        "armies": [a.model_copy(update={"id": "Admiral Nigel", "leader": "Admiral Nigel", "is_fleet": True})]})
+    _, rej = validate_orders(r, _orders(MoveAgent(agent="Admiral Nigel", x=105, y=164)), areas=AREAS)
+    assert rej[0].reason.startswith("'Admiral Nigel' is an admiral: he sails with his fleet, so move it with "
+                                    '{"type": "move_army", "army": "Admiral Nigel", "x": 105, "y": 164}')
+
+
 def test_validate_gold_over_treasury(venice_report):
     kept, results = validate_orders(venice_report, _orders(SendGold(to="milan", amount=6000)))
     assert kept.orders == []
@@ -44,6 +93,15 @@ def test_retrain_needs_an_owned_settlement(venice_report):
     _, results = validate_orders(venice_report.model_copy(update={"human_slot": False}),
                                  _orders(Retrain(settlement=own)), areas=("recruit",))
     assert results == []  # any faction: a direct write, not the human slot's screens
+
+
+def test_retrain_refused_when_no_gold(venice_report):
+    from parley.protocol import Retrain
+    report = venice_report.model_copy(update={"treasury": 0})
+    own = report.settlements[0].id
+    kept, results = validate_orders(report, _orders(Retrain(settlement=own)), areas=("recruit",))
+    assert kept.orders == []
+    assert "treasury too low" in results[0].reason
 
 
 def test_validate_unknown_faction(venice_report):

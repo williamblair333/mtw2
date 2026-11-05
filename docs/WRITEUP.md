@@ -76,7 +76,7 @@ just play watch
 
 Start a **new** Grand Campaign **as England**. Your campaign faction has no game AI, so here
 everything it does is the LLM's doing. It builds, sets taxes, moves and attacks with every army,
-uses its agents and makes its own diplomacy. Its governors recruit (see `recruit` below). Autoplay ends its turns, the camera jumps to its
+uses its agents, recruits and makes its own diplomacy. Autoplay ends its turns, the camera jumps to its
 army, and the Parley window shows its current plan. Type `!adviser` in `#watch` to open your private
 thread with it. It treats you as a loyal adviser, may overrule you, and tells you why.
 
@@ -86,13 +86,13 @@ thread with it. It treats you as a loyal adviser, may overrule you, and tells yo
 |---|---|---|
 | `diplomat` | diplomacy | everything else |
 | `ruler` (default) | diplomacy, armies, agents | building, recruiting, taxes |
-| `full` | everything but recruiting | recruiting |
+| `full` | everything | nothing |
 | a list, e.g. `diplomacy,armies,build` | exactly those areas | the rest |
 
-**Why `full` leaves recruiting out:** EOP 3.3.1 lists a settlement's recruits by reading past an
-array in its own C++ code whenever units are inside (the retraining list). Lua can't prevent that,
-and it can crash the game. A ruler given `recruit` explicitly sees recruit options only for
-settlements with no units inside. Elsewhere it's told to march them out first.
+**Recruiting in a settlement with units inside:** EOP 3.3.1's own list of a settlement's recruits
+can crash the game when units are inside, so the bridge reads the game's recruitment pools instead.
+Where it still can't tell, the ruler sees "can recruit: unknown" and is told to march the units out
+first.
 
 On your campaign faction, "the game handles" means the settlement governors (auto-manage) do the
 building and recruiting. EOP can't hand taxes to the governor, so taxes stay as they are. Armies the
@@ -110,6 +110,15 @@ never get committed. Edit that template to mod factions: persona, name and brain
 
 A new game name is a clean slate: no notes, no grudges, a new channel. Reusing a name continues that
 game's memory and conversations.
+
+**When the game crashes:** Medieval II crashes now and then, more often in long unattended runs.
+`just relaunch-game` stops what's left of it and starts it again through Steam on the newest save,
+with no clicks. `just crash-watch` does that for you: it watches the game and relaunches it after a
+crash (`just crashes` lists what it caught). A relaunch refuses at once if your desktop is locked or
+nobody is logged in, because the game can't run behind a lock screen.
+
+**Keep the screen awake:** a game behind a blanked or locked screen slows to a crawl. `just play`
+keeps the screen awake while it runs.
 
 ---
 
@@ -137,7 +146,7 @@ game's memory and conversations.
  Medieval II (Windows build, Proton)          this repo (Python)                Discord
  ┌──────────────────────────────┐   files   ┌───────────────────────┐  SQLite  ┌──────────────┐
  │ EOP 3.3.1 Lua plugin         │ ───────▶  │ orchestrator          │ ◀──────▶ │ Parley bot   │
- │  lua/parley_bridge.lua       │ state.json│  `just run <game>`    │  outbox/ │ `just discord`│
+ │  lua/parley_bridge.lua       │ state.json│  (`just play` starts  │  outbox/ │  (and this)  │
  │  - turn END: write report    │           │  prompt → LLM seat    │ messages │  #<game>     │
  │  - turn START: apply orders  │ ◀───────  │  validate → orders    │          │  threads     │
  └──────────────────────────────┘orders.json└───────────────────────┘          └──────────────┘
@@ -155,40 +164,79 @@ game's memory and conversations.
   game, inside `pcall`. A bad order is reported back and never forced through.
 - **Turn folders:** the game's Lua can't create folders, so the orchestrator creates them ahead
   of the game, following `heartbeat.txt`.
-- **Memory** (per game) has three parts:
+- **The rule for anything that isn't the ruler: the ruler's wishes are always carried out.**
+  Work may be offloaded (to rules, to cheaper models) so long as nothing the game would accept
+  is overridden, cancelled or blocked, and the ruler is told what was done. The **steward**
+  (`steward = true` on a seat; `parley/steward.py`) follows it. After the ruler's orders are
+  checked, it looks for own settlements the orders leave with no garrison (a `merge_armies` of
+  `garrison:X` into a field army, a `disband` of the last unit, or one already empty) where the
+  ruler ordered no recruit. There it appends one `recruit` of the cheapest land unit the
+  settlement offers (never ships or siege engines), if the treasury afterward still covers the
+  unit's cost, two turns of its upkeep, and any deficit. The ruler's orders go through intact and
+  first; the steward's follow, numbered after them, and are listed in the turn folder's
+  `steward.json`. The next prompt says what was recruited and how to stop it: list the settlement
+  in `hold_empty`, a field of the orders (this turn only). A garrison the steward couldn't fund is
+  reported too. The prompt also warns, without changing anything, of settlements with high tax
+  and low public order.
+- **Memory** has four parts:
   - a SQLite file `parley_turns/<game>.db`, which holds every message and the outbox for Discord;
   - each ruler's last 5 private notes;
-  - a diff of its last two reports.
+  - a diff of its last two reports;
+  - **lessons** carried from past games: short rules a ruler learned from its mistakes.
+    `just lessons <game>` lists them, and `just lessons-veto <game> <id>` removes one for good.
 - **Seats** (brains) are interchangeable:
   - `claude:<model>`: the Claude Code CLI on your subscription, no tools;
   - `agy:<model>`: Gemini through the Antigravity CLI, one call at a time per machine;
   - `ollama:<model>`: local;
+  - `heretic:local` / `heretic:think`: a llama-server on this machine (port 8090), if you run one; answering
+    straight away or reasoning first (`think`: about 3-4 minutes a turn against ~40 s; keep
+    `seat_timeout` a minute above that);
+  - `openai:<model>`: any OpenAI-compatible API;
   - `script:<plan.json>`: fixed orders, for testing.
+- **Discord** shows each ruler's model on its lines: `**King Edward (England · heretic:think):** ...`.
 
 ## 3. Requirements
 
 - Linux with Steam, and **Total War: MEDIEVAL II – Definitive Edition** (Steam appid 4700).
 - Python 3.13, [`uv`](https://docs.astral.sh/uv/), [`just`](https://github.com/casey/just), `gh`
   (GitHub CLI, used to download pinned releases), `unzip`, `7z`.
-- At least one LLM brain: the `claude` CLI (Claude Code), `agy` (Gemini), or Ollama.
-- A Discord server you own, for the table.
+- At least one LLM brain: the `claude` CLI (Claude Code), `agy` (Gemini), Ollama, or any
+  OpenAI-compatible API.
+- A Discord server you own, for the table. You can play without one; you just can't talk to the
+  rulers.
+- A desktop session that stays logged in and unlocked while the game runs. The game stalls behind
+  a lock screen.
+
+We test on Debian 13 with an NVIDIA RTX 3060, and on Debian 12 with an old Intel laptop chip
+(HD 4600), both with Proton 10.
 
 ## 4. Installation on Linux
 
 ### 4.1 Switch the game to the Windows build
 The native Feral Linux port can't run mods.
 
-1. Steam → right-click Medieval II → **Properties → Compatibility** → force **Proton 10.0-4**.
-   Steam downloads the Windows build.
+1. Steam → right-click Medieval II → **Properties → Compatibility** → force **Proton 10**.
+   Steam downloads the Windows build (about 33 GB).
 2. Start the game once from Steam and reach the main menu.
 
 ### 4.2 Install EOP (the Lua scripting engine) and the bridge
 ```
 git clone <this repo> && cd mtw2
 just setup            # Python dependencies
-just install-eop      # EOP 3.3.1 into <game>/mods/parley, with vanilla campaign files
+just install-eop      # EOP into <game>/mods/parley (3.3.1; EOP_BUILD=master for what we test on)
 just install-bridge   # the Lua bridge into the mod
 ```
+**Which EOP:** `install-eop` installs the last release, 3.3.1. We test on a newer build of EOP's
+master branch (commit b525628, from EOP's own CI), because it adds calls the bridge uses when it
+finds them: treaties, a settlement's recruitment queue, and the land links between regions. The
+bridge checks which version it runs on (`eop_master()` in `lua/parley_bridge.lua`) and leaves
+those parts out of the report on 3.3.1. We test mostly on master, so 3.3.1 is less proven.
+
+To install the master build we test on: `EOP_BUILD=master just install-eop`. It downloads that
+build from EOP's CI and checks its checksum. Two limits: `gh` must be logged in to GitHub
+(`gh auth login`), and GitHub deletes the build on 2027-01-17, unless EOP releases a newer version
+before then.
+
 `install-eop` downloads a pinned, checksummed release. If M2EX is also installed, it copies the
 vanilla campaign files into the mod (M2EX's `descr_strat.txt` breaks the vanilla engine), and it
 sets fullscreen at 1920×1080 (`PARLEY_RES="2560 1440" just install-eop` to change that).
@@ -199,6 +247,18 @@ Steam → Medieval II → **Properties → General → Launch Options**:
 PROTON_LOG=1 bash -c 'cd mods/parley && exec "${@/medieval2.exe/mods\/parley\/M2TWEOP GUI.exe}"' -- %command%
 ```
 **Play** now opens EOP's launcher; click **Run Mod**. Clear the field to get the plain game back.
+
+**Older graphics chips.** Proton draws the game through Vulkan by default. On a chip without good
+Vulkan support (we hit this on an Intel HD 4600), use Wine's OpenGL renderer instead, and tell Wine
+to load EOP's own `d3d9.dll` first, because EOP hooks the game through that file:
+```
+PROTON_USE_WINED3D=1 WINEDLLOVERRIDES=d3d9=n,b PROTON_LOG=1 bash -c 'cd mods/parley && exec "${@/medieval2.exe/mods\/parley\/M2TWEOP GUI.exe}"' -- %command%
+```
+Without the `WINEDLLOVERRIDES` part the game starts, but EOP never loads.
+
+**If Steam asks which launch option to use** every time, the scripts that relaunch the game will
+wait on that question. Put `PARLEY_STEAM_URL=steam://launch/4700/option0` in
+`~/.config/environment.d/parley.conf` and log in again; the scripts then pick the first option.
 
 ### 4.4 Discord
 1. Create a server. The bot finds it by name, set in the game config's `[discord] guild = ...`.
@@ -223,9 +283,9 @@ no Lua scripting**, so the bridge runs on EOP. We'll move to M2EX once scripting
 
 ## 5. Playing a session
 
-1. **Turn loop:** `just run games/<game>.toml`
-2. **Discord bot** (in your own terminal, because it reads the token): `just discord games/<game>.toml`.
-   It creates `#<game-id>` on first start.
+1. **Start it:** `just play <name>` (for `games/local/<name>.toml`). It starts the turn loop and
+   the Discord bot in the background. The bot creates `#<game-id>` on first start.
+   (`just run` and `just discord` start one each, if you want them in separate terminals.)
 3. **Game:** Steam **Play** → **Run Mod** → **new** Grand Campaign as your faction. Untick
    **Show CPU Moves**, or every AI march is animated.
 4. **Each turn:** end your turn and wait for **"Turn N: all rulers have decided. You may end your
@@ -306,6 +366,7 @@ game_id = "historic-1080"                 # turn folders, database and Discord c
 turn_root = "<game>/parley_turns"         # where the bridge writes; the game's working dir
 save_dir  = "<game>/saves"                # backed up before every LLM turn (last 20 kept)
 seat_timeout = 120                        # seconds per LLM decision
+fallback_reserve = 90                     # seconds of seat_timeout kept for a seat's fallback
 
 [humans]
 england = "your_discord_name"                     # faction = Discord username
@@ -315,18 +376,26 @@ guild = "My Parley Server"            # game_channel defaults to the game id
 
 [seats.france]                            # an LLM ruler
 brain = "claude:sonnet"                   # or "agy:gemini-3.8-flash-low", "ollama:qwen3.5:9b"
+fallback = "claude:sonnet"                # optional: asked once if brain fails a turn
 persona = "@philip-i-of-france"           # from the library, or inline text
 name = "King Philip"                      # optional: overrides the persona's name
+steward = true                            # optional: recruit a garrison unit where the ruler's orders leave
+                                          # one empty (needs control "full"); the ruler can veto with hold_empty
 ```
 
-Example games: `games/historic-1080.toml` (6 historic LLM rulers), `games/first-game.toml`
-(Venice and Milan), `games/order-check.toml` and `games/army-check.toml` (scripted live checks).
+`save_dir` is backed up before every LLM turn; `keep_backups` (default 20) sets how many are kept.
+`games/template.toml` documents the rest: time and token budgets per ruler (`ruler_budget`,
+`decide_timeout`), `autoplay`, and the test-only `playtest_funds`.
 
-**Brains that worked well:**
-- `claude:sonnet`: sharp, in character, 10–30 s.
-- `agy:gemini-3.8-flash-low`: about 14 s, good.
-  - Use **low** effort: flash-medium returned empty answers on real turn prompts.
-- `ollama:qwen3.5:9b`: weak (it invented cities and made empty threats), and slow on a shared
+Example games: `games/example.toml` (runs with no game at all; see the README),
+`games/historic-1080.toml` (6 historic LLM rulers), `games/first-game.toml` (Venice and Milan),
+and `games/order-check.toml` and `games/army-check.toml` (scripted live checks).
+
+**Brains we've tried.** Model names change often; `BRAIN_SHORTHANDS` in `parley/setup.py` maps
+the shorthands to current names.
+- Claude Sonnet: sharp and in character, 10–30 s a turn.
+- Gemini Flash (low effort): about 14 s a turn, good. Higher effort once returned empty answers.
+- Qwen 3.5 9B on Ollama: weak (it invented cities and made empty threats), and slow on a shared
   GPU.
 
 **Every faction an LLM?** Possible: add a seat per faction. The limits are throughput and
@@ -357,13 +426,21 @@ rate limits.
 - **Add your own:** a TOML table with `name`, `kind`, optional `faction`, and `persona`. The
   persona text opens every prompt. Cover who they are, what they want, how honest they are, and
   how they talk.
+- **Faction strategy notes:** `parley/strategy/<faction>.md` (named for the faction id, e.g.
+  `england.md`) holds short instructions for one faction. `faction_note()` in `parley/prompt.py`
+  loads it, and `build_prompt` appends it right after the primer under "HOW <FACTION> WINS". A
+  faction with no file gets nothing. To add one, drop in a markdown file of about 2 KB: numbered
+  instructions a small model can follow, only claims checked against the game files or past runs,
+  nothing about battles (they are auto-resolved).
 
 ## 8. Resetting (no grudges carried over)
 
-All memory today is per game. A new `game_id` is a clean slate: no notes, no conversations, a
-fresh channel. To clear an old game, move `parley_turns/<game>/` and `parley_turns/<game>.db`
-into an archive folder. Claude and Gemini keep no session memory. Cross-game memory for
-permanent personas is planned (with a `forget` command).
+A new `game_id` is a clean slate: no notes, no conversations, a fresh channel. To clear an old
+game, move `parley_turns/<game>/` and `parley_turns/<game>.db` into an archive folder. Claude and
+Gemini keep no session memory between calls.
+
+The one thing that crosses games is **lessons** (§2): short rules a ruler learned from mistakes.
+`just lessons <game>` lists them, and `just lessons-veto <game> <id>` removes one for good.
 
 ## 9. What a ruler sees and can do
 
@@ -392,14 +469,20 @@ permanent personas is planned (with a `forget` command).
   Agent orders are checked twice: by the orchestrator against the report, then by the bridge
   against the live game at turn start (the agent is alive, the right kind, and the target is
   still in sight). `done` means issued; whether the agent succeeded shows in the next report.
-- with more control (see the control table in §0): `build` and `recruit` (from a settlement's
-  "can build" and "can recruit" lists, priced; the checker deducts gold order by order), `set_tax`
-  (low, normal, high, extortionate), `move_army` (toward a tile), `attack` (a foreign army in
-  sight) and `merge_armies` (one army, or a garrison with no general, walks to join another;
-  20 units at most). Agents can also `move_agent` (toward a tile; agents can't cross the sea
-  alone) and a princess can `marry` (a foreign general in sight). The report then also lists each settlement's queue, tax and public order, and each
-  army's troops and moves left. Orders outside a ruler's control are refused by both the checker
-  and the bridge.
+- with more control (see the control table in §0):
+  - **towns:** `build` and `recruit` (from a settlement's priced "can build" and "can recruit"
+    lists; the checker deducts gold order by order), `repair` (a damaged building), `retrain`
+    (refill a unit), `hire_mercenary`, `recruit_agent`, and `set_tax` (low, normal, high,
+    extortionate);
+  - **armies:** `move_army` (toward a tile), `attack` (a foreign army in sight), `merge_armies`
+    (one army, or a garrison with no general, joins another; 20 units at most), `merge_units`,
+    `disband`, and at sea `board`, `land` and `blockade`;
+  - **agents:** `move_agent` (toward a tile; agents can't cross the sea alone), and a princess can
+    `marry` (a foreign general in sight). A refused proposal can end with the princess disgraced
+    and removed by the game; the next report says so.
+
+  The report then also lists each settlement's queue, tax and public order, and each army's troops
+  and moves left. Orders outside a ruler's control are refused by both the checker and the bridge.
 - `messages`: to `lobby`, to a faction someone actually plays, or to `adviser` if it has one; at
   most 3 per recipient per turn, 600 characters each;
 - a private `note`. The faction you're watching shows its latest note in the Parley window.
@@ -429,7 +512,11 @@ what is enforceable.
 | The game freezes at turn start | An old probe with a blocking wait; reinstall with `just install-bridge` |
 | `PrivilegedIntentsRequired` | Turn on **both** privileged intents and **Save Changes** |
 | The bot isn't in the server (`[]` from the guilds check) | The invite link lacked `scope=bot` |
-| A ruler never replies | Check the bot terminal; Gemini flash-medium returns empty answers, so use flash-low |
+| A ruler never replies | Check `just logs <name>`. A model that keeps returning empty answers: try a lower effort setting or another model |
+| The game stalls with nothing on screen | The desktop locked or blanked. Unlock it; `just play` keeps the screen awake |
+| A relaunch waits forever on Steam | Steam is asking which launch option to use; set `PARLEY_STEAM_URL` (§4.3) |
+| The game starts but EOP never loads | On Wine's renderer (`PROTON_USE_WINED3D=1`), add `WINEDLLOVERRIDES=d3d9=n,b` (§4.3) |
+| Starting the game on one machine does nothing | Steam runs a game on one machine per account at a time; close it on the other |
 | "agy returned an empty answer" | A timeout, or the model failed the JSON schema; agy calls also queue machine-wide |
 | An order "done" but nothing happened | `ok` means issued, not succeeded (e.g. a siege when not adjacent); the next report shows the outcome |
 | A ruler names armies from another campaign | Generals' names are random per campaign; use `$general` in scripted tests |
@@ -437,31 +524,31 @@ what is enforceable.
 
 ## 11. Known limitations
 
-- Sight is a 10-tile radius, not the game's real fog of war: EOP only exposes "ever seen"
-  tiles, not "visible now". Hills, forests and watchtowers don't change it.
-- Merchants, priests and princesses are listed but have no orders yet (no acquire, denounce or
-  marry).
-- Income is the game's figure for the turn just ended; it reads 0 ("not reported") if EOP
+- **Two kinds of popup still need a mouse click:** the papal election vote, and family offers (a
+  marriage or adoption your faction must accept or decline). Our scripts click them from a
+  screenshot, which works only at one screen size. Help wanted (`CONTRIBUTING.md`).
+- **Cheap models play poorly.** Strong models rule well but cost money each turn. Small and local
+  models leave armies idle and forget their plans.
+- **Sight is a fixed radius, not the game's fog of war.** EOP tells us which tiles a faction has
+  ever seen, not which it sees now. Hills, forests and watchtowers don't change it.
+- **Merchants and priests have no orders yet** (no acquire, no denounce).
+- **Income** is the game's figure for the turn just ended. It reads 0 ("not reported") when EOP
   can't say.
-- Observer mode is untested in the live game. The new EOP calls are checked against EOP's source
-  only. The tax numbers (0–3) are assumed. Auto-resolve and the popup buttons depend on timing.
-  The first live run is the probe, so watch `parley_bridge.log`.
-- LLM recruiting works only in settlements with no units inside (see above), and can't see units
-  already queued (EOP doesn't expose that queue).
-- Whether queueing a building or unit takes the gold isn't verified. The bridge logs the treasury
-  before and after each queue (`parley_bridge.log`), so the first live run shows it.
-- Popup recovery tries six known buttons, only those actually open when EOP can tell. After six
-  tries it stops and the Parley window says *needs a human click*.
-- Armies move toward a tile and stop when out of moves. A ruler has to re-issue a long march each
-  turn. Merging, splitting and disbanding units aren't orders yet.
-- Humans have no `/send` or `/cede` command yet; use in-game diplomats.
-- Deals aren't recorded in a ledger yet (Plan 3); memory is per game (Plan 4).
-- Rulers sometimes repeat themselves despite the instruction not to.
+- **Armies move toward a tile and stop when out of moves.** A ruler has to repeat a long march each
+  turn.
+- **Humans have no `/send` or `/cede` command** yet; use in-game diplomats.
+- **Deals aren't recorded** in a ledger yet.
+- **Rulers sometimes repeat themselves** despite the instruction not to.
+- **There is no one-step installer.** §4 is the whole install.
 
 ## 12. Development
 
-- `just test`: about 170 tests, including the **real Lua bridge running in LuaJIT** (via `lupa`)
-  against a fake of the EOP API (`tests/lua/fake_game.lua`).
+- `just test`: about 1,600 tests, including the **real Lua bridge running in LuaJIT** (via
+  `lupa`) against a fake of the EOP API (`tests/lua/fake_game.lua`). No game needed.
+- `just qa <suite>`: the **test bench** in the real game. About 100 scripted cases in
+  `games/qa/*.toml` each set up a situation (spawn an army, teleport a spy), give an order and
+  check the result. They run on a fixed test save, and the real campaign is put back afterwards.
+  `just qa all kind=instant` runs only the cases that finish within one turn, with no clicks.
 - **Design:** `docs/superpowers/specs/`.
 - **Plans:** `docs/superpowers/plans/`.
 - **EOP API notes**, source-verified: `docs/eop-api-notes.md`.
@@ -476,11 +563,11 @@ what is enforceable.
 
 ## 13. Roadmap
 
-See `ROADMAP.md`. Next:
-- the **deal ledger**: `/send` and `/cede` with travel time, plus a public record of deals kept
-  or broken;
-- **cross-game memory** for permanent personas;
-- **scenarios** (teams, co-op goals);
-- a **richer report** (foreign armies and settlements, income);
-- remote friends via Sunshine/Moonlight;
-- a one-command **automated installer**.
+See `ROADMAP.md`. In order:
+1. **No clicks at all:** every game action through EOP, so it runs the same on any screen.
+2. **Cheap rulers that play well:** prompts and rules until a small model holds its own over a
+   campaign.
+3. **A one-command installer**, then games with friends.
+
+Later: a deal ledger (`/send` and `/cede`, and a public record of deals kept or broken),
+scenarios (teams, shared goals), and remote friends via Sunshine/Moonlight.

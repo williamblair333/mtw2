@@ -42,6 +42,16 @@ def test_pump_posts_in_order_once(tmp_path):
     assert [x[1] for x in t.sent] == ["**Doge Enrico (Venice):** first", "**Duke Ottone (Milan):** second"]
 
 
+def test_pump_tags_each_ruler_with_its_brain(tmp_path):
+    s = Store(tmp_path / "g.db")
+    s.queue("g", 1, "lobby", "venice", "first")
+    s.queue("g", 1, "lobby", "milan", "second")
+    t = FakeTable()
+    run(pump_outbox(s, t, "g", NAMES, HUMANS, brains={"venice": "heretic:local"}))
+    assert [x[1] for x in t.sent] == ["**Doge Enrico (Venice · heretic:local):** first",
+                                      "**Duke Ottone (Milan):** second"]
+
+
 def test_pump_survives_send_error(tmp_path):
     s = Store(tmp_path / "g.db")
     s.queue("g", 1, "lobby", "venice", "boom")

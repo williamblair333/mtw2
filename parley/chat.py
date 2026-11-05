@@ -90,6 +90,8 @@ def chat_prompt(persona: str, faction: str, history: list[Message], incoming: Me
              "This is talk only: you can't give orders here, and promises bind nothing in the game. "
              "Never reveal your private reasoning in a public reply.")
     if incoming.channel.startswith("adviser:"):  # live: three promised marches, none ordered
+        from parley.prompt import TECHNICAL_NOTES
+        rules += " " + TECHNICAL_NOTES
         rules += (" To your adviser, don't promise orders: say what you ordered last turn and what you "
                   "will weigh. Your next turn reads this thread and must keep anything you do promise, "
                   "or tell them why not.")

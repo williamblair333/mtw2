@@ -1,5 +1,8 @@
+import io
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 import httpx
@@ -11,6 +14,7 @@ from parley.seats import (
     ClaudeCodeSeat,
     FakeSeat,
     OllamaSeat,
+    OpenAISeat,
     SeatError,
     make_seat,
 )
@@ -24,6 +28,18 @@ ORDERS = {"protocol": 1, "game_id": "x", "turn": 99, "faction": "milan",
 
 def _proc(stdout: str, rc: int = 0):
     return subprocess.CompletedProcess(args=[], returncode=rc, stdout=stdout, stderr="")
+
+
+class _FakePopen:
+    pid = 999_999_999
+
+    def __init__(self, stdout: str, rc: int = 0, stderr: str = ""):
+        self.returncode = rc
+        self.stdout = io.StringIO(stdout)
+        self.stderr = io.StringIO(stderr)
+
+    def wait(self, timeout=None):
+        return self.returncode
 
 
 def _claude_stdout(payload):
@@ -93,14 +109,25 @@ def test_ollama_unreachable_raises_seat_error(monkeypatch):
 
 
 def test_agy_parses_fixture(monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(_agy_stdout(ORDERS)))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: _FakePopen(_agy_stdout(ORDERS)))
     orders, _ = AgySeat().decide("prompt", **IDS)
     assert orders.note == "why"
 
 
 def test_agy_no_result_event_raises(monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc('{"event":"start"}\n'))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: _FakePopen('{"event":"start"}\n'))
     with pytest.raises(SeatError):
+        AgySeat().decide("prompt", **IDS)
+
+
+def test_agy_e2big_raises_seat_error(monkeypatch):
+    import errno
+
+    def boom(*a, **k):
+        raise OSError(errno.E2BIG, "Argument list too long")
+
+    monkeypatch.setattr(subprocess, "Popen", boom)
+    with pytest.raises(SeatError, match="prompt too long for argv"):
         AgySeat().decide("prompt", **IDS)
 
 
@@ -153,7 +180,7 @@ def test_agy_fenced_response_without_structured_output(monkeypatch):
             ev["result"].pop("structured_output")
             ev["result"]["response"] = "```json\n" + json.dumps(ORDERS) + "\n```\n"
         lines.append(json.dumps(ev))
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc("\n".join(lines)))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: _FakePopen("\n".join(lines)))
     orders, _ = AgySeat().decide("prompt", **IDS)
     assert orders.orders[0].amount == 100
 
@@ -182,7 +209,7 @@ def test_agy_empty_response_is_reported_as_timeout(monkeypatch):
             ev["result"].pop("structured_output")
             ev["result"]["response"] = ""
         lines.append(json.dumps(ev))
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc("\n".join(lines)))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: _FakePopen("\n".join(lines)))
     with pytest.raises(SeatError, match="empty"):
         AgySeat().decide("prompt", **IDS)
 
@@ -201,8 +228,8 @@ def test_agy_calls_limited_to_the_slots(monkeypatch, slots, threads_n, expected_
         time.sleep(0.2)
         with lock:
             active[0] -= 1
-        return _proc(_agy_stdout(ORDERS))
-    monkeypatch.setattr(subprocess, "run", slow_run)
+        return _FakePopen(_agy_stdout(ORDERS))
+    monkeypatch.setattr(subprocess, "Popen", slow_run)
     threads = [threading.Thread(target=AgySeat().decide, args=("p",), kwargs=IDS) for _ in range(threads_n)]
     for t in threads:
         t.start()
@@ -237,8 +264,27 @@ def test_not_a_json_object_still_fails():
     import pytest
 
     from parley.seats.base import to_orders
-    with pytest.raises(SeatError):
-        to_orders("[1, 2]", **PARSE_IDS)
+    for answer in ("42", '"orders"', "I will defend my lands this turn."):
+        with pytest.raises(SeatError):
+            to_orders(answer, **PARSE_IDS)
+
+
+STANCE = '{"type": "set_stance", "to": "milan", "stance": "peace"}'
+
+
+def test_a_bare_array_is_taken_as_the_orders():
+    from parley.seats.base import to_orders
+    o = to_orders(f"[{STANCE}, 7]", **PARSE_IDS)
+    assert [x.type for x in o.orders] == ["set_stance"] and [r.index for r in o.malformed] == [1]
+
+
+def test_json_found_inside_a_chatty_answer():
+    # weak models wrap the answer in prose, or quote an example block before the real one
+    from parley.seats.base import to_orders
+    for answer in (f'Here are my orders:\n```json\n{{"orders": [{STANCE}]}}\n```\nGod save the king.',
+                   f'Example:\n```\n{{"orders": []}}\n```\nMine:\n```json\n{{"orders": [{STANCE}]}}\n```',
+                   f'My lord, I decree {{"orders": [{STANCE}]}} and nothing more.'):
+        assert [x.type for x in to_orders(answer, **PARSE_IDS).orders] == ["set_stance"], answer
 
 
 def test_script_seat_plays_orders_by_turn(tmp_path):
@@ -323,7 +369,7 @@ def test_agy_chat_takes_response(monkeypatch):
             ev["result"].pop("structured_output", None)
             ev["result"]["response"] = "Gemini speaks."
         lines.append(json.dumps(ev))
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc("\n".join(lines)))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: _FakePopen("\n".join(lines)))
     assert AgySeat().chat("hi", timeout=5) == "Gemini speaks."
 
 
@@ -340,7 +386,13 @@ def _capture_run(monkeypatch, stdout):
     def run(cmd, **kw):
         seen["cmd"], seen["kw"] = cmd, kw
         return _proc(stdout)
+
+    def popen(cmd, **kw):
+        seen["cmd"], seen["kw"] = cmd, kw
+        return _FakePopen(stdout)
+
     monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(subprocess, "Popen", popen)
     return seen
 
 
@@ -355,6 +407,7 @@ def test_agy_runs_sandboxed_without_secrets(monkeypatch):
     assert "PATH" in env
     assert Path(cwd).name.startswith("parley-seat-") and not Path(cwd).exists()  # fresh, then removed
     assert "--sandbox" in seen["cmd"] and "--disable-slash-commands" in seen["cmd"]
+    assert seen["kw"]["start_new_session"] is True
 
 
 def test_claude_runs_without_secrets(monkeypatch):
@@ -370,6 +423,8 @@ def test_make_seat_specs():
     assert make_seat("ollama:qwen3.5:9b").model == "qwen3.5:9b"
     assert isinstance(make_seat("agy:gemini-4-argon-medium"), AgySeat)
     assert isinstance(make_seat("fake"), FakeSeat)
+    assert isinstance(make_seat("openai:gpt-4o"), OpenAISeat)
+    assert make_seat("heretic:local").model == "heretic"
     with pytest.raises(ValueError):
         make_seat("bogus:x")
 
@@ -378,7 +433,7 @@ def test_agy_busy_lock_times_out(monkeypatch):
     import fcntl
     import time
     from parley.seats import agy
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _proc(_agy_stdout(ORDERS)))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: _FakePopen(_agy_stdout(ORDERS)))
     monkeypatch.setattr(agy, "SLOTS", 2)
     held = [open(agy.LOCK_PATH.with_name(f"{agy.LOCK_PATH.stem}.{k}{agy.LOCK_PATH.suffix}"), "a") for k in range(2)]
     try:
@@ -391,3 +446,140 @@ def test_agy_busy_lock_times_out(monkeypatch):
     finally:
         for f in held:
             f.close()
+
+
+def _make_fake_agy(tmp_path: Path, body: str) -> tuple[Path, Path]:
+    pid_file = tmp_path / "agy.pid"
+    script = tmp_path / "fake_agy"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import os, signal, sys, time\n"
+        f"open({str(pid_file)!r}, 'w').write(str(os.getpid()))\n"
+        + body
+    )
+    script.chmod(0o755)
+    return script, pid_file
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
+def test_agy_hang_after_result_returns_and_kills_process(tmp_path):
+    import time
+    out = _agy_stdout(ORDERS)
+    script, pid_file = _make_fake_agy(
+        tmp_path,
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        f"sys.stdout.write({out!r} + '\\n')\n"
+        "sys.stdout.flush()\n"
+        "time.sleep(60)\n",
+    )
+    start = time.monotonic()
+    orders, _ = AgySeat(binary=str(script)).decide("prompt", **IDS)
+    assert time.monotonic() - start < IDS["timeout"]
+    assert orders.orders[0].amount == 100 and orders.note == "why"
+    assert not _pid_alive(int(pid_file.read_text()))
+
+
+def test_agy_silent_hang_times_out_and_kills_process(tmp_path):
+    script, pid_file = _make_fake_agy(
+        tmp_path,
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "time.sleep(60)\n",
+    )
+    seat = AgySeat(binary=str(script))
+    seat.GRACE = 0
+    with pytest.raises(SeatError, match="timed out"):
+        seat.decide("prompt", **{**IDS, "timeout": 1})
+    assert not _pid_alive(int(pid_file.read_text()))
+
+
+def test_agy_normal_exit_executable(tmp_path):
+    out = _agy_stdout(ORDERS)
+    script, pid_file = _make_fake_agy(
+        tmp_path,
+        f"sys.stdout.write({out!r} + '\\n')\n"
+        "sys.stdout.flush()\n",
+    )
+    orders, _ = AgySeat(binary=str(script)).decide("prompt", **IDS)
+    assert orders.orders[0].amount == 100 and orders.note == "why"
+    assert not _pid_alive(int(pid_file.read_text()))
+
+
+def test_openai_host_env_override(monkeypatch):
+    monkeypatch.setenv("PARLEY_OPENAI_HOST", "http://custom:1234/v1/")
+    seat = OpenAISeat("heretic")
+    assert seat.host == "http://custom:1234/v1"
+    assert seat.name == "openai:heretic"
+
+    monkeypatch.delenv("PARLEY_OPENAI_HOST", raising=False)
+    default_seat = OpenAISeat("heretic")
+    assert default_seat.host == "http://127.0.0.1:8090/v1"
+
+    explicit_seat = OpenAISeat("m", host="http://other:8080/")
+    assert explicit_seat.host == "http://other:8080"
+
+
+def test_make_seat_openai_and_heretic():
+    s_openai = make_seat("openai:gpt-4o")
+    assert isinstance(s_openai, OpenAISeat)
+    assert s_openai.model == "gpt-4o"
+    assert s_openai.name == "openai:gpt-4o"
+
+    s_local = make_seat("heretic:local")
+    assert isinstance(s_local, OpenAISeat)
+    assert s_local.model == "heretic"
+    assert s_local.name == "openai:heretic"
+
+    s_any = make_seat("heretic:any")
+    assert isinstance(s_any, OpenAISeat)
+    assert s_any.model == "heretic"
+
+    s_bare = make_seat("heretic")
+    assert isinstance(s_bare, OpenAISeat)
+    assert s_bare.model == "heretic"
+
+    with pytest.raises(ValueError, match="needs a model"):
+        make_seat("openai")
+
+
+def test_script_seat_foreign_character_reads_agent_ids_from_the_end_of_the_line(tmp_path, venice_report):
+    # FOREIGN AGENTS IN SIGHT lines read "- france diplomat at (103,136), 2 tiles away: Denisot": the id is last
+    from parley.prompt import build_prompt
+    from parley.protocol import Agent
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"3": [{"type": "assassinate", "agent": "$assassin", "target": "$foreign_character"}]}))
+    report = venice_report.model_copy(update={
+        "agents": [Agent(id="Iacopo", kind="assassin", x=1, y=1)], "visible_enemies": [],
+        "seen_agents": [Agent(id="Denisot", kind="diplomat", faction="france", x=4, y=4, distance=2)]})
+    orders, _ = make_seat(f"script:{plan}").decide(build_prompt(report, "p"), **IDS)
+    assert orders.orders[0].target == "Denisot"
+
+
+def test_script_seat_nearest_character_to_an_agent(tmp_path, venice_report):
+    from parley.prompt import build_prompt
+    from parley.protocol import Agent, Army
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"3": [
+        {"type": "assassinate", "agent": "Iacopo", "target": "$nearest_character_to:Iacopo"},
+        {"type": "assassinate", "agent": "Nobody", "target": "$nearest_character_to:Nobody"},
+    ]}))
+    report = venice_report.model_copy(update={
+        "agents": [Agent(id="Iacopo", kind="assassin", x=10, y=10)],
+        "visible_enemies": [
+            Army(id="Admiral Polo", faction="milan", is_fleet=True, x=11, y=10, strength=1, units=1, distance=1),
+            Army(id="Heinrich#2", faction="hre", leader="Heinrich", x=14, y=10, strength=1, units=1, distance=3),
+            Army(id="On Top", faction="hre", x=10, y=10, strength=1, units=1, distance=0),
+        ],
+        "seen_agents": [Agent(id="Admiral Polo#2", kind="admiral", faction="milan", x=11, y=10, distance=1),
+                        Agent(id="Ulrich", kind="spy", faction="hre", x=12, y=11, distance=2),
+                        Agent(id="Otto", kind="spy", faction="hre", x=12, y=11, distance=2)]})
+    orders, _ = make_seat(f"script:{plan}").decide(build_prompt(report, "p"), **IDS)
+    # not the fleet or its admiral, not on the assassin's own tile; nearest, then first listed
+    assert orders.orders[0].target == "Ulrich"
+    assert orders.orders[1].target == "$nearest_character_to:Nobody"  # left as written: rejected with a reason

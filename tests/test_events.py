@@ -69,6 +69,14 @@ def test_army_gone_and_treasury(venice_report):
     assert "Treasury: 5000 → 7000 (+2000)." in events
 
 
+def test_besieging_army_gone_says_it_was_besieging(venice_report):
+    sieging = venice_report.armies[0].model_copy(update={"besieging": "Milan"})
+    before = _r(venice_report, armies=[sieging])
+    [gone] = [e for e in diff_reports(before, _r(venice_report, armies=[])) if "is gone" in e]
+    assert gone.startswith("Your army Doge Enrico is gone (destroyed, disbanded or merged).")
+    assert "It was besieging Milan" in gone
+
+
 def test_small_treasury_change_reported_too(venice_report):
     after = _r(venice_report, treasury=venice_report.treasury - 300)
     assert diff_reports(venice_report, after) == ["Treasury: 5000 → 4700 (-300)."]

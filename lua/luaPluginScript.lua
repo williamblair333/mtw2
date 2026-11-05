@@ -51,7 +51,23 @@ end
 
 -- game popups: acknowledged under autoplay a few seconds later (bridge.on_frame), and told to
 -- the human slot's ruler
+--
+-- papal_hands_off=1 in bridge.txt (`[autoplay] papal_hands_off`, on by default; a game toml can
+-- turn it off): a papal_* scroll gets no work from us at all inside the event, no bridge call, no
+-- log, no file write, no queueing. The game died ~5 s after a results scroll opened (20:48, 22:29,
+-- 22:43) with only our logging and file writes left in this callback; four QA runs with the switch
+-- on went through those turns clean. The bridge finds the vote scroll from its per-frame tick
+-- instead (parley_bridge K.PAPAL_LOOK). The check reads one field and a flag the bridge keeps from
+-- its last config read; with the switch off nothing extra is read.
+local function papal_hands_off(eventData)
+    if not bridge.papal_hands_off then return false end
+    local name = type(eventData) == "string" and eventData or eventData.resourceDescription
+    return type(name) == "string" and name:sub(1, 6) == "papal_"
+end
+
 function onScrollOpened(eventData)
+    local quiet, skip = pcall(papal_hands_off, eventData)
+    if quiet and skip then return end
     local ok, err = pcall(bridge.on_scroll_opened, eventData)
     if not ok then print("parley: on_scroll_opened failed: " .. tostring(err)) end
 end

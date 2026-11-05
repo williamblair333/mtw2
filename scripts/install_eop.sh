@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Install M2TWEOP (pinned release) as its own mod folder, mods/parley, so the vanilla
+# Install M2TWEOP (pinned) as its own mod folder, mods/parley, so the vanilla
 # game and M2EX stay untouched. EOP needs the 32-bit Steam medieval2.exe (1.52).
+#   default            the last release, 3.3.1
+#   EOP_BUILD=master   EOP's CI build of master commit b525628, the build we test on (treaties,
+#                      recruitment queue, land links). A GitHub Actions artifact: gh must be logged
+#                      in, and GitHub deletes it on 2027-01-17. Its M2TWEOPLibrary.dll is the one
+#                      the game ran in testing (sha256 b13acf7f...).
 set -euo pipefail
 
-TAG="M2TWEOP-3.3.1"
-ASSET="M2TWEOP-3.3.1.zip"
-SHA256="e1ac32f2e969b56b56750204b6fe1e6e4d412429c7b72f2bd6d0992ef50b00b9"
 GAME="${MTW2_GAME_DIR:-$HOME/.steam/steam/steamapps/common/Medieval II Total War}"
 MOD="$GAME/mods/parley"
 
@@ -13,11 +15,30 @@ MOD="$GAME/mods/parley"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-gh release download "$TAG" -R EOP-Labs/M2TWEOP-library -p "$ASSET" -D "$work"
+case "${EOP_BUILD:-3.3.1}" in
+    3.3.1)
+        TAG="M2TWEOP-3.3.1"
+        ASSET="M2TWEOP-3.3.1.zip"
+        SHA256="e1ac32f2e969b56b56750204b6fe1e6e4d412429c7b72f2bd6d0992ef50b00b9"
+        gh release download "$TAG" -R EOP-Labs/M2TWEOP-library -p "$ASSET" -D "$work"
+        ;;
+    master)
+        TAG="master b525628"
+        ASSET="M2TWEOP.zip"
+        SHA256="953bc58929a7b21a93fb9c35aa5f16fa7fb6d0e3a14cbe065125b1166152d912"
+        gh run download 39303083056 -R EOP-Labs/M2TWEOP-library \
+            -n M2TWEOP-latest-build-b525628d3d59f7b07a02bc1a2e615101aa29b516 -D "$work" \
+            || { echo "can't download EOP's master build (gh logged in? GitHub deletes it on 2027-01-17)" >&2; exit 1; }
+        ;;
+    *) echo "EOP_BUILD must be 3.3.1 or master, not '$EOP_BUILD'" >&2; exit 2 ;;
+esac
 echo "$SHA256  $work/$ASSET" | sha256sum -c -
 
 mkdir -p "$MOD/logs"
 unzip -q -o "$work/$ASSET" -d "$MOD"
+# master names its launcher M2TWEOP_GUI.exe; the Steam launch option (docs/WRITEUP.md §4.3) runs
+# "M2TWEOP GUI.exe", 3.3.1's name, so both builds launch the same way
+if [ -f "$MOD/M2TWEOP_GUI.exe" ]; then cp -f "$MOD/M2TWEOP_GUI.exe" "$MOD/M2TWEOP GUI.exe"; fi
 cat > "$MOD/parley.cfg" <<EOF
 [features]
 mod = mods/parley
@@ -60,4 +81,10 @@ if [ -n "$vanilla" ] && [ -d "$vanilla/data" ]; then
     cp -r "$vanilla/data" "$MOD/"
     echo "vanilla campaign and base map copied into $MOD/data"
 fi
+# No launcher at start-up: the mod runs without a "Run mod" click (scripts/relaunch_game.sh sets it
+# again before each relaunch). Both files: the installed launcher reads config/uiCfg.json, the docs
+# name uiCfg.json. One the release doesn't ship is written by the launcher on its first run.
+repo=$(cd "$(dirname "$0")/.." && pwd)
+(cd "$repo" && python3 -m parley.relaunch hide-launcher "$MOD") \
+    || echo "hideLauncher not set: no uiCfg.json yet; scripts/relaunch_game.sh sets it once the launcher has written one" >&2
 echo "EOP $TAG installed in $MOD"

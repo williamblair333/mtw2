@@ -33,8 +33,9 @@ class Table(Protocol):
         ...
 
 
-def format_line(name: str, faction_display: str, text: str) -> str:
-    return f"**{name} ({faction_display}):** {text}"[:DISCORD_LIMIT]
+def format_line(name: str, faction_display: str, text: str, brain: str = "") -> str:
+    tag = f"{faction_display} · {brain}" if brain else faction_display  # brain: which model speaks
+    return f"**{name} ({tag}):** {text}"[:DISCORD_LIMIT]
 
 
 MAX_ATTEMPTS = 5  # a row that fails this many pumps in a row is set aside, not retried forever
@@ -54,7 +55,8 @@ def acquire_bot_lock(turn_root: Path):
 
 async def pump_outbox(store: Store, table: Table, game_id: str, names: dict[str, str],
                       humans: dict[str, str], attempts: dict[int, int] | None = None,
-                      advisers: dict[str, str] | None = None) -> int:
+                      advisers: dict[str, str] | None = None,
+                      brains: dict[str, str] | None = None) -> int:
     """Post unposted rows in order; returns how many were posted.
 
     Stops at the first failure so order is kept. A row that has failed MAX_ATTEMPTS pumps is
@@ -74,7 +76,8 @@ async def pump_outbox(store: Store, table: Table, game_id: str, names: dict[str,
                 await table.send(m.channel, m.text[:DISCORD_LIMIT])
             else:
                 await table.send(m.channel, format_line(names.get(m.sender, m.sender),
-                                                        m.sender.replace("_", " ").title(), m.text))
+                                                        m.sender.replace("_", " ").title(), m.text,
+                                                        (brains or {}).get(m.sender, "")))
         except Exception as e:  # network, permissions: retry on the next pump
             attempts[m.id] = attempts.get(m.id, 0) + 1
             if attempts[m.id] >= MAX_ATTEMPTS:
@@ -166,6 +169,18 @@ class DiscordTable:
                 log.warning("can't create #%s (bot lacks Manage Channels); turn notices go to #%s",
                             name, self.lobby.name)
                 self.chronicle = self.lobby
+        # the turn audit's alerts, for the humans only: rulers read the lobby, the table and their
+        # threads, never this; without it the alerts are dropped (they stay in `just audit`)
+        audit_name = f"{name}-audit"
+        self.audit = discord.utils.get(guild.text_channels, name=audit_name)
+        if self.audit is None:
+            try:
+                self.audit = await guild.create_text_channel(
+                    audit_name, category=self.lobby.category,
+                    topic=f"Turn audit for game {self.config.game_id}: bridge bugs, ruler mistakes, unused options")
+                log.info("created #%s for this game", audit_name)
+            except discord.Forbidden:
+                log.warning("can't create #%s (bot lacks Manage Channels); audit alerts are dropped", audit_name)
         # The game's channel is its public table: public talk is read from it and from #lobby,
         # posted to it, and private threads open under it. Only threads under this game's own
         # channel are adopted: thread names carry no game id, so threads under #lobby (or another
@@ -229,7 +244,12 @@ class DiscordTable:
 
     async def send(self, channel: str, text: str) -> None:
         import discord
-        target = {"lobby": self.table, "chronicle": self.chronicle}.get(channel) or self.threads[channel]
+        if channel == "audit":
+            if getattr(self, "audit", None) is None:
+                return  # no audit channel: dropped, see connect()
+            target = self.audit
+        else:
+            target = {"lobby": self.table, "chronicle": self.chronicle}.get(channel) or self.threads[channel]
         try:
             await target.send(text, allowed_mentions=discord.AllowedMentions.none())
         except discord.NotFound:
@@ -256,7 +276,8 @@ def run_bot(config: GameConfig) -> None:
     except RuntimeError as e:
         raise SystemExit(str(e))
     store = Store(config.turn_root / f"{config.game_id}.db")
-    responder = Responder(store, {f: make_seat(s.brain) for f, s in config.seats.items()}, config)
+    responder = Responder(store, {f: make_seat(s.brain, config.budget_for(f)) for f, s in config.seats.items()},
+                          config)
     names = config.display_names()
     tasks: list[asyncio.Task] = []  # strong reference: asyncio keeps only weak ones
 
@@ -265,7 +286,7 @@ def run_bot(config: GameConfig) -> None:
         while True:
             try:
                 await pump_outbox(store, table, config.game_id, names, config.humans, attempts,
-                                  advisers=config.advisers())
+                                  advisers=config.advisers(), brains=config.brains())
             except Exception:  # e.g. SQLite busy: log and keep pumping
                 log.exception("outbox pump failed; retrying")
             await asyncio.sleep(PUMP_SECONDS)

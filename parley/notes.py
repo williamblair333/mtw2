@@ -15,7 +15,10 @@ def _order_line(o: dict, result: dict | None) -> str:
     parts = [o["type"], what, f"→ {target}" if target else "", str(extra) if extra else ""]
     status = ""
     if result is not None:
-        status = " [done]" if result.get("ok") else f" [rejected: {result.get('reason')}]"
+        if result.get("ok"):
+            status = f" [done: {result['note']}]" if result.get("note") else " [done]"
+        else:
+            status = f" [rejected: {result.get('reason')}]"
     return "    " + " ".join(p for p in parts if p) + status
 
 

@@ -1,0 +1,310 @@
+# Envoys suite: recruit_agent (diplomat, merchant, a princess refused, the merchant limit), move_agent
+# (walks; refused into a foreign town and across the sea, each with the order to use instead), bribe
+# (an army, an agent, a settlement), marry, a general named in an agent order, and a merchant on a
+# resource. covert.toml has the spy and the assassin; nothing of theirs is repeated here.
+#
+# Every case but the last is kind = "instant" (see instant.toml for how they run): the turn is held,
+# each case builds its scene with M.qa lines and its orders go through M.qa.order, the bridge's own
+# apply() as orders.json's run at turn start; M.qa.last(type) reads back what it said ("<type> ok",
+# "<type> ok: <note>", "<type> refused: <why>").
+#   - A bribe or a proposal is a mission the game rolls when the agent acts: the case passes on the
+#     order's "ok" and the outcome line the game's event writes ("agent mission: england: <who>'s
+#     bribery: <how it went>"), whatever the outcome. `within` on a log expect polls the log.
+#   - Recruiting is checked in-turn (the order paid for, the recruit queued); the recruit comes at the
+#     next turn start, so the one turn case sees him arrive.
+# The one turn case (next_turn_recruit_and_trade) groups what needs a played turn: a diplomat recruited
+# by the seat's order arriving, and a merchant on a resource earning trade income.
+#
+# Placeholders from the newest report (parley/qa/runner.py pick_targets): $garrison_town (an own town
+# not under siege, with its tile).
+#
+# Bench helpers (lua/parley_bridge.lua M.qa), on top of those in field.toml, instant.toml, siege.toml
+# and diplomacy.toml:
+#   funds(faction, n)               the treasury raised to at least n (a bribe costs what the game says)
+#   agents(faction, kind)           "have=<n> limit=<n|none>": on the map and in training, and the EDB limit
+#   agent_town(faction, kind)       an own town that can train the kind now (a building grants it, under
+#                                   the limit), or "none"
+#   fill_agents(faction, kind, x, y)  agents of the kind spawned on free tiles near (x, y) up to the
+#                                   limit: "have=<n> limit=<n>", or "unlimited"
+#   resource(x, y, near, far)       the nearest free trade resource tile walkable from (x, y): "x,y"
+#   merchant_income(faction)        getFactionEconomy(0).merchantIncome
+#   drop_training(faction)          the faction's queued recruits dropped from the QA game's training file
+#
+# Order of cases: recruiting first (the limit case fills the merchants up, so the merchant recruit
+# goes before it), the walks, the bribes and the proposal, the settlement bribe last of the instant
+# cases (a bribe that works gives England a town), then the turn case.
+#
+# What can't be forced:
+#   - a mission's outcome. The game rolls each bribe and proposal; the cases pass on its outcome
+#     line, any outcome. The bribery event exports no chance (luaPluginScript.lua has_chance false:
+#     reading missionProbability there is a raw vfunc call), so only the proposal's line gives one.
+#   - a town that trains merchants, a coast for the fleet, and a merchant limit in the EDB: the
+#     cases that need one skip (inconclusive) without it. On the bench save (England, turn 1) no town
+#     may have a market yet: recruit_merchant then skips, and the limit case is refused at "0 of 0".
+#     No case needs an AI faction to act, so none thaws one (`needs`). Live 10-31 (bench save,
+#     England turn 5) no town trained one: recruit_merchant is `phase2` (needs a later save).
+#
+# Isolation: every case with a scene on the map starts on the bench save as recorded ("fresh", the
+# default; live 10-31 bribe_army, bribe_agent and marry_foreign_general found no free tile England
+# saw 3-4 tiles from London after 25 cases' spawns); the recruiting cases and the refusals that move
+# nobody are "shared".
+#   - England's other merchants: the turn case's trade income must top what England's merchants
+#     made the turn before; one of them acquired or walked off a resource that turn fails it.
+#
+# Unproven live (10-31): every case here. createCharacter("princess"), a mission resolved inside a
+# held turn (no confirmation panel for the player's bribe), bribing an agent (EOP character:bribe on
+# a diplomat), getFactionEconomy(0).merchantIncome naming the merchants' trade. Run: `just qa envoys`,
+# or `case=<name>`.
+
+name = "envoys"
+faction = "england"
+
+# 1. a diplomat recruited in a town that trains one: paid for (250) and queued for the next turn
+[[cases]]
+name = "recruit_diplomat"
+kind = "instant"
+setup = [
+    'return M.qa.funds("england", 50000)',
+    { lua = 'return M.qa.agent_town("england", "diplomat")', bind = "town", require = '^(?!none$)' },
+    { lua = 'return M.qa.money("england")', bind = "before" },
+]
+act = ['return M.qa.order("england", { type = "recruit_agent", settlement = "$town", agent = "diplomat" })']
+expect = [
+    { lua = 'return M.qa.last("recruit_agent")', equals = "recruit_agent ok" },
+    { log = 'england recruits a diplomat in $town for 250; ready turn \d+' },
+    { lua = 'return $before - M.qa.money("england")', equals = "250" },
+]
+
+# 2. a merchant the same way (550); skipped when no town has a market that trains one, or the
+# merchants are at their limit already
+[[cases]]
+name = "recruit_merchant"
+kind = "instant"
+isolation = "shared"
+phase2 = "needs a later save: on the bench save (England, turn 5) no town can train a merchant (live 10-31: agent_town said none; England's merchants are at their limit, 1 of 1, recruit_merchant_limit_refused)"
+setup = [
+    'return M.qa.funds("england", 50000)',
+    { lua = 'return M.qa.agent_town("england", "merchant")', bind = "town", require = '^(?!none$)' },
+    { lua = 'return M.qa.money("england")', bind = "before" },
+]
+act = ['return M.qa.order("england", { type = "recruit_agent", settlement = "$town", agent = "merchant" })']
+expect = [
+    { lua = 'return M.qa.last("recruit_agent")', equals = "recruit_agent ok" },
+    { log = 'england recruits a merchant in $town for 550; ready turn \d+' },
+    { lua = 'return $before - M.qa.money("england")', equals = "550" },
+]
+
+# 3. a princess isn't recruited (she is a daughter of the family coming of age): refused with the
+# kinds that are, nothing paid
+[[cases]]
+name = "recruit_princess_refused"
+kind = "instant"
+isolation = "shared"
+setup = [{ lua = 'return M.qa.money("england")', bind = "before" }]
+act = ['return M.qa.order("england", { type = "recruit_agent", settlement = "$garrison_town", agent = "princess" })']
+expect = [
+    { lua = 'return M.qa.last("recruit_agent")', equals = "recruit_agent refused: unknown agent 'princess' (spy, assassin, diplomat, merchant, priest)" },
+    { lua = 'return M.qa.money("england")', equals = "$before" },
+]
+
+# 4. the merchant limit (the EDB's agent_limit lines, summed over England's towns): merchants spawned
+# up to it, then a recruit refused with the count and what raises it, nothing paid
+[[cases]]
+name = "recruit_merchant_limit_refused"
+kind = "instant"
+isolation = "shared"
+setup = [
+    'return M.qa.funds("england", 50000)',
+    { lua = 'return M.qa.fill_agents("england", "merchant", $garrison_town_x, $garrison_town_y)', require = '^have=\d+ limit=\d+$' },
+    { lua = 'return M.qa.money("england")', bind = "before" },
+]
+act = ['return M.qa.order("england", { type = "recruit_agent", settlement = "$garrison_town", agent = "merchant" })']
+expect = [
+    { lua = 'return M.qa.last("recruit_agent")', match = '^recruit_agent refused: merchant limit reached: \d+ of \d+ \(buildings that train them raise it\)$' },
+    { lua = 'return M.qa.money("england")', equals = "$before" },
+]
+
+# 5. an agent walks toward a tile 3-4 off: the order is taken and he is nearer it
+[[cases]]
+name = "move_agent_walks"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "diplomat", $at_x, $at_y, "QA Envoy")', bind = "envoy" },
+    { lua = 'return M.qa.free_tile($at_x, $at_y, 3, 4)', bind = "to" },
+    { lua = 'return M.qa.dist("$envoy", $to_x, $to_y)', bind = "start" },
+]
+act = ['return M.qa.order("england", { type = "move_agent", agent = "$envoy", x = $to_x, y = $to_y })']
+expect = [
+    { lua = 'return M.qa.last("move_agent")', equals = "move_agent ok" },
+    { lua = 'return M.qa.dist("$envoy", $to_x, $to_y)', below = "$start", within = 15 },
+]
+
+# 6. into a foreign town (live 10-29: 15 such moves came back "done" with nobody moved): refused,
+# naming the agent orders that act on a town from the next tile; he stays put
+[[cases]]
+name = "move_agent_into_foreign_town_refused"
+kind = "instant"
+isolation = "shared"
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "diplomat", $at_x, $at_y, "QA Envoy")', bind = "envoy" },
+]
+act = ['return M.qa.order("england", { type = "move_agent", agent = "$envoy", x = $hostile_at_x, y = $hostile_at_y })']
+expect = [
+    { lua = 'return M.qa.last("move_agent")', match = "^move_agent refused: \\($hostile_at_x,$hostile_at_y\\) is .+, \\w+'s settlement: an agent can't walk in; act on it from outside with the agent's own order \\(spy, assassinate, sabotage, bribe\\)" },
+    { lua = 'return M.qa.where("$envoy")', equals = "$at" },
+]
+
+# 7. across the sea: refused with the board order to copy (a fleet of England's is spawned off
+# $garrison_town first, so there is one to name); he stays put
+[[cases]]
+name = "move_agent_across_sea_refused"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.coast("$garrison_town", 1, 6)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "diplomat", $at_x, $at_y, "QA Envoy")', bind = "envoy" },
+    { lua = 'return M.qa.sea_town("england", $at_x, $at_y)', bind = "far_town" },
+    { lua = 'return M.qa.town("$far_town")', bind = "far_at" },
+    { lua = 'return M.qa.free_tile($far_at_x, $far_at_y, 1, 2)', bind = "far" },
+]
+act = ['return M.qa.order("england", { type = "move_agent", agent = "$envoy", x = $far_x, y = $far_y })']
+expect = [
+    { lua = 'return M.qa.last("move_agent")', match = '^move_agent refused: \($far_x,$far_y\) can.t be reached over land from \($at_x,$at_y\): it.s across the sea; board a fleet first, then land on the far shore: \{"type": "board", "who": "$envoy", "fleet": "[^"]+"\}' },
+    { lua = 'return M.qa.where("$envoy")', equals = "$at" },
+]
+
+# 8. bribe a rebel army: England's diplomat beside it, on a tile England sees (as covert.toml's
+# assassinate places its victim); the order is taken and the game's bribery outcome is logged
+[[cases]]
+name = "bribe_army"
+kind = "instant"
+setup = [
+    'return M.qa.funds("england", 50000)',
+    { lua = 'return M.qa.seen_tile("england", $garrison_town_x, $garrison_town_y, 3, 4)', bind = "target_at" },
+    { lua = 'return M.qa.spawn_army("slave", $target_at_x, $target_at_y)', bind = "rebels" },
+    { lua = 'return M.qa.free_tile($target_at_x, $target_at_y, 1, 1)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "diplomat", $at_x, $at_y, "QA Envoy")', bind = "envoy" },
+    { lua = 'return M.qa.sees("england", $target_at_x, $target_at_y)', bind = "target" },
+]
+act = ['return M.qa.order("england", { type = "bribe", agent = "$envoy", target = "$target" })']
+expect = [
+    { lua = 'return M.qa.last("bribe")', equals = "bribe ok" },
+    { log = "agent mission: england: .*'s bribery: \\S", within = 30 },
+]
+
+# 9. bribe another faction's agent (its diplomat) the same way
+[[cases]]
+name = "bribe_agent"
+kind = "instant"
+setup = [
+    'return M.qa.funds("england", 50000)',
+    { lua = 'return M.qa.rival("england")', bind = "rival" },
+    { lua = 'return M.qa.seen_tile("england", $garrison_town_x, $garrison_town_y, 3, 4)', bind = "target_at" },
+    { lua = 'return M.qa.spawn_agent("$rival", "diplomat", $target_at_x, $target_at_y, "QA Mark")', bind = "mark" },
+    { lua = 'return M.qa.free_tile($target_at_x, $target_at_y, 1, 1)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "diplomat", $at_x, $at_y, "QA Envoy")', bind = "envoy" },
+    { lua = 'return M.qa.sees("england", $target_at_x, $target_at_y)', bind = "target" },
+]
+act = ['return M.qa.order("england", { type = "bribe", agent = "$envoy", target = "$target" })']
+expect = [
+    { lua = 'return M.qa.last("bribe")', equals = "bribe ok" },
+    { log = "agent mission: england: .*'s bribery: \\S", within = 30 },
+]
+
+# 10. marry: England's princess proposes to a rival's general (an army of the rival's spawned on a
+# tile England sees, at peace); the order is taken and the game's proposal outcome reaches the
+# ruler's news, any outcome. A hard refusal fires no mission event and removes the princess ("Princess
+# Disgraced!"): bench, she vanished 4 of 4 and the 11-05 probes saw her record go dead; the bridge
+# reports it when the news is read (settle_proposals), so the case reads the news, not the log
+[[cases]]
+name = "marry_foreign_general"
+kind = "instant"
+setup = [
+    # Real family members only: the game runs no proposal to a spawned general (isFamily false), and
+    # a spawned princess vanished at the order (live 11-04; 11 fails before). The suitor is of the
+    # wooer's religion and at peace (live 10-31 17:13: the Aztecs' general got none). England woos if
+    # it has a princess of age on the bench save, else the first faction that does: the order
+    # handler is the same for every faction.
+    { lua = 'return M.qa.wooer("england")', bind = "wooer" },
+    { lua = 'return M.qa.princess("$wooer")', bind = "princess" },
+    { lua = 'return M.qa.where("$princess")', bind = "her" },
+    { lua = 'return M.qa.bachelor("$wooer", $her_x, $her_y)', bind = "suitor_at" },
+    { lua = 'return M.qa.sees("$wooer", $suitor_at_x, $suitor_at_y)', bind = "suitor" },
+]
+act = ['return M.qa.order("$wooer", { type = "marry", agent = "$princess", target = "$suitor" })']
+expect = [
+    { lua = 'return M.qa.last("marry")', equals = "marry ok" },
+    { lua = 'return M.qa.news("$wooer")', match = "$princess's marriage proposal: \\S", within = 30 },
+]
+
+# 11. a general named in an agent order (live 10-29, turn 138: France moved its generals by
+# move_agent): refused as the ruler's mistake, "unknown agent '<him>'" as parley/audit.py reads it,
+# saying he is a general and, for a move, giving the move_army to copy; he stays put
+[[cases]]
+name = "agent_order_naming_a_general_refused"
+kind = "instant"
+isolation = "shared"
+setup = [
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.free_tile($at_x, $at_y, 2, 3)', bind = "to" },
+]
+act = [
+    'return M.qa.order("england", { type = "move_agent", agent = "$gen", x = $to_x, y = $to_y })',
+    'return M.qa.order("england", { type = "bribe", agent = "$gen", target = "$garrison_town" })',
+]
+expect = [
+    { lua = 'return M.qa.last("move_agent")', equals = "move_agent refused: unknown agent '$gen': $gen is one of your generals, not an agent; move his army with {\"type\": \"move_army\", \"army\": \"$gen\", \"x\": $to_x, \"y\": $to_y}" },
+    { lua = 'return M.qa.last("bribe")', equals = "bribe refused: unknown agent '$gen': $gen is one of your generals, not an agent; a bribe order is for a diplomat of yours" },
+    { lua = 'return M.qa.where("$gen")', equals = "$at" },
+]
+
+# 12. bribe a foreign town (a rebel one, or one at war with England, nearest $garrison_town) from the
+# next tile. Last of the instant cases: a bribe that works gives England the town
+[[cases]]
+name = "bribe_settlement"
+kind = "instant"
+setup = [
+    'return M.qa.funds("england", 50000)',
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "diplomat", $at_x, $at_y, "QA Envoy")', bind = "envoy" },
+]
+act = ['return M.qa.order("england", { type = "bribe", agent = "$envoy", target = "$hostile" })']
+expect = [
+    { lua = 'return M.qa.last("bribe")', equals = "bribe ok" },
+    { log = "agent mission: england: .*'s bribery: \\S", within = 30 },
+]
+
+# 13. what needs a played turn, in one: the seat's recruit_agent order goes through the validator and
+# the bridge at turn start and the diplomat arrives a turn later (the game's spawn_character); and a
+# merchant spawned on a trade resource beside $garrison_town earns trade income, read from the next
+# report's income_parts. The floor is England's merchant income before he came, plus one (read before
+# he is spawned). The recruits the instant cases queued are dropped first: they would arrive at the
+# same turn start and could pass the arrival line for the seat's.
+[[cases]]
+name = "next_turn_recruit_and_trade"
+max_turns = 3
+setup = [
+    'return M.qa.drop_training("england")',
+    'return M.qa.funds("england", 50000)',
+    { lua = 'return M.qa.agent_town("england", "diplomat")', bind = "dip_town" },
+    { lua = 'return M.qa.merchant_income("england") + 1', bind = "floor" },
+    { lua = 'return M.qa.resource($garrison_town_x, $garrison_town_y, 0, 10)', bind = "trade_at" },
+    { lua = 'return M.qa.spawn_agent("england", "merchant", $trade_at_x, $trade_at_y, "QA Merchant")', bind = "merchant" },
+]
+expect = [
+    { order_ok = true },
+    { log = 'england: diplomat trained in $dip_town$' },
+    { state = "income_parts.merchants", at_least = "$floor" },
+]
+
+[cases.orders]
+1 = [{ type = "recruit_agent", settlement = "$dip_town", agent = "diplomat" }]

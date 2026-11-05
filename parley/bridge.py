@@ -54,7 +54,7 @@ class TurnDir:
         dest = dir / f"superseded-{time.strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
         dest.mkdir()
         for name in ("orders.json", "results.json", "prompt.txt", "answer.txt",
-                     "rejected.json", "index_map.json"):
+                     "rejected.json", "index_map.json", "steward.json"):
             if (dir / name).exists():
                 os.replace(dir / name, dest / name)
         return dest

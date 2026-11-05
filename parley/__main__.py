@@ -32,6 +32,9 @@ def main(argv: list[str] | None = None) -> int:
     fol.add_argument("--state", type=Path, help="remember what was already shown in this file")
     rep = sub.add_parser("report", help="campaign report: what every ruler did, order coverage, failures")
     rep.add_argument("config", type=Path)
+    aud = sub.add_parser("audit", help="turn audit: bridge bugs, ruler mistakes and unused options, found by checks")
+    aud.add_argument("config", type=Path)
+    aud.add_argument("--game-id", help="audit this game's turn folders instead (e.g. an archived run)")
     from parley.setup import HELP_EXAMPLES
     ng = sub.add_parser("new-game", help="make a new game from your template",
                         description="Make games/local/<name>.toml: who plays, which personalities, "
@@ -88,6 +91,12 @@ def main(argv: list[str] | None = None) -> int:
         cfg = load_config(args.config)
         print(campaign_report(cfg.turn_root, cfg.game_id), end="")
         return 0
+    if args.cmd == "audit":
+        from parley.audit import audit_game, format_audit
+        cfg = load_config(args.config)
+        game_id = args.game_id or cfg.game_id
+        print(format_audit(audit_game(cfg.turn_root / game_id), game_id), end="")
+        return 0
     if args.cmd == "notes":
         from parley.notes import format_notes
         cfg = load_config(args.config)
@@ -100,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         from parley.discord_bot import run_bot
         run_bot(config)
         return 0
-    seats = {faction: make_seat(s.brain) for faction, s in config.seats.items()}
+    seats = {faction: make_seat(s.brain, config.budget_for(faction)) for faction, s in config.seats.items()}
     orch = Orchestrator(config, seats)
     try:
         orch.acquire()

@@ -1,0 +1,242 @@
+# Diplomacy suite: set_stance, send_gold, cede_settlement, `say`, an AI's offer put to the ruler, a
+# second offer on the open screen (#297), and the diplomacy screen left open.
+#
+# Most cases are instant (see instant.toml): the turn is held, each case builds its scene with M.qa
+# lines and runs the bridge's own code on it.
+#   - Orders go through M.qa.order: the bridge's apply(), as orders.json's are at turn start (area,
+#     target faction, handler); M.qa.last(type) reads back what it said ("<type> ok" / "refused: why").
+#   - The offer and screen cases step the bridge's own watch_buttons and close_leftover_diplomacy with
+#     M.qa.diplomacy_step(answer): tick() skips both while the turn is held. The answer stands in for
+#     the ruler (written where parley/popups.py writes his: popup-<id>.answer).
+# Two turn cases cover what needs the turn: one turn of every diplomacy order through the seat, the
+# validator and the next report, and an AI envoy's parley made on the AI's own turn.
+#
+# Forcing an AI's offer: EOP has no call that makes an AI propose. The lever used is an AI faction's
+# envoy told to do diplomacy with England's town (character:diplomacySettlement, EOP 3.3.1), as the
+# AI's own envoys bring their offers (JOURNAL: HRE's diplomat made one on HRE's turn). Whether the
+# command alone brings an offer up is unproven live: the instant cases then skip as inconclusive
+# ("offer=yes" required), and ai_offer_on_its_turn is a chance case. Live 10-31 (phase 1) it didn't:
+# ai_offer_accepted and second_offer_asked_again are `phase2` (a no-click run skips them, saying why).
+#
+# Isolation "shared" for the suite: its scenes are stances, money and a few envoys, each case setting
+# its own first (the first case still starts on a fresh bench save: a new suite always does).
+#
+# Rivals come from M.qa.rival: no seat of their own (a seated AI's unordered stance change is put
+# back), not the rebels or the Pope, at peace with England first. cede_settlement goes last: nothing
+# here gives a town back. The restore loads the kept save, so none of it reaches the real campaign.
+
+name = "diplomacy"
+faction = "england"
+isolation = "shared"
+
+[[cases]]
+name = "set_stance_war"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.rival("england")', bind = "rival" },
+    { lua = 'return M.qa.stance("england", "$rival", "peace")', require = '^peace$' },
+]
+act = ['return M.qa.order("england", { type = "set_stance", to = "$rival", stance = "war" })']
+expect = [
+    { lua = 'return M.qa.stance("england", "$rival")', equals = "war" },
+    { lua = 'return M.qa.last("set_stance")', equals = "set_stance ok" },
+]
+
+[[cases]]
+name = "set_stance_peace"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.rival("england")', bind = "rival" },
+    { lua = 'return M.qa.stance("england", "$rival", "war")', require = '^war$' },
+]
+act = ['return M.qa.order("england", { type = "set_stance", to = "$rival", stance = "peace" })']
+expect = [
+    { lua = 'return M.qa.stance("england", "$rival")', equals = "peace" },
+    { lua = 'return M.qa.last("set_stance")', equals = "set_stance ok" },
+]
+
+[[cases]]
+name = "set_stance_alliance"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.rival("england")', bind = "rival" },
+    { lua = 'return M.qa.stance("england", "$rival", "peace")', require = '^peace$' },
+]
+act = ['return M.qa.order("england", { type = "set_stance", to = "$rival", stance = "alliance" })']
+expect = [
+    { lua = 'return M.qa.stance("england", "$rival")', equals = "alliance" },
+    { lua = 'return M.qa.last("set_stance")', equals = "set_stance ok" },
+]
+
+# both treasuries move by the amount, at once (no turn start: no income, upkeep or playtest top-up)
+[[cases]]
+name = "send_gold"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.rival("england")', bind = "rival" },
+    { lua = 'return M.qa.money("$rival")', bind = "theirs" },
+    { lua = 'return M.qa.money("england")', bind = "ours" },
+]
+act = ['return M.qa.order("england", { type = "send_gold", to = "$rival", amount = 1000 })']
+expect = [
+    { lua = 'return M.qa.money("$rival") - $theirs', equals = "1000" },
+    { lua = 'return $ours - M.qa.money("england")', equals = "1000" },
+    { lua = 'return M.qa.last("send_gold")', equals = "send_gold ok" },
+]
+
+# A diplomacy screen with no offer on it gets closed (the seal, then the close buttons in turn).
+# England's own envoy beside the rival's nearest town opens it; a game that opens none, or opens it
+# with offer buttons on it, skips the case.
+[[cases]]
+name = "screen_left_open_closed"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.rival("england")', bind = "rival" },
+    { lua = 'return M.qa.town_of("$rival", $garrison_town_x, $garrison_town_y)', bind = "their_town" },
+    { lua = 'return M.qa.town("$their_town")', bind = "their_at" },
+    { lua = 'return M.qa.free_tile($their_at_x, $their_at_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "diplomat", $at_x, $at_y, "QA Envoy")', bind = "envoy" },
+    { lua = 'return M.qa.screen("diplomacy_scroll")', require = '^closed$' },
+]
+act = [
+    'return M.qa.parley("$envoy", "$their_town")',
+    { lua = 'return M.qa.screen("diplomacy_scroll")', require = '^open$', within = 10 },
+    { lua = 'return M.qa.diplomacy_step()', require = 'offer=no' },
+]
+expect = [
+    { lua = 'return M.qa.diplomacy_step()', match = '^screen=closed', within = 40 },
+    { log = 'popup: diplomacy screen left open; (pressing its seal|trying \w+)' },
+]
+
+# An AI's offer reaches the ruler as a choice, and his "accept" is pressed (never decline); the screen
+# closes afterwards. The rival's envoy, beside England's town, parleys with it on England's turn.
+[[cases]]
+name = "ai_offer_accepted"
+kind = "instant"
+phase2 = "no AI offer in a held turn: live 10-31 (phase 1) the rival's envoy parleyed with London and diplomacy_step said offer=no for 15 s; the AI makes its offers on its own turn (ai_offer_on_its_turn)"
+setup = [
+    { lua = 'return M.qa.rival("england")', bind = "rival" },
+    { lua = 'return M.qa.stance("england", "$rival", "peace")', require = '^peace$' },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("$rival", "diplomat", $at_x, $at_y, "QA Envoy")', bind = "envoy" },
+    { lua = 'return M.qa.screen("diplomacy_scroll")', require = '^closed$' },
+]
+act = [
+    'return M.qa.parley("$envoy", "$garrison_town")',
+    { lua = 'return M.qa.diplomacy_step("accept")', require = 'offer=yes', within = 15 },
+]
+expect = [
+    { lua = 'return M.qa.diplomacy_step("accept")', match = '^screen=closed', within = 60 },
+    { log = 'an AI.s diplomatic offer, the ruler chooses: decline, accept' },
+    { log = 'popup button on screen: pressing diplomacy_accept_offer_button' },
+    { lua = 'return M.qa.screen("diplomacy_decline_offer_button")', equals = "closed" },
+]
+
+# #297 (live run9 turn 33): an offer comes up on the screen an answered one left open. The first
+# envoy's offer is declined; with the screen still open (else the case skips: no #297 scene), the
+# second rival's envoy parleys. After the close round the bridge must ask the ruler again, press his
+# "accept", and the screen must close. Its buttons have the answered offer's names, so neither the
+# bridge nor this case can tell them from the first offer's lingering ones: that the second offer
+# came is shown only by the second envoy's parley on the open screen (and, if the game reports it,
+# its "agent mission: <rival2>: ...diplomacy" line in the log).
+[[cases]]
+name = "second_offer_asked_again"
+kind = "instant"
+phase2 = "no AI offer in a held turn (as ai_offer_accepted): live 10-31 (phase 1) the first envoy's parley gave offer=no for 15 s"
+setup = [
+    { lua = 'return M.qa.rival("england", 1)', bind = "first" },
+    { lua = 'return M.qa.rival("england", 2)', bind = "second" },
+    { lua = 'return M.qa.stance("england", "$first", "peace")', require = '^peace$' },
+    { lua = 'return M.qa.stance("england", "$second", "peace")', require = '^peace$' },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at1" },
+    { lua = 'return M.qa.spawn_agent("$first", "diplomat", $at1_x, $at1_y, "QA Envoy")', bind = "envoy1" },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 3)', bind = "at2" },
+    { lua = 'return M.qa.spawn_agent("$second", "diplomat", $at2_x, $at2_y, "QA Envoy")', bind = "envoy2" },
+    { lua = 'return M.qa.screen("diplomacy_scroll")', require = '^closed$' },
+]
+act = [
+    'return M.qa.parley("$envoy1", "$garrison_town")',
+    { lua = 'return M.qa.diplomacy_step("decline")', require = 'offer=yes', within = 15 },
+    { lua = 'return M.qa.diplomacy_step("decline")', require = 'answered=yes', within = 15 },
+    { lua = 'return M.qa.screen("diplomacy_scroll")', require = '^open$' },
+    'return M.qa.parley("$envoy2", "$garrison_town")',
+]
+expect = [
+    { lua = 'return M.qa.diplomacy_step("accept")', match = '^screen=closed', within = 90 },
+    { log = 'popup button on screen: pressing diplomacy_decline_offer_button' },
+    { log = 'a new offer: asking the ruler again' },
+    { log = 'popup button on screen: pressing diplomacy_accept_offer_button' },
+]
+
+# One turn of every diplomacy order through the scripted seat, the validator, orders.json and the
+# bridge, read back from the next report: three rivals' stances, the gold and the town logged done,
+# and the message kept and queued to the outbox (the orchestrator's messages.json, as `qa_messages`).
+# The rivals are all picked before any stance is set (M.qa.rival orders by stance).
+[[cases]]
+name = "orders_next_report"
+max_turns = 3
+setup = [
+    { lua = 'return M.qa.rival("england", 1)', bind = "war_on" },
+    { lua = 'return M.qa.rival("england", 2)', bind = "peace_with" },
+    { lua = 'return M.qa.rival("england", 3)', bind = "ally" },
+    'return M.qa.stance("england", "$war_on", "peace")',
+    'return M.qa.stance("england", "$peace_with", "war")',
+    'return M.qa.stance("england", "$ally", "peace")',
+    { lua = 'return M.qa.spare_town("england", "$garrison_town")', bind = "spare" },
+]
+expect = [
+    { order_ok = true },
+    { state = "factions[id=$war_on].stance", equals = "war" },
+    { state = "factions[id=$peace_with].stance", equals = "peace" },
+    { state = "factions[id=$ally].stance", equals = "alliance" },
+    { log = 'england order \d+ send_gold: done' },
+    { log = 'england order \d+ cede_settlement: done' },
+    { state = "qa_messages", equals = "QA diplomacy suite: a word to the table" },
+]
+
+[cases.orders]
+1 = [
+    { type = "set_stance", to = "$war_on", stance = "war" },
+    { type = "set_stance", to = "$peace_with", stance = "peace" },
+    { type = "set_stance", to = "$ally", stance = "alliance" },
+    { type = "send_gold", to = "$ally", amount = 1000 },
+    { type = "cede_settlement", to = "$ally", settlement = "$spare" },
+    { type = "say", to = "lobby", text = "QA diplomacy suite: a word to the table" },
+]
+
+# The AI's offer as the game makes them: the rival's envoy, beside England's town, is told at its own
+# faction's next turn start (M.qa.court) to parley with it; the offer then comes during the AI's turn,
+# the bridge asks the ruler, the scripted ruler answers "accept" (choice) and the bridge presses it.
+# A chance case: the game's AI may re-task its envoy or propose nothing (inconclusive, never a pass).
+# Any AI's offer in those turns shows the same path; the court line shows the envoy was sent.
+[[cases]]
+name = "ai_offer_on_its_turn"
+chance = true
+max_turns = 2
+choice = "accept"
+setup = [
+    { lua = 'return M.qa.rival("england")', bind = "rival" },
+    'return M.qa.stance("england", "$rival", "peace")',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("$rival", "diplomat", $at_x, $at_y, "QA Envoy")', bind = "envoy" },
+    'return M.qa.court("$envoy", "$garrison_town")',
+]
+expect = [
+    { log = 'qa: court: $envoy parleys with $garrison_town at $rival.s turn start$' },
+    { log = 'popup popup-[\d-]+: an AI.s diplomatic offer, the ruler chooses: decline, accept' },
+    { log = 'popup button on screen: pressing diplomacy_accept_offer_button' },
+]
+
+# Last: nothing gives the town back.
+[[cases]]
+name = "cede_settlement"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.rival("england")', bind = "rival" },
+    { lua = 'return M.qa.spare_town("england", "$garrison_town")', bind = "spare" },
+]
+act = ['return M.qa.order("england", { type = "cede_settlement", to = "$rival", settlement = "$spare" })']
+expect = [
+    { lua = 'return M.qa.owner("$spare")', equals = "$rival" },
+    { lua = 'return M.qa.last("cede_settlement")', equals = "cede_settlement ok" },
+]

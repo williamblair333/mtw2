@@ -1,0 +1,98 @@
+# Popups suite: the game's own popups closed (or answered) under autoplay, each forced on demand.
+#
+# Mixed kinds. A held turn (kind = "instant") presses nothing: paused.txt stops the bridge's popup
+# handling and the turn loop's (parley/popups.py poll), so every popup case is a turn case: setup
+# forces the popup, the QA loop (the turn loop that screenshots, votes and presses checks) runs, the
+# turn ends, and the bridge log since the case began must show the popup handled. Only the scene
+# check (papal_scene) is instant.
+#
+# Forced with EOP (helpers in lua/parley_bridge.lua, M.qa; none looks up a papal scroll):
+#   - the Pope's death: M.qa.kill_pope (EOP character:kill, the game's own death with deathType
+#     natural, on campaignStruct.collegeOfCardinals.pope.character). Live, the death notice (message
+#     202) came right after "autoplay: ending turn" (10-31 04:48:50, 05:29:28), so the election is
+#     expected at the end of the turn the Pope dies in; max_turns = 2 in case it waits a round.
+#   - England's vote: M.qa.give_cardinal (a cardinal of England's, else another faction's moved over
+#     by character:switchFaction); none: M.qa.drop_cardinals (England's cardinals killed).
+#   - an event scroll: M.qa.event (campaign script command historic_event, a descr_events.txt name).
+#   - the faction overview: M.qa.press("faction_button") (the bridge's own click; faction_button is
+#     in every live UI scan).
+# Not forced, so no case here: mission results (the council's missions end on the game's schedule)
+# and "Victory Conditions Failed" (no EOP call or script command found that raises it). The spy report
+# (#255) is covert.toml's spy_report_closed.
+#
+# "alive = N, after = regex": the game was still running N s after that line (a later line of the
+# same game's bridge log, before any bridge load): the papal crash check.
+
+name = "popups"
+faction = "england"
+
+# the scene tools, in one held turn: a Pope to kill, and a vote for England
+[[cases]]
+name = "papal_scene"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.pope()', bind = "pope" },
+    { lua = 'return M.qa.give_cardinal("england")', bind = "cardinal" },
+]
+expect = [
+    { lua = 'return M.qa.cardinals("england")', at_least = 1 },
+    { lua = 'return M.qa.pope()', equals = "$pope" },
+]
+
+# a message scroll from a historic event: the turn loop reads it and the bridge closes it. The first
+# message after the event, before the turn ends, must be handled.
+[[cases]]
+name = "event_scroll_closed"
+max_turns = 1
+setup = ['return M.qa.event("first_wheelbarrow")']
+expect = [
+    { log = 'qa: event ok: first_wheelbarrow(?:(?!autoplay: ending turn)[\s\S])*?popup message (\d+)\n[\s\S]*?popup handled: game message \1 \(' },
+]
+
+# the faction overview held the AI turns behind it (live 10-29, a new campaign); only a stuck turn
+# closes it (K.STUCK_ONLY_SCROLLS), from End Turn (20 s) or an AI turn (30 s)
+[[cases]]
+name = "faction_overview_closed"
+max_turns = 1
+setup = ['return M.qa.press("faction_button")']
+expect = [
+    { log = "qa: press ok: faction_button[\\s\\S]*?stuck\\? try \\d+: combined_overview_scroll's tick" },
+]
+
+# England votes: notice -> the vote scroll found from the tick -> the vote request -> the turn loop
+# clicks a Vote button (it writes .done only after its click) -> the results window -> closed, and
+# the game alive 30 s after the results (live 10-31 04:50:27-04:51:32 went this way)
+[[cases]]
+name = "papal_election_vote"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.give_cardinal("england")', bind = "cardinal" },
+    { lua = 'return M.qa.kill_pope()', bind = "pope" },
+]
+expect = [
+    { log = 'popup message 202' },
+    { log = 'papal vote: the vote scroll is up \(seen from the tick\)' },
+    { log = 'calling captured\(\) \(asks the turn loop to screenshot it\) \[papal_election_scroll\]' },
+    { log = 'popup: a papal election vote answered by the ruler' },
+    { log = 'papal window: results; [\s\S]*?papal window: closed; the turn loop may press again' },
+    { alive = 30, after = 'papal window: results; ' },
+]
+
+# England has no vote: the notice, no election for England, its check pressed after 15 s, the
+# results (England's screen) close by themselves, and the game alive 30 s after the check. The
+# 05:29 bench crash (10-31): the game died within 45 s of "asking for its check". Reproduces it;
+# it fixes nothing. Last: a crash ends the run.
+[[cases]]
+name = "papal_election_no_vote"
+max_turns = 2
+setup = [
+    'return M.qa.drop_cardinals("england")',
+    { lua = 'return M.qa.kill_pope()', bind = "pope" },
+]
+expect = [
+    { log = 'popup message 202' },
+    { log = 'papal notice: no election after 15s; asking for its check' },
+    { log = 'popup handled: game message 202 \(acknowledged with its check\)' },
+    { log = 'papal notice: no election after 15s[\s\S]*?papal window: closed; the turn loop may press again' },
+    { alive = 30, after = 'popup handled: game message 202 \(acknowledged with its check\)' },
+]

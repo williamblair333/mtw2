@@ -6,11 +6,13 @@ from parley.protocol import Orders
 
 
 class FakeSeat:
-    def __init__(self, script: list | None = None, delay: float = 0.0, chats: list | None = None):
+    def __init__(self, script: list | None = None, delay: float = 0.0, chats: list | None = None,
+                 name: str = "fake"):
         self.script = list(script or [])
         self.chats = list(chats or [])
         self.delay = delay
-        self.name = "fake"
+        self.name = name
+        self.timeouts: list[float] = []
 
     def chat(self, prompt: str, *, timeout: float) -> str:
         item = self.chats.pop(0) if self.chats else ""
@@ -20,6 +22,7 @@ class FakeSeat:
 
     def decide(self, prompt: str, *, game_id: str, turn: int, faction: str,
                timeout: float) -> tuple[Orders, str]:
+        self.timeouts.append(timeout)
         if self.delay:
             time.sleep(self.delay)
         item = self.script.pop(0) if self.script else Orders(
