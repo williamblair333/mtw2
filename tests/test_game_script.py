@@ -26,3 +26,11 @@ def test_play_unknown_game_explains(tmp_path):
 def test_play_rejects_bad_name(tmp_path):
     r = run("play", "../evil", games_dir=tmp_path)
     assert r.returncode != 0 and "letters, digits" in r.stderr
+
+
+def test_bot_unknown_game_and_bad_name_are_refused(tmp_path):
+    # `bot` starts only the Discord bot (a QA restore of a campaign whose loop was stopped)
+    r = run("bot", "nope", games_dir=tmp_path)
+    assert r.returncode != 0 and "no such game" in r.stderr
+    r = run("bot", "../evil", games_dir=tmp_path)
+    assert r.returncode != 0 and "letters, digits" in r.stderr

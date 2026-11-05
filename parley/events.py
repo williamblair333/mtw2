@@ -22,6 +22,8 @@ def diff_reports(before: StateReport | None, after: StateReport) -> list[str]:
     events += [f"You gained {new_s[s]}." for s in sorted(new_s.keys() - old_s.keys())]
     new_armies = {_base(a.id) for a in after.armies}  # (ids lost " (null)" once: not a loss)
     events += [f"Your army {a.leader or a.id} is gone (destroyed, disbanded or merged)."
+               + (f" It was besieging {a.besieging}: a sally from the town or a relief army can destroy "
+                  "a besieger." if a.besieging else "")
                for a in before.armies if a.leader and _base(a.id) not in new_armies]
     if after.treasury != before.treasury:
         delta = after.treasury - before.treasury

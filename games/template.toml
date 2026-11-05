@@ -7,7 +7,14 @@
 
 turn_root = "~/.steam/steam/steamapps/common/Medieval II Total War/parley_turns"
 save_dir = "~/.steam/steam/steamapps/common/Medieval II Total War/saves"
-seat_timeout = 120
+seat_timeout = 120          # seconds per turn; fallback_reserve = 90 is kept for a seat's fallback
+# Streamed rulers (heretic:, openai:) never lose a turn by running long: thinking stops after
+# think_tokens, or with answer_reserve seconds left, and the ruler answers without it; a cut answer
+# keeps the orders it finished. Defaults below; a seat may override them in [seats.<f>.ruler_budget].
+# [ruler_budget]
+# think_tokens = 6000
+# answer_tokens = 2500
+# answer_reserve = 120
 
 # Which factions are LLM rulers this game (humans are never picked):
 #   play = ["france", "hre", "venice"]   exactly these
@@ -35,7 +42,13 @@ guild = "My Parley Server"
 [defaults]
 brain = "claude:sonnet"   # or "claude:opus", "agy:gemini-3.8-flash-low", "ollama:qwen3.5:9b"
 
-# One block per faction. Edit persona (a library "@id" or your own text), name, or brain.
+# One block per faction. Edit persona (a library "@id" or your own text), name, brain, or fallback.
+#   steward = true                  # bool (default false). A steward recruits one cheap unit in a settlement the ruler's orders leave
+#                                   #   without a garrison (needs control = "full" or the "recruit" area). It only adds an order after the
+#                                   #   ruler's; the ruler is told next turn and can stop it by listing the settlement in "hold_empty".
+# Per-seat testing keys:
+#   playtest_funds = true           # bool (default false); tops up treasury at turn start. For testing only; spoils any judgement of a ruler's economy.
+#   playtest_funds_amount = 50000    # int florins (optional, default 50000)
 [factions.england]
 persona = "@william-the-conqueror"
 

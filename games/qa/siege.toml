@@ -1,0 +1,241 @@
+# Siege suite: besiege, assault, siege equipment (#235), across the sea (#222), and a town of our
+# own under siege (#297): its garrison's general can't march out, the sally is how out, and the
+# report says who besieges it.
+#
+# Every case is kind = "instant" (see instant.toml for how they run): orders go through the real
+# order handlers with M.qa.order, inside one held turn, and the evidence is read back at once. No
+# case needs a played turn: each behaviour shows in the turn it is ordered in. A case builds its own
+# scene from control lines; nothing waits on what the restored world happens to be doing.
+#
+# Placeholders from the newest report (parley/qa/runner.py pick_targets): $garrison_town (an own
+# town not under siege, with its tile), $home_x/$home_y (any own town's tile).
+#
+# Bench helpers (lua/parley_bridge.lua M.qa), on top of those listed in field.toml and instant.toml:
+#   order(faction, {...})     one order, as orders.json gives it, through the turn start's apply():
+#                             "<type> ok", "<type> ok: <note>", "<type> refused: <why>", "<type> error: ..."
+#   last(type)                what the last order() of that type said
+#   siege(faction, army)      "besieging=<town|-> turns= queue= holdout= can_assault=" (the army's report
+#                             view), or "gone" when no army has that id now
+#   keep_sieges(faction)      the turn start's siege keeping (#235), now
+#   town_siege(town)          the town's report `siege` view: "by= faction= turns= holdout= units=", or "none"
+#   besieged(town)            the town under a rebel siege: its besieger's tile, spawning a rebel army of
+#                             Peasants beside it and besieging when nobody does yet (so the cases share one
+#                             besieger instead of piling them up)
+#   road_town(faction, town)  the nearest other own town its garrison could walk to, or "none"
+#   coast(town, near, far)    a free sea tile near the town, or "none"
+#   spawn_fleet(faction, x, y, unit)  an admiral with one ship ("cog") at sea; the fleet's report id
+#
+# Order of cases: the foreign town's sieges first, then our own town's, the sally last: it is the one
+# case that ends our town's siege. Since 10-31 every case starts on the bench save as recorded
+# (isolation "fresh", the default: the runner reloads it), so no case meets an earlier one's siege;
+# besieged() builds each its own. The order is kept for a run with reloads off.
+#
+# What can't be forced:
+#   - canStartAssault. besiege_assault_storms needs an army the game lets storm at once; it brings a
+#     Catapult and skips (inconclusive) when the game still says no. besiege_assault_refused_note needs
+#     a walled town; it skips when the game says the Peasants can storm it.
+#   - a coast. besieged_garrison_board_refused skips when $garrison_town has no sea within 6 tiles.
+#   - a town to march to. besieged_garrison_moves_refused skips when no other own town is reachable
+#     over land with room for the garrison.
+#   - the battle's outcome: the storm and the sally pass when the siege ends, won or lost.
+#
+# Unproven live (10-31): spawn_fleet (characterType.admiral = 3, the "cog" unit name), "Catapult" as a
+# unit name, equipmentQueueCount rising on keep_sieges, the sally (attackArmy from a besieged
+# garrison) and a battle fought inside a held turn (autoresolve; its result scroll waits for the hold
+# to lift). Run: `just qa siege`, or `case=<name>`.
+
+name = "siege"
+faction = "england"
+
+# 1. besiege a foreign town from the next tile: the order is taken and the army's report shows
+# `besieging` (the siege struct may be set late: polled 15 s)
+[[cases]]
+name = "besiege_next_tile"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "next" },
+    { lua = 'return M.qa.spawn_army("england", $next_x, $next_y, nil, "Peasants")', bind = "army" },
+]
+act = ['return M.qa.order("england", { type = "besiege", army = "$army", settlement = "$hostile" })']
+expect = [
+    { lua = 'return M.qa.last("besiege")', match = '^besiege ok' },
+    { lua = 'return M.qa.siege("england", "$army")', match = '^besieging=$hostile ', within = 15 },
+]
+
+# 2. an assault the game says can't start yet (walls, no engines): the order goes through with the
+# refusal note, and the siege goes on
+[[cases]]
+name = "besiege_assault_refused_note"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "next" },
+    { lua = 'return M.qa.spawn_army("england", $next_x, $next_y, nil, "Peasants")', bind = "army" },
+    { lua = 'return M.qa.order("england", { type = "besiege", army = "$army", settlement = "$hostile" })', require = '^besiege ok' },
+    { lua = 'return M.qa.siege("england", "$army")', require = '^besieging=$hostile .*can_assault=false$', within = 15 },
+]
+act = ['return M.qa.order("england", { type = "besiege", army = "$army", settlement = "$hostile", assault = true })']
+expect = [
+    { lua = 'return M.qa.last("besiege")', match = "^besiege ok: the game says this army can't assault yet" },
+    { lua = 'return M.qa.siege("england", "$army")', match = '^besieging=$hostile ' },
+]
+
+# 3. siege equipment (#235): an army keeping a siege has the game's AI queue equipment
+[[cases]]
+name = "siege_equipment_kept"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "next" },
+    { lua = 'return M.qa.spawn_army("england", $next_x, $next_y, nil, "Peasants")', bind = "army" },
+    { lua = 'return M.qa.order("england", { type = "besiege", army = "$army", settlement = "$hostile" })', require = '^besiege ok' },
+    { lua = 'return M.qa.siege("england", "$army")', require = '^besieging=$hostile ', within = 15 },
+]
+act = ['return M.qa.keep_sieges("england")']
+expect = [
+    { log = '\w+: [^\n]* keeps the siege of $hostile; siege equipment queued' },
+    { lua = 'return M.qa.siege("england", "$army")', match = '^besieging=$hostile .*queue=[1-9]' },
+]
+
+# 4. besiege + assault where the game says the army can storm now (a Catapult breaches walls): the
+# order goes through with no note and the siege ends in a battle, won (the army is the town's
+# garrison: no army by its id, or besieging nothing) or lost (gone)
+[[cases]]
+name = "besiege_assault_storms"
+kind = "instant"
+phase2 = "the assault's battle waits on the pre-battle screen: live 10-31 20:55 the siege formed (can_assault=true), the storm order was taken, the battle panel opened and nothing resolved in 150 s with clicks off"
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "next" },
+    # infantry to carry the equipment, and a catapult merged in (live 10-31 19:4x: a general with a
+    # catapult alone was refused, "it needs infantry to carry equipment"). The unit's EDU type is
+    # "NE Catapult": plain "Catapult" is no type (getEduIndexByType "Catapult" -1, "NE Catapult" 338)
+    { lua = 'return M.qa.spawn_army("england", $next_x, $next_y, nil, "Peasants")', bind = "army" },
+    { lua = 'return M.qa.free_tile($next_x, $next_y, 1, 1)', bind = "cat_at" },
+    { lua = 'return M.qa.spawn_army("england", $cat_at_x, $cat_at_y, nil, "NE Catapult")', bind = "cat" },
+    { lua = 'return M.qa.order("england", { type = "merge_armies", army = "$cat", into = "$army" })', require = '^merge_armies ok' },
+    { lua = 'return M.qa.units("england", "$army")', require = '^2$', within = 10 },
+    { lua = 'return M.qa.order("england", { type = "besiege", army = "$army", settlement = "$hostile" })', require = '^besiege ok' },
+    { lua = 'return M.qa.siege("england", "$army")', require = '^besieging=$hostile .*can_assault=true$', within = 15 },
+]
+act = ['return M.qa.order("england", { type = "besiege", army = "$army", settlement = "$hostile", assault = true })']
+expect = [
+    { lua = 'return M.qa.last("besiege")', equals = "besiege ok" },
+    # the assault's battle comes about 70 s after the order (live 10-31 20:53: prebattle at ~70 s)
+    { lua = 'return M.qa.siege("england", "$army")', match = '^(gone|besieging=- )', within = 150 },
+]
+
+# 5. besiege a town across the sea (#222): refused with the reason; the army stays put
+[[cases]]
+name = "besiege_across_sea_refused"
+kind = "instant"
+isolation = "shared"
+setup = [
+    { lua = 'return M.qa.free_tile($home_x, $home_y, 1, 3)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.sea_town("england", $at_x, $at_y)', bind = "sea" },
+]
+act = ['return M.qa.order("england", { type = "besiege", army = "$army", settlement = "$sea" })']
+expect = [
+    { lua = 'return M.qa.last("besiege")', match = "^besiege refused: \\(\\d+,\\d+\\) can't be reached over land from \\($at_x,$at_y\\): it's across the sea" },
+    { lua = 'return M.qa.where("$gen")', equals = "$at" },
+]
+
+# 6. besiege from far off: the army marches there instead and says so
+[[cases]]
+name = "besiege_far_marches"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 3, 5)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y, nil, "Peasants")', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.dist("$gen", $hostile_at_x, $hostile_at_y)', bind = "start" },
+]
+act = ['return M.qa.order("england", { type = "besiege", army = "$army", settlement = "$hostile" })']
+expect = [
+    { lua = 'return M.qa.last("besiege")', match = '^besiege ok: .* is \d+ tiles from $hostile: marching there instead' },
+    { lua = 'return M.qa.dist("$gen", $hostile_at_x, $hostile_at_y)', below = "$start" },
+]
+
+# 7. our town besieged (#297, live run9 turns 22-35): every way out for the garrison's general is
+# refused, naming the besieger and the attack order to copy; he stays in the town
+[[cases]]
+name = "besieged_garrison_moves_refused"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.garrison("england", "$garrison_town")', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.status("$gen")', require = 'moves=(?!0(\.0*)? )\S+ town=$garrison_town$' },
+    { lua = 'return M.qa.road_town("england", "$garrison_town")', bind = "road", require = '^(?!none$)' },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 2, 3)', bind = "out" },
+    { lua = 'return M.qa.besieged("$garrison_town")', bind = "rebel" },
+    { lua = 'return M.qa.sieges("$garrison_town")', require = '^[1-9]', within = 15 },
+]
+act = [
+    'return M.qa.order("england", { type = "move_army", army = "$army", x = $out_x, y = $out_y })',
+    'return M.qa.order("england", { type = "march_on", army = "$army", target_settlement = "$road" })',
+    'return M.qa.order("england", { type = "withdraw", army = "$army", to_settlement = "$road" })',
+]
+expect = [
+    { lua = 'return M.qa.last("move_army")', match = '^move_army refused: $garrison_town is under siege by .+ \(slave\): nobody can march out of a besieged town\. To break the siege, attack the besieger from inside: \{"type": "attack", "army": "garrison:$garrison_town", "target": "[^"]+", "target_faction": "slave"\}' },
+    { lua = 'return M.qa.last("march_on")', match = '^march_on refused: $garrison_town is under siege by .+ \(slave\): nobody can march out of a besieged town\. To break the siege, attack the besieger from inside: \{"type": "attack", "army": "garrison:$garrison_town", "target": "[^"]+", "target_faction": "slave"\}' },
+    { lua = 'return M.qa.last("withdraw")', match = '^withdraw refused: $garrison_town is under siege by .+ \(slave\): nobody can march out of a besieged town\. To break the siege, attack the besieger from inside: \{"type": "attack", "army": "garrison:$garrison_town", "target": "[^"]+", "target_faction": "slave"\}' },
+    { lua = 'return M.qa.status("$gen")', match = '^$garrison_town_x,$garrison_town_y .*town=$garrison_town$' },
+]
+
+# 8. the same for boarding a fleet (#297): a fleet is spawned at sea near the town first
+[[cases]]
+name = "besieged_garrison_board_refused"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.garrison("england", "$garrison_town")', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.status("$gen")', require = 'moves=(?!0(\.0*)? )\S+ town=$garrison_town$' },
+    { lua = 'return M.qa.coast("$garrison_town", 1, 6)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.besieged("$garrison_town")', bind = "rebel" },
+    { lua = 'return M.qa.sieges("$garrison_town")', require = '^[1-9]', within = 15 },
+]
+act = ['return M.qa.order("england", { type = "board", who = "$army", fleet = "$fleet" })']
+expect = [
+    { lua = 'return M.qa.last("board")', match = '^board refused: $garrison_town is under siege by .+ \(slave\): nobody can march out of a besieged town\. To break the siege, attack the besieger from inside: \{"type": "attack", "army": "garrison:$garrison_town", "target": "[^"]+", "target_faction": "slave"\}' },
+    { lua = 'return M.qa.status("$gen")', match = '^$garrison_town_x,$garrison_town_y .*town=$garrison_town$' },
+]
+
+# 9. the report shows our town's siege: who besieges it, whose army, how long, how long it holds
+[[cases]]
+name = "besieged_town_report"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.besieged("$garrison_town")', bind = "rebel" },
+    { lua = 'return M.qa.sieges("$garrison_town")', require = '^[1-9]', within = 15 },
+]
+expect = [
+    { lua = 'return M.qa.town_siege("$garrison_town")', match = '^by=\S.* faction=slave turns=\d+ holdout=\d+ ' },
+]
+
+# 10. the sally (FIRST LIVE PROOF: never seen live): the attack order the refusals hand out, from
+# garrison:<town> on the besieger, is taken and the siege ends (won or lost). Goes last: it is the
+# only case that lifts our town's siege
+[[cases]]
+name = "sally_breaks_siege"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.garrison("england", "$garrison_town")', bind = "army" },
+    { lua = 'return M.qa.besieged("$garrison_town")', bind = "rebel" },
+    { lua = 'return M.qa.sieges("$garrison_town")', require = '^[1-9]', within = 15 },
+    { lua = 'return M.qa.sees("england", $rebel_x, $rebel_y)', bind = "besieger" },
+]
+act = ['return M.qa.order("england", { type = "attack", army = "$army", target = "$besieger", target_faction = "slave" })']
+expect = [
+    { lua = 'return M.qa.last("attack")', equals = "attack ok" },
+    { lua = 'return M.qa.sieges("$garrison_town")', equals = "0", within = 60 },
+]

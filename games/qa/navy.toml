@@ -1,0 +1,375 @@
+# Navy suite: board, land, blockade, fleets carrying armies (the report's carrying/aboard), fleets on
+# move_army, the sea crossing end to end, the "across the sea: board a fleet first" refusal and its
+# ready-to-copy board order (#202, #263), and a ship recruited in a port.
+#
+# Instant cases (see instant.toml for how they run) wherever the turn it is ordered in shows the
+# behaviour: orders go through the real handlers with M.qa.order, inside one held turn, and the
+# evidence is read back at once. Three turn cases go last, grouped: the next report's carrying/aboard
+# fields, the crossing over as many turns as the sail takes, and the blockade (it crashed the game
+# in a held turn, see the case). Every case builds its own scene: an army on a shore tile with a
+# fleet spawned on the sea beside it.
+#
+# Boarding (live 10-31 08:18-08:21, phase 1): the board order walks the general onto the fleet's tile
+# (moveToTile; EOP has no board call, and factionStruct:splitArmy "embarks/disembarks" too), and it
+# works inside a held turn: in all five board cases the army stood on its fleet's sea tile within
+# 6 s (110,156 -> 111,157; 110,157 -> 111,158; ...). They failed on the read: army_view took the
+# fleet's admiral from st.shipArmy.leader, which EOP leaves nil for a stack in a residence (a fleet),
+# so every army aboard read aboard=-. The view now finds the admiral by leader_of.
+#
+# Placeholders from the newest report (parley/qa/runner.py pick_targets): $garrison_town (an own
+# town not under siege, with its tile), $home_x/$home_y (any own town's tile).
+#
+# Bench helpers (lua/parley_bridge.lua M.qa), on top of those in field.toml, instant.toml and siege.toml
+# (order, last, coast, spawn_fleet):
+#   army(faction, id)          the report's view of an army or fleet: "x,y fleet=<yes|no> carrying=<units|->
+#                              men=<men|-> aboard=<fleet|->", or "gone"
+#   sea(x, y, near, far)       a free sea tile near..far tiles off, or "none"
+#   shore(x, y, near, far)     a free land tile walkable from (x, y) with a free sea tile beside it, or "none"
+#   far_shore(x, y, near, far) a free land tile that can't be walked to from (x, y), with a free sea tile
+#                              beside it (a far shore to land on), or "none"
+#   port_town(faction, x, y, whose)  the nearest town with a port: "own", else a rebel or at-war one's
+#   port(town)                 its port tile, or "none"
+#   blockade_of(town)          "by=<who blockades its port|-> turns=<n>" (EOP portStruct.blockadingArmy)
+#   ship_yard(faction)         an own town whose recruitment pool holds a ship, or "none"
+#   ship_unit(town)            that ship's unit name, its pool topped up to one when below
+#   deliver(faction, town)     the town's recruits in training delivered now, as at turn start: "delivered=<n>"
+#   fleets(faction)            how many fleets the faction has
+#   rerun(faction, type)       the order the last refusal of that type hands out, run as given (ready to copy)
+#
+# Order of cases: the "board a fleet first" refusal first, while the fleet spawned for it is the
+# nearest England has (the refusal names the nearest). Every case starts on the bench save as
+# recorded (isolation "fresh": the runner reloads it), but the refusals that move nobody near the
+# anchor ("shared"); the restore loads the kept save, so none of it reaches the real campaign.
+#
+# What can't be forced:
+#   - a coast. A case whose shore, sea, port or far shore helper finds none skips (inconclusive): an
+#     inland $home, no hostile port on the map, no other landmass within 15 tiles, no ship in any pool.
+#   - moves left after boarding. The game may spend the army's moves on the boarding; the instant
+#     landing cases skip then, and crossing_over_turns lands on a later turn.
+#   - a sail's length. crossing_in_one_turn skips when the fleet doesn't reach the far shore in the
+#     turn; crossing_over_turns gives it two turns.
+#
+# Unproven live: the aboard read by leader_of (the boarding itself was seen, above), landing by
+# moveToTile from aboard, blockadePort's effect on portStruct.blockadingArmy, EOP eduEntry.category = 4
+# for a ship, and a recruited ship put to sea by spawnArmy(admiral) (M.launch_ship; it went into the
+# land garrison before). spawn_fleet is the siege suite's, also unproven. Run: `just qa navy`, or
+# `case=<name>`.
+
+name = "navy"
+faction = "england"
+
+# 1. #202/#263: a move to a tile across the sea is refused with the board order ready to copy (the
+# nearest fleet's); the order copied as given boards the army
+[[cases]]
+name = "across_sea_board_first"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.shore($home_x, $home_y, 1, 10)', bind = "at", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.sea($at_x, $at_y, 1, 1)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.sea_town("england", $at_x, $at_y)', bind = "far_town" },
+    { lua = 'return M.qa.town("$far_town")', bind = "far_town_at" },
+    { lua = 'return M.qa.free_tile($far_town_at_x, $far_town_at_y, 1, 2)', bind = "far" },
+]
+act = [
+    'return M.qa.order("england", { type = "move_army", army = "$army", x = $far_x, y = $far_y })',
+    'return M.qa.rerun("england", "move_army")',
+]
+expect = [
+    { lua = 'return M.qa.last("move_army")', match = '^move_army refused: \($far_x,$far_y\) can.t be reached over land from \($at_x,$at_y\): it.s across the sea; board a fleet first, then land on the far shore: \{"type": "board", "who": "$army", "fleet": "[^"]+"\} \(.+ is at \(\d+,\d+\), \d+ tiles away\)$' },
+    { lua = 'return M.qa.last("board")', match = '^board ok' },
+    { lua = 'return M.qa.army("england", "$army")', match = ' aboard=(?!-$).+$', within = 15 },
+]
+
+# 2. board a fleet on the next tile: the army is aboard it and the fleet carries it (the report's
+# aboard and carrying fields)
+[[cases]]
+name = "board_next_fleet"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.shore($home_x, $home_y, 1, 10)', bind = "at", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.sea($at_x, $at_y, 1, 1)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+]
+act = ['return M.qa.order("england", { type = "board", who = "$army", fleet = "$fleet" })']
+expect = [
+    { lua = 'return M.qa.last("board")', equals = "board ok" },
+    { lua = 'return M.qa.army("england", "$army")', match = '^$sea_x,$sea_y .* aboard=$fleet$', within = 15 },
+    { lua = 'return M.qa.army("england", "$fleet")', match = '^$sea_x,$sea_y fleet=yes carrying=1 men=\d+ ', within = 15 },
+]
+
+# 3. a general in a town boards a fleet 3-6 tiles off: he steps out of the town (M.walk) and walks
+# toward it in the same order
+[[cases]]
+name = "board_far_fleet_walks"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.garrison("england", "$garrison_town")', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.status("$gen")', require = 'moves=(?!0(\.0*)? )\S+ town=$garrison_town$' },
+    { lua = 'return M.qa.coast("$garrison_town", 3, 6)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.dist("$gen", $sea_x, $sea_y)', bind = "start" },
+]
+act = ['return M.qa.order("england", { type = "board", who = "$army", fleet = "$fleet" })']
+expect = [
+    { lua = 'return M.qa.last("board")', match = '^board ok' },
+    { lua = 'return M.qa.status("$gen")', match = 'town=-$' },
+    { lua = 'return M.qa.dist("$gen", $sea_x, $sea_y)', below = "$start" },
+]
+
+# 4. land an army aboard on the shore tile beside its fleet: it stands there, aboard nothing
+[[cases]]
+name = "land_on_coast"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.shore($home_x, $home_y, 1, 10)', bind = "at", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.sea($at_x, $at_y, 1, 1)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.order("england", { type = "board", who = "$army", fleet = "$fleet" })', require = '^board ok' },
+    { lua = 'return M.qa.army("england", "$army")', require = ' aboard=$fleet$', within = 15 },
+    { lua = 'return M.qa.status("$gen")', require = 'moves=(?!0(\.0*)? )\S+ ' },
+]
+act = ['return M.qa.order("england", { type = "land", army = "$army", x = $at_x, y = $at_y })']
+expect = [
+    { lua = 'return M.qa.last("land")', equals = "land ok" },
+    { lua = 'return M.qa.army("england", "$army")', match = '^$at_x,$at_y fleet=no .* aboard=-$', within = 15 },
+]
+
+# 5. land onto the sea: refused with the reason; the army stays aboard
+[[cases]]
+name = "land_onto_sea_refused"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.shore($home_x, $home_y, 1, 10)', bind = "at", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.sea($at_x, $at_y, 1, 1)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.order("england", { type = "board", who = "$army", fleet = "$fleet" })', require = '^board ok' },
+    { lua = 'return M.qa.army("england", "$army")', require = ' aboard=$fleet$', within = 15 },
+    { lua = 'return M.qa.sea($sea_x, $sea_y, 1, 2)', bind = "water", require = '^\d+,\d+$' },
+]
+act = ['return M.qa.order("england", { type = "land", army = "$army", x = $water_x, y = $water_y })']
+expect = [
+    { lua = 'return M.qa.last("land")', equals = "land refused: ($water_x,$water_y) is not land; land on a tile next to the fleet" },
+    { lua = 'return M.qa.army("england", "$army")', match = ' aboard=$fleet$' },
+]
+
+# 6. land onto another faction's town: refused like a walk into one (the besiege advice); the army
+# stays aboard. Before 10-31 the land order took it and moved nobody
+[[cases]]
+name = "land_onto_foreign_town_refused"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.shore($home_x, $home_y, 1, 10)', bind = "at", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.sea($at_x, $at_y, 1, 1)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.order("england", { type = "board", who = "$army", fleet = "$fleet" })', require = '^board ok' },
+    { lua = 'return M.qa.army("england", "$army")', require = ' aboard=$fleet$', within = 15 },
+    { lua = 'return M.qa.hostile_town("england", $at_x, $at_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+]
+act = ['return M.qa.order("england", { type = "land", army = "$army", x = $hostile_at_x, y = $hostile_at_y })']
+expect = [
+    { lua = 'return M.qa.last("land")', match = '^land refused: \($hostile_at_x,$hostile_at_y\) is .+, \w+.s settlement: an army can.t walk in; besiege it' },
+    { lua = 'return M.qa.army("england", "$army")', match = ' aboard=$fleet$' },
+]
+
+# 7. land with an army that isn't aboard anything: refused; it stays put
+[[cases]]
+name = "land_needs_aboard_refused"
+kind = "instant"
+isolation = "shared"
+setup = [
+    { lua = 'return M.qa.free_tile($home_x, $home_y, 1, 3)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.free_tile($at_x, $at_y, 1, 1)', bind = "next" },
+]
+act = ['return M.qa.order("england", { type = "land", army = "$army", x = $next_x, y = $next_y })']
+expect = [
+    { lua = 'return M.qa.last("land")', equals = "land refused: '$army' is not aboard a fleet" },
+    { lua = 'return M.qa.army("england", "$army")', match = '^$at_x,$at_y fleet=no ' },
+]
+
+# 8. the crossing in one held turn: board, sail to the far shore, land there. Skips when the fleet
+# doesn't get there this turn or boarding left no moves (crossing_over_turns covers both)
+[[cases]]
+name = "crossing_in_one_turn"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.shore($home_x, $home_y, 1, 10)', bind = "at", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.sea($at_x, $at_y, 1, 1)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.far_shore($at_x, $at_y, 2, 15)', bind = "far", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.sea($far_x, $far_y, 1, 1)', bind = "far_sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+]
+act = [
+    { lua = 'return M.qa.order("england", { type = "board", who = "$army", fleet = "$fleet" })', require = '^board ok' },
+    { lua = 'return M.qa.army("england", "$army")', require = ' aboard=$fleet$', within = 15 },
+    { lua = 'return M.qa.order("england", { type = "move_army", army = "$fleet", x = $far_sea_x, y = $far_sea_y })', require = '^move_army ok' },
+    # beside the far shore, wherever the sail ends: M.qa.sea picks a water tile by the far shore without
+    # knowing whether a fleet can reach it (11-04 the test laptop and 11-01: aimed at 118,145, stopped at
+    # 118,146 with 27 of 80 moves left, beside the far shore 119,146, where landing works)
+    { lua = 'return M.qa.dist("$fleet", $far_x, $far_y)', require = '^1$', within = 15 },
+    { lua = 'return M.qa.army("england", "$fleet")', require = ' fleet=yes carrying=1 ' },
+    { lua = 'return M.qa.status("$gen")', require = 'moves=(?!0(\.0*)? )\S+ ' },
+    'return M.qa.order("england", { type = "land", army = "$army", x = $far_x, y = $far_y })',
+]
+expect = [
+    { lua = 'return M.qa.last("land")', equals = "land ok" },
+    { lua = 'return M.qa.army("england", "$army")', match = '^$far_x,$far_y fleet=no .* aboard=-$', within = 15 },
+]
+
+# 9. move_army for a fleet to sea 2-3 tiles off: taken, and the fleet sails toward it
+[[cases]]
+name = "fleet_sails"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.coast("$garrison_town", 1, 6)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.sea($sea_x, $sea_y, 2, 3)', bind = "dest", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.dist("$fleet", $dest_x, $dest_y)', bind = "start" },
+]
+act = ['return M.qa.order("england", { type = "move_army", army = "$fleet", x = $dest_x, y = $dest_y })']
+expect = [
+    { lua = 'return M.qa.last("move_army")', equals = "move_army ok" },
+    { lua = 'return M.qa.dist("$fleet", $dest_x, $dest_y)', below = "$start" },
+]
+
+# 10. move_army for a fleet onto land: refused, naming the nearest sea; the fleet stays put
+[[cases]]
+name = "fleet_onto_land_refused"
+kind = "instant"
+isolation = "shared"
+setup = [
+    { lua = 'return M.qa.coast("$garrison_town", 1, 6)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "land" },
+]
+act = ['return M.qa.order("england", { type = "move_army", army = "$fleet", x = $land_x, y = $land_y })']
+expect = [
+    { lua = 'return M.qa.last("move_army")', match = '^move_army refused: a fleet can.t sail onto land \($land_x,$land_y\)(; the nearest sea is \(\d+,\d+\))?$' },
+    { lua = 'return M.qa.where("$fleet")', equals = "$sea" },
+]
+
+# 11. blockade of an own port: refused before any game call; nobody blockades it (blockade_port, the
+# one that blockades, is a turn case below: it crashed the game in a held turn)
+[[cases]]
+name = "blockade_own_port_refused"
+kind = "instant"
+isolation = "shared"
+setup = [
+    { lua = 'return M.qa.port_town("england", $garrison_town_x, $garrison_town_y, "own")', bind = "own", require = '^(?!none$)' },
+    { lua = 'return M.qa.port("$own")', bind = "port", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.sea($port_x, $port_y, 1, 2)', bind = "sea", require = '^\d+,\d+$' },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+]
+act = ['return M.qa.order("england", { type = "blockade", fleet = "$fleet", settlement = "$own" })']
+expect = [
+    { lua = 'return M.qa.last("blockade")', equals = "blockade refused: cannot blockade your own port" },
+    { lua = 'return M.qa.blockade_of("$own")', match = '^by=- ' },
+]
+
+# 12. recruit a ship in a port: the order is paid and queued, and delivered (as at turn start) it puts
+# to sea as a fleet of its own beside the port, not into the town's land garrison
+[[cases]]
+name = "recruit_ship"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.ship_yard("england")', bind = "yard", require = '^(?!none$)' },
+    { lua = 'return M.qa.ship_unit("$yard")', bind = "ship", require = '^(?!none$)' },
+    { lua = 'return M.qa.fleets("england")', bind = "before" },
+]
+act = [
+    { lua = 'return M.qa.order("england", { type = "recruit", settlement = "$yard", unit = "$ship" })', require = '^recruit ok$' },
+    'return M.qa.deliver("england", "$yard")',
+]
+expect = [
+    { log = 'england recruits $ship in $yard for \d+; ready turn \d+' },
+    { log = 'england: $ship trained in $yard \(a fleet at \(\d+,\d+\)\)' },
+    { lua = 'return M.qa.fleets("england") - $before', equals = "1" },
+]
+
+# --- turn cases ---------------------------------------------------------------------------------
+
+# 14. the next report after a board: the fleet's `carrying` and the army's `aboard`, as the ruler reads
+# them (state.json through the orchestrator)
+[[cases]]
+name = "report_fleet_carrying"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.shore($home_x, $home_y, 1, 10)', bind = "at" },
+    { lua = 'return M.qa.sea($at_x, $at_y, 1, 1)', bind = "sea" },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+]
+expect = [
+    { log = 'england order \d+ board: done' },
+    { state = "armies[id=$fleet].carrying", equals = 1 },
+    { state = "armies[id=$army].aboard", equals = "$fleet" },
+]
+
+[cases.orders]
+1 = [{ type = "board", who = "$army", fleet = "$fleet" }]
+
+# 15. the crossing over turns: board, sail (two turns given), land on the far shore. The army ends on
+# the far shore's tile in the report
+[[cases]]
+name = "crossing_over_turns"
+max_turns = 6
+setup = [
+    { lua = 'return M.qa.shore($home_x, $home_y, 1, 10)', bind = "at" },
+    { lua = 'return M.qa.sea($at_x, $at_y, 1, 1)', bind = "sea" },
+    { lua = 'return M.qa.far_shore($at_x, $at_y, 2, 15)', bind = "far" },
+    { lua = 'return M.qa.sea($far_x, $far_y, 1, 1)', bind = "far_sea" },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+]
+expect = [
+    { log = 'england order \d+ board: done' },
+    { log = 'england order \d+ land: done' },
+    { state = "armies[leader=$gen].x", equals = "$far_x" },
+    { state = "armies[leader=$gen].y", equals = "$far_y" },
+]
+
+[cases.orders]
+1 = [{ type = "board", who = "$army", fleet = "$fleet" }]
+2 = [{ type = "move_army", army = "$fleet", x = "$far_sea_x", y = "$far_sea_y" }]
+3 = [{ type = "move_army", army = "$fleet", x = "$far_sea_x", y = "$far_sea_y" }]
+4 = [{ type = "land", army = "$army", x = "$far_x", y = "$far_y" }]
+
+# 16. blockade a rebel or enemy port from the sea beside it, ordered at the next turn start as a
+# ruler's blockade is; the game must still be running 30 s after the order. Phase 2, never instant:
+# live 10-31 08:21:45 (phase 1) the instant version crashed the game in the held turn, right after
+# M.qa.blockade_of said "by=- turns=0", inside the order (no "qa: order" line came): Admiral Lewes,
+# spawned that turn at (116,145), ordered onto rebel Bruges's port (117,144). The order is
+# handlers.blockade -> armyStruct:blockadePort, which EOP passes straight to the game's assault
+# routine (M2TWEOP-library types/army.cpp blockadePort: assaultObject(fleet, port, 0)) with no check
+# but nil; the arguments' types are right (an armyStruct, tileStruct.port). Which game precondition
+# broke is unproven: a fleet spawned in the same turn (a ruler's fleets never are), the held turn, or
+# a rebel port. Blockades from turn-start orders didn't crash (france 10-29 18:11 and 10-30 00:37,
+# england 10-30 01:48), so here the fleet has a turn start before its order.
+[[cases]]
+name = "blockade_port"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.port_town("england", $garrison_town_x, $garrison_town_y)', bind = "target" },
+    { lua = 'return M.qa.port("$target")', bind = "port" },
+    { lua = 'return M.qa.sea($port_x, $port_y, 1, 2)', bind = "sea" },
+    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+]
+expect = [
+    { log = 'england order \d+ blockade: done' },
+    { alive = 30, after = 'england order \d+ blockade: done' },
+]
+
+[cases.orders]
+1 = [{ type = "blockade", fleet = "$fleet", settlement = "$target" }]

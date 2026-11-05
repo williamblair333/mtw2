@@ -1,0 +1,354 @@
+# Towns suite: build, repair, recruit, retrain, set_tax, the governors, the steward's garrison backfill
+# (#225), and what a played turn delivers.
+#
+# Mostly instant (see instant.toml for how they run): orders go through the real order handlers with
+# M.qa.order inside one held turn ("<type> ok" / "<type> refused: <why>", read back by M.qa.last), and
+# each case builds its own scene with M.qa lines. One turn case, last, serves everything that needs
+# the game to play a turn: a recruit and a retrain delivered at the next turn start, a building
+# finished, the steward's backfill (the orchestrator's, in Python, from the next report), and a tax
+# level's effect on public order.
+#
+# Placeholders from the newest report (parley/qa/runner.py pick_targets): $garrison_town (an own town
+# not under siege, with its tile). The suite seats the steward (steward = true below).
+#
+# Bench helpers (lua/parley_bridge.lua M.qa), on top of those in siege.toml and diplomacy.toml:
+#   money(faction, set)          the treasury; with set, set first and read back
+#   can_build(town)              the report's can_build list: "name:cost:turns,..." or "none"
+#   buildable(town, max_turns)   the quickest (then cheapest) on that list; an error past max_turns
+#   cost(town, name, kind)       a build/repair (by level name) or recruit (by unit) option's cost
+#   build_queue(town)            items in the construction queue (buildingsQueue.numBuildingsInQueue)
+#   idle_town(faction, keep)     an own town with an empty construction queue and something to build
+#   damage(town, name, hp)       a building's hp set (default 50; 100 mends it); its level name
+#   repairable(town)             the repair options the game lists now, or "none"
+#   recruitable(town, n)         the cheapest land unit the pools hold, its pool stocked to n (2)
+#   pool(town, unit)             that unit's pool stock
+#   training(town) / ready(town, unit)  recruits the bridge holds for the town / a unit's ready turn
+#   fill_queue(faction, town, clear)    the recruitment queue filled to 9 with placeholders, or cleared
+#   worn(faction, town)          a garrison unit of the cheapest pool type at a tenth of its men; its type
+#   men(town, unit)              the most worn such unit: "men/max"
+#   tax(town, set)               the tax level, set first with set
+#   automanage(town, set)        the governor flags "build= recruit= all=", all set first with set
+#   governors(faction, town, areas)  M.set_governors as the turn start runs it; the town's flags after
+#   empty_garrison(faction, keep)    an own town without a general, its garrison disbanded; its name
+#
+# What can't be forced or checked here:
+#   - a refusal for upkeep: no code refuses a recruit on upkeep (the bridge checks the treasury and the
+#     queue only; the validator nothing), so there is no case for it.
+#   - the head of the construction queue on EOP master (queue_of: its name can't be read), so
+#     "already in the queue" refusals and queue names aren't checked; the queue's count is.
+#   - a building done in one turn: the turn case builds the quickest the idle town offers and fails
+#     at setup, naming it, when that takes more than 3 turns.
+#   - retrain with nothing to retrain: a town always has a worn unit or none, by luck.
+#
+# Unproven live (10-31): that queueing a building charges its cost at once (the bridge logs the
+# treasury either side and never checked), that writing building.hp makes the game offer its repair,
+# availablePool and soldierCountStratMap writes, unit:kill on a garrison unit, the governor flags'
+# type (booleans on EOP master, set_governors writes 0/1), the tax enum 0..3 = low..extortionate, and
+# that "low" tax shows as a "low tax" public order bonus. Run: `just qa towns`, or `case=<name>`.
+
+name = "towns"
+faction = "england"
+# the cases' scenes are a town's queues, treasury and tax, each set by the case itself; nothing is
+# spawned on the map (the first case still starts on a fresh bench save: a new suite always does)
+isolation = "shared"
+steward = true
+
+# 1. build: on the town's can_build list, queued; the game charges a building when it starts, so
+# its cost is paid at once into an empty queue and later behind others (live 10-31 19:3x: London,
+# empty queue, leather_tanner 600 paid at once; then brothel 800 behind it, nothing paid)
+[[cases]]
+name = "build_queued"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.buildable("$garrison_town")', bind = "b" },
+    { lua = 'return M.qa.can_build("$garrison_town")', require = '(^|,)$b:' },
+    { lua = 'return M.qa.cost("$garrison_town", "$b")', bind = "c" },
+    { lua = 'return M.qa.build_queue("$garrison_town")', bind = "q", require = '^[0-5]$' },
+    { lua = 'return M.qa.money("england")', bind = "ours" },
+]
+act = ['return M.qa.order("england", { type = "build", settlement = "$garrison_town", building = "$b" })']
+expect = [
+    { lua = 'return M.qa.last("build")', equals = "build ok" },
+    { lua = 'return M.qa.build_queue("$garrison_town") - $q', equals = "1" },
+    { lua = 'return ($q == 0 and $c or 0) - ($ours - M.qa.money("england"))', equals = "0" },
+    { log = '\w+ build $b in $garrison_town: treasury \d+ -> \d+' },
+]
+
+# 2. a building the town can't build: refused, naming what it can; nothing queued
+[[cases]]
+name = "build_unknown_refused"
+kind = "instant"
+setup = [{ lua = 'return M.qa.build_queue("$garrison_town")', bind = "q" }]
+act = ['return M.qa.order("england", { type = "build", settlement = "$garrison_town", building = "qa_no_such_building" })']
+expect = [
+    { lua = 'return M.qa.last("build")', match = "^build refused: $garrison_town can't build 'qa_no_such_building' now \\(can: " },
+    { lua = 'return M.qa.build_queue("$garrison_town")', equals = "$q" },
+]
+
+# 3. a build in someone else's town: refused
+[[cases]]
+name = "build_not_owned_refused"
+kind = "instant"
+setup = [{ lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" }]
+act = ['return M.qa.order("england", { type = "build", settlement = "$hostile", building = "farms" })']
+expect = [
+    { lua = 'return M.qa.last("build")', equals = "build refused: settlement '$hostile' not owned" },
+]
+
+# 4. no money: the treasury set to 0, the build refused with what it needs, then the treasury put back
+[[cases]]
+name = "build_no_money_refused"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.buildable("$garrison_town")', bind = "b" },
+    { lua = 'return M.qa.cost("$garrison_town", "$b")', bind = "c" },
+    { lua = 'return M.qa.build_queue("$garrison_town")', bind = "q" },
+    { lua = 'return M.qa.money("england")', bind = "ours" },
+    { lua = 'return M.qa.money("england", 0)', require = '^0$' },
+]
+act = [
+    'return M.qa.order("england", { type = "build", settlement = "$garrison_town", building = "$b" })',
+    'return M.qa.money("england", $ours)',
+]
+expect = [
+    { lua = 'return M.qa.last("build")', equals = "build refused: treasury too low (0, needs $c)" },
+    { lua = 'return M.qa.build_queue("$garrison_town")', equals = "$q" },
+    { lua = 'return M.qa.money("england")', equals = "$ours" },
+]
+
+# 5. repair of a building at full health: refused (before repair_queued, which queues that building's repair)
+[[cases]]
+name = "repair_not_damaged_refused"
+kind = "instant"
+setup = [{ lua = 'return M.qa.damage("$garrison_town", nil, 100)', bind = "b" }]
+act = ['return M.qa.order("england", { type = "repair", settlement = "$garrison_town", building = "$b" })']
+expect = [
+    { lua = 'return M.qa.last("repair")', equals = "repair refused: $garrison_town can't repair '$b' (not damaged)" },
+]
+
+# 6. repair: a building damaged to half, the game offers its repair (else the case skips), queued and paid
+[[cases]]
+name = "repair_queued"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.damage("$garrison_town", nil, 50)', bind = "b" },
+    { lua = 'return M.qa.repairable("$garrison_town")', require = '(^|,)$b(,|$)', within = 5 },
+    { lua = 'return M.qa.cost("$garrison_town", "$b", "repair")', bind = "c" },
+    { lua = 'return M.qa.build_queue("$garrison_town")', bind = "q", require = '^[0-5]$' },
+    { lua = 'return M.qa.money("england")', bind = "ours" },
+]
+act = ['return M.qa.order("england", { type = "repair", settlement = "$garrison_town", building = "$b" })']
+expect = [
+    { lua = 'return M.qa.last("repair")', equals = "repair ok" },
+    { lua = 'return M.qa.build_queue("$garrison_town") - $q', equals = "1" },
+    # a repair is paid in full when queued with at most one item ahead of it, and nothing at queue
+    # time behind two or more (live 11-04, London town_guard, cost 400: queue 1 -> paid 400, the main machine
+    # 10:20; queue 2 -> paid 0, the test laptop 22:21). An empty queue is taken as paid, as a build is
+    # (not yet seen live)
+    { lua = 'return ($q <= 1 and $c or 0) - ($ours - M.qa.money("england"))', equals = "0" },
+    { log = '\w+ repair $b in $garrison_town: treasury \d+ -> \d+' },
+]
+
+# 7. recruit: paid, one taken from the pool, held for the town until its ready turn
+[[cases]]
+name = "recruit_queued"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.recruitable("$garrison_town")', bind = "u" },
+    { lua = 'return M.qa.cost("$garrison_town", "$u", "recruit")', bind = "c" },
+    { lua = 'return M.qa.pool("$garrison_town", "$u")', bind = "p" },
+    { lua = 'return M.qa.training("$garrison_town")', bind = "t", require = '^[0-8]$' },
+    { lua = 'return M.qa.money("england")', bind = "ours" },
+]
+act = ['return M.qa.order("england", { type = "recruit", settlement = "$garrison_town", unit = "$u" })']
+expect = [
+    { lua = 'return M.qa.last("recruit")', equals = "recruit ok" },
+    { lua = 'return M.qa.training("$garrison_town") - $t', equals = "1" },
+    { lua = 'return $ours - M.qa.money("england")', equals = "$c" },
+    { lua = 'return $p - M.qa.pool("$garrison_town", "$u")', equals = "1" },
+    { lua = 'return M.qa.ready("$garrison_town", "$u")', match = '^\d+$' },
+    { log = '\w+ recruits $u in $garrison_town for $c; ready turn \d+' },
+]
+
+# 8. a unit the town can't recruit: refused, naming what it can
+[[cases]]
+name = "recruit_unknown_refused"
+kind = "instant"
+act = ['return M.qa.order("england", { type = "recruit", settlement = "$garrison_town", unit = "QA No Such Unit" })']
+expect = [
+    { lua = 'return M.qa.last("recruit")', match = "^recruit refused: $garrison_town can't recruit 'QA No Such Unit' now \\(can: " },
+]
+
+# 9. no money: refused with what it needs; nothing paid, nothing held; the treasury put back
+[[cases]]
+name = "recruit_no_money_refused"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.recruitable("$garrison_town")', bind = "u" },
+    { lua = 'return M.qa.cost("$garrison_town", "$u", "recruit")', bind = "c" },
+    { lua = 'return M.qa.training("$garrison_town")', bind = "t" },
+    { lua = 'return M.qa.money("england")', bind = "ours" },
+    { lua = 'return M.qa.money("england", 0)', require = '^0$' },
+]
+act = [
+    'return M.qa.order("england", { type = "recruit", settlement = "$garrison_town", unit = "$u" })',
+    'return M.qa.money("england", $ours)',
+]
+expect = [
+    { lua = 'return M.qa.last("recruit")', equals = "recruit refused: treasury too low (0, needs $c)" },
+    { lua = 'return M.qa.training("$garrison_town")', equals = "$t" },
+    { lua = 'return M.qa.money("england")', equals = "$ours" },
+]
+
+# 10. a full recruitment queue (9 waiting): refused; nothing paid. The placeholders are cleared after
+[[cases]]
+name = "recruit_queue_full_refused"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.recruitable("$garrison_town")', bind = "u" },
+    { lua = 'return M.qa.money("england")', bind = "ours" },
+    { lua = 'return M.qa.training("$garrison_town")', bind = "t" },
+    { lua = 'return M.qa.fill_queue("england", "$garrison_town")', require = '^9$' },
+]
+act = [
+    'return M.qa.order("england", { type = "recruit", settlement = "$garrison_town", unit = "$u" })',
+    'return M.qa.fill_queue("england", "$garrison_town", true)',
+]
+expect = [
+    { lua = 'return M.qa.last("recruit")', equals = "recruit refused: $garrison_town's recruitment queue is full (9 waiting)" },
+    { lua = 'return M.qa.money("england")', equals = "$ours" },
+    { lua = 'return M.qa.training("$garrison_town")', equals = "$t" },
+]
+
+# 11. retrain: a worn garrison unit (a tenth of its men) is paid for and held for the next turn start
+# (the refill itself is the turn case's)
+[[cases]]
+name = "retrain_queued"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.worn("england", "$garrison_town")', bind = "u" },
+    { lua = 'return M.qa.men("$garrison_town", "$u")', bind = "before", require = '^\d+/\d+$' },
+    { lua = 'return M.qa.training("$garrison_town")', bind = "t" },
+    { lua = 'return M.qa.money("england")', bind = "ours" },
+]
+act = ['return M.qa.order("england", { type = "retrain", settlement = "$garrison_town" })']
+expect = [
+    { lua = 'return M.qa.last("retrain")', equals = "retrain ok" },
+    { log = '\w+ retrains in $garrison_town for \d+: [^\n]*$u $before' },
+    { lua = 'return M.qa.training("$garrison_town") - $t', at_least = 1 },
+    { lua = 'return $ours - M.qa.money("england")', at_least = 1 },
+]
+
+# 12-15. set_tax, each level, from another level first
+[[cases]]
+name = "set_tax_low"
+kind = "instant"
+setup = [{ lua = 'return M.qa.tax("$garrison_town", "high")', require = '^high$' }]
+act = ['return M.qa.order("england", { type = "set_tax", settlement = "$garrison_town", level = "low" })']
+expect = [
+    { lua = 'return M.qa.tax("$garrison_town")', equals = "low" },
+    { lua = 'return M.qa.last("set_tax")', equals = "set_tax ok" },
+]
+
+[[cases]]
+name = "set_tax_normal"
+kind = "instant"
+setup = [{ lua = 'return M.qa.tax("$garrison_town", "low")', require = '^low$' }]
+act = ['return M.qa.order("england", { type = "set_tax", settlement = "$garrison_town", level = "normal" })']
+expect = [
+    { lua = 'return M.qa.tax("$garrison_town")', equals = "normal" },
+    { lua = 'return M.qa.last("set_tax")', equals = "set_tax ok" },
+]
+
+[[cases]]
+name = "set_tax_high"
+kind = "instant"
+setup = [{ lua = 'return M.qa.tax("$garrison_town", "low")', require = '^low$' }]
+act = ['return M.qa.order("england", { type = "set_tax", settlement = "$garrison_town", level = "high" })']
+expect = [
+    { lua = 'return M.qa.tax("$garrison_town")', equals = "high" },
+    { lua = 'return M.qa.last("set_tax")', equals = "set_tax ok" },
+]
+
+[[cases]]
+name = "set_tax_extortionate"
+kind = "instant"
+setup = [{ lua = 'return M.qa.tax("$garrison_town", "normal")', require = '^normal$' }]
+act = ['return M.qa.order("england", { type = "set_tax", settlement = "$garrison_town", level = "extortionate" })']
+expect = [
+    { lua = 'return M.qa.tax("$garrison_town")', equals = "extortionate" },
+    { lua = 'return M.qa.last("set_tax")', equals = "set_tax ok" },
+]
+
+# 16. a tax level that doesn't exist: refused; the level stays
+[[cases]]
+name = "set_tax_unknown_refused"
+kind = "instant"
+setup = [{ lua = 'return M.qa.tax("$garrison_town", "normal")', require = '^normal$' }]
+act = ['return M.qa.order("england", { type = "set_tax", settlement = "$garrison_town", level = "qa_none" })']
+expect = [
+    { lua = 'return M.qa.last("set_tax")', equals = "set_tax refused: unknown tax level 'qa_none'" },
+    { lua = 'return M.qa.tax("$garrison_town")', equals = "normal" },
+]
+
+# 17. the QA seat has full control: the turn start's set_governors turns the town's governor off
+[[cases]]
+name = "governors_off_under_full_control"
+kind = "instant"
+setup = [{ lua = 'return M.qa.automanage("$garrison_town", true)', require = '^build=(1|true) recruit=(1|true)' }]
+act = ['return M.qa.governors("england", "$garrison_town")']
+expect = [
+    { lua = 'return M.qa.automanage("$garrison_town")', match = '^build=(0|false) recruit=(0|false) all=(0|false)$' },
+    { log = 'governors \w+: [^\n]*$garrison_town build=(0|false) recruit=(0|false)' },
+]
+
+# 18. a seat that runs neither building nor recruiting (the "ruler" preset): the governor takes both.
+# The full-control flags are put back after (the next turn start would too)
+[[cases]]
+name = "governors_on_under_ruler_control"
+kind = "instant"
+setup = [{ lua = 'return M.qa.automanage("$garrison_town", false)', require = '^build=(0|false) recruit=(0|false)' }]
+act = [
+    'return M.qa.governors("england", "$garrison_town", "diplomacy,armies,agents")',
+    'return M.qa.governors("england", "$garrison_town")',
+]
+expect = [
+    { log = 'governors \w+: [^\n]*$garrison_town build=(1|true) recruit=(1|true)' },
+    { lua = 'return M.qa.automanage("$garrison_town")', match = '^build=(0|false) recruit=(0|false) all=(0|false)$' },
+]
+
+# 19. One played turn for everything that needs one. Setup, on the held turn: a recruit and a retrain
+# in $garrison_town (ready next turn), the quickest building in a town with an empty queue, another
+# town's garrison disbanded (the steward's #225 case), and "low" tax in $garrison_town. The scripted
+# ruler orders nothing, so a recruit order in the next turns is the steward's. Then:
+#   - the recruit joins and the worn unit is refilled at the next turn start (deliver_training)
+#   - the building stands in the next report (within 3 turns: the quickest may take more than one)
+#   - the steward recruits in the empty town, and the bridge carries it out
+#   - the next report shows low tax and its public order bonus
+[[cases]]
+name = "next_turn_delivers"
+max_turns = 3
+setup = [
+    { lua = 'return M.qa.recruitable("$garrison_town")', bind = "u" },
+    'return M.qa.order("england", { type = "recruit", settlement = "$garrison_town", unit = "$u" })',
+    { lua = 'return M.qa.worn("england", "$garrison_town")', bind = "w" },
+    'return M.qa.order("england", { type = "retrain", settlement = "$garrison_town" })',
+    { lua = 'return M.qa.idle_town("england", "$garrison_town")', bind = "idle" },
+    { lua = 'return M.qa.buildable("$idle", 3)', bind = "b" },
+    'return M.qa.order("england", { type = "build", settlement = "$idle", building = "$b" })',
+    { lua = 'return M.qa.empty_garrison("england", "$garrison_town")', bind = "empty" },
+    'return M.qa.recruitable("$empty")',
+    'return M.qa.order("england", { type = "set_tax", settlement = "$garrison_town", level = "low" })',
+]
+expect = [
+    { log = 'qa: order ok: recruit ok' },
+    { log = 'qa: order ok: retrain ok' },
+    { log = 'qa: order ok: build ok' },
+    { log = '\w+: $u trained in $garrison_town(?! FAILED)' },
+    { log = '\w+: $w retrained in $garrison_town(?! FAILED)' },
+    { state = "settlements[id=$idle].buildings", equals = "^$b$" },
+    { log = '\w+ order \d+ recruit: done' },
+    { log = '\w+ recruits [^\n]+ in $empty for \d+; ready turn \d+' },
+    { state = "settlements[id=$garrison_town].tax_level", equals = "low" },
+    { state = "settlements[id=$garrison_town].order_parts.low tax", at_least = 1 },
+]

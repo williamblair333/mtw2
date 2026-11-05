@@ -1,0 +1,85 @@
+# Game events that can interrupt a QA run that plays turns (scripts/preflight_interrupts.py).
+# Lives outside games/qa/ on purpose: the runner and tests load every games/qa/*.toml as a suite.
+#
+# The preflight gate (.claude/preflight.toml) refuses any `just qa` run with a turn case until
+# every event below has either
+#   ruled_out = "why it can't happen in a bench run"
+# or
+#   held_by = "what holds it off"
+#   proof = ["<repo path>::<regex>", ...]   # each must match, so a planned-but-unbuilt fix fails
+#   bench = "<suite>/<case>"   # and the newest bench report row for it must say pass (11-01: holds
+#                              # merged on fake-game tests alone don't count)
+# It also refuses turn runs while the newest no-click run (runs/qa/*-all.md) has a fail or
+# inconclusive case not listed in games/no-click-explained.toml (STANDARDS: phase-order).
+# Runs with kind=instant play no turn and pass regardless.
+#
+# Started 2026-11-01 after a papal election stalled turn 50 for hours and the author had to ask for a
+# quiet world. Add an event the moment one interrupts a run; never delete one to get a run through.
+
+[events.papal_election]
+what = "the Pope dies (old age or assassination) and an election scroll opens"
+held_by = "M.qa.quiet makes the Pope 45 after every bench load (runner refuses the load if it doesn't stick) and the bridge repeats it at each player turn start under freeze=*; assassins: every AI faction is frozen"
+proof = ["parley/qa/runner.py::_quiet_world\\(ctrl, log_path, bench\\.rel\\)",
+         "lua/parley_bridge.lua::quiet = function\\(max_age\\)",
+         "lua/parley_bridge.lua::cfg\\.freeze\\[\"\\*\"\\] and fac\\.isPlayerControlled == 1 and M\\.qa then M\\.qa\\.quiet\\(\\)",
+         "tests/test_qa_quiet_pope.py::def test_the_players_turn_start_keeps_him_young_in_the_quiet_world"]
+bench = "instant/quiet_world_held"
+note = "unproven live: that the game's old-age death roll reads characterRecord.age; the first bench load logs 'qa: quiet ok: pope=... age=a->b'"
+
+[events.papal_missions]
+what = "papal requests, excommunication threats and crusade calls from the Pope"
+
+[events.council_missions]
+what = "council, guild and senate missions that open a scroll"
+
+[events.crusade_jihad]
+what = "a crusade or jihad is called or joined, with its prompts"
+
+[events.ai_diplomacy_offers]
+what = "an AI faction offers alliance, trade, ceasefire or demands tribute"
+note = "freeze=* may stop these (freezeFactionAI); prove it with a forced case before claiming it"
+
+[events.ai_attacks_sieges]
+what = "an AI army attacks, besieges, or blocks a case's target"
+held_by = "freeze=* freezes every AI faction's campaign AI on the bench (runner quiet world)"
+proof = ["lua/parley_bridge.lua::fac\\.freezeFactionAI = want",
+         "parley/orchestrator.py::freeze=\\*"]
+
+[events.marriage_adoption]
+what = "a marriage, adoption or man-of-the-hour offer opens a scroll"
+note = "the steward answers family offers by rule, but only in suites with steward = true. Seen on the bench 10-31 12:13 and 12:33: the same offer (Fraunce of_Leeds for england) at the first End Turn, and the QA loop never answered it ('didn't capture it in time'), so End Turn stayed held"
+
+# Split 11-01 from one "rebellion" event: the town half is held, the general half is not.
+[events.rebellion]
+what = "a settlement revolts"
+held_by = "M.qa.quiet sets every seated faction's town turmoil and rebel-faction chance to 0, read back (after every bench load, refused if it doesn't stick, and at each player turn start under freeze=*)"
+proof = ["lua/parley_bridge.lua::s\\.turmoil, s\\.rebelFactionChance = 0, 0",
+         "tests/test_qa_quiet_pope.py::def test_quiet_calms_and_cures_the_seated_factions_towns"]
+bench = "instant/quiet_world_held"
+note = "inferred: turmoil 0 each round keeps public order from falling into revolt (public order itself is get-only); live 11-01 the write stuck on scratch (england 4 towns, france 7)"
+
+[events.general_defects]
+what = "a general defects to the rebels"
+note = "spawned generals get LoyaltyStarter (#279); the save's own generals keep their loyalty"
+
+[events.succession]
+what = "the faction leader or heir dies and a succession or new-heir scroll opens"
+held_by = "M.qa.quiet keeps each seated faction's leader and heir at 45 or younger (after every bench load, refused if it doesn't stick, and at each player turn start under freeze=*); assassins and battles: every AI faction is frozen"
+proof = ["lua/parley_bridge.lua::fac\\.leader and keep_young\\(fac\\.leader",
+         "lua/parley_bridge.lua::fac\\.heir and keep_young\\(fac\\.heir",
+         "tests/test_qa_quiet_pope.py::def test_quiet_keeps_the_seated_factions_leader_and_heir_young"]
+bench = "instant/quiet_world_held"
+note = "unproven: the old-age death roll reading characterRecord.age (as for the Pope)"
+
+# Split 11-01 from one "plague_disaster" event: town plague is held, the other disasters are not.
+[events.plague]
+what = "plague strikes a seated faction's town and opens a scroll"
+held_by = "M.qa.quiet clears plagued and plagueDuration on every seated faction's town, read back (after every bench load and at each player turn start under freeze=*)"
+proof = ["lua/parley_bridge.lua::s\\.plagued, s\\.plagueDuration = false, 0",
+         "tests/test_qa_quiet_pope.py::def test_quiet_calms_and_cures_the_seated_factions_towns"]
+bench = "instant/quiet_world_held"
+note = "a plague carried by a character (10-31 12:13: 'Captain Draganos was struck by a disaster: plague') is not cleared"
+
+[events.disaster]
+what = "an earthquake, flood, famine or another disaster opens a scroll or kills a case's character"
+note = "seen on the bench 10-31 12:33: famine 'struck' nearly every character, England's included; no EOP lever found"

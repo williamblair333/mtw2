@@ -182,6 +182,12 @@ def build_game(template: dict, name: str, *, personas_dir: Path, play=None, pers
                 "persona": persona}
         if base.get("name"):
             seat["name"] = base["name"]
+        if base.get("steward"):
+            seat["steward"] = True
+        if base.get("playtest_funds"):
+            seat["playtest_funds"] = True
+        if "playtest_funds_amount" in base:
+            seat["playtest_funds_amount"] = base["playtest_funds_amount"]
         seat.update(overrides.get(f, {}))
         game_seats[f] = seat
 

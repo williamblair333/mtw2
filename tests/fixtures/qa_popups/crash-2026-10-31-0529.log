@@ -1,0 +1,38 @@
+2026-10-31 05:29:27 character event: slave: Captain Radoslav was struck by a disaster: famine (in Moscow_Province)
+2026-10-31 05:29:27 character event: slave: Christofle Saisset was struck by a disaster: famine (in Bordeaux_Province)
+2026-10-31 05:29:27 character event: slave: Baraka was struck by a disaster: famine (in Trebizond_Province)
+2026-10-31 05:29:27 playtest funds: england topped up 7042 -> 50000
+2026-10-31 05:29:27 governors england: London build=true recruit=true; Nottingham build=true recruit=true; Caen build=true recruit=true; York build=true recruit=true
+2026-10-31 05:29:27 popup message 3
+2026-10-31 05:29:27 papal-trace: #423 onIncomingMessage: event 3 queued (nothing read from the game) [message:3]
+2026-10-31 05:29:28 autoplay: ending turn 50
+2026-10-31 05:29:28 popup message 202
+2026-10-31 05:29:28 papal-trace: #424 onIncomingMessage: event 202 queued (nothing read from the game) [message:202]
+2026-10-31 05:29:28 papal notice: hands off until the election opens (up to 15s)
+2026-10-31 05:29:28 papal vote: looking for the vote scroll from the tick (hands off its event)
+2026-10-31 05:29:28 papal window: notice; the turn loop presses nothing else for up to 45s
+2026-10-31 05:29:32 papal-trace: #425 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:29:32 papal-trace: #426 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:29:34 papal-trace: #427 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:29:34 papal-trace: #428 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:29:36 papal-trace: #429 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:29:36 papal-trace: #430 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:29:38 papal-trace: #431 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:29:38 papal-trace: #432 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:29:40 papal-trace: #433 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:29:40 papal-trace: #434 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:29:42 papal-trace: #435 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:29:42 papal-trace: #436 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:29:44 papal-trace: #437 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:29:44 papal-trace: #438 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:29:44 papal notice: no election after 15s; asking for its check
+2026-10-31 05:29:46 papal-trace: #439 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:29:46 papal-trace: #440 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:30:31 papal window: notice (kept across the reload)
+2026-10-31 05:30:31 papal window: closed; the turn loop may press again
+2026-10-31 05:30:31 papal hands-off: on (papal scrolls never reach the bridge)
+2026-10-31 05:30:31 bridge loaded campaign at turn 0
+2026-10-31 05:30:31 autoplay: auto-resolve all battles on
+2026-10-31 05:31:08 bridge loaded campaign at turn 50
+2026-10-31 05:31:08 autoplay: auto-resolve all battles on
+2026-10-31 05:31:08 autoplay: ending turn 50

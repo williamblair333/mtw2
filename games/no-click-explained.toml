@@ -1,0 +1,7 @@
+# No-click bench cases that may stay fail or inconclusive without blocking turn work
+# (scripts/preflight_interrupts.py, STANDARDS: phase-order). Each needs a `why` a reviewer can check:
+#
+# [cases.<case name>]
+# why = "what makes it fail or skip, and why turn work may go ahead anyway"
+#
+# Empty on purpose (2026-11-01): every open no-click case is to be fixed, not explained away.

@@ -1,0 +1,117 @@
+# Instant suite: bridge behaviour proven in seconds, inside one held turn (no End Turn).
+#
+# kind = "instant": the runner stops the QA loop, holds the turn (paused.txt: the bridge ends no turn
+# but still runs control lines), waits for England's own turn (M.qa.current), then runs `setup` and
+# `act` lines in order and polls each `expect`'s query every half second for up to `within` seconds
+# (10 by default): a character's tile after a split may lag the call that made it (live run9).
+#   - `bind` keeps a line's result as `$name` (a tile "x,y" also binds `$name_x`, `$name_y`).
+#   - `require` (a regex) on a setup line: a result it doesn't match skips the case (inconclusive),
+#     with the result as the reason; `within` polls it.
+#   - expects: `{ lua = '...', match / no_match = regex, equals = text, below / at_least = number }`,
+#     or `{ log = regex }` over the bridge log since the case started.
+#   - `isolation` (a suite's default, a case's own): "fresh" (the default) starts the case on the
+#     bench save as recorded, the runner reloading it (M.qa.load, ~4 s live) when any case ran since
+#     the last load; "shared" starts it on what the case before left. A new suite always starts fresh.
+#   - `phase2 = "<why>"`: an instant case that can't pass in a no-click run (`kind=instant`), which
+#     reports it skipped with the reason; a full run still runs it.
+#
+# The cases share $garrison_town (an own town not under siege, from the newest report). Each takes
+# the general leading its garrison (M.qa.garrison spawns one when nobody does), on a fresh bench
+# save: live 10-31 (phase 1, no reloads yet) these four ran after 30 cases had spawned around London,
+# found no free tile beside it, and split_far_target's general was one field's withdraw had put in
+# London; his split had no tile to step onto. The restore loads the kept save, so none of it reaches
+# the real campaign.
+#
+# Run alone after a recent smoke pass: `just qa instant no-smoke` (or `case=<name>` for one case).
+
+name = "instant"
+faction = "england"
+
+# live run9 (Caen to (110,130)): a split onto the tile next to the town works at once
+[[cases]]
+name = "split_adjacent_target"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.garrison("england", "$garrison_town")', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.status("$gen")', require = 'moves=(?!0(\.0*)? )\S+ town=$garrison_town$' },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 1)', bind = "next" },
+]
+act = ['return M.qa.walk("$gen", $next_x, $next_y)']
+expect = [
+    { lua = 'return M.qa.status("$gen")', match = '^$next_x,$next_y .*town=-$' },
+]
+
+# live run9 turns 22-27: splitArmy straight to a target 11-18 tiles off did nothing; M.walk (#295)
+# steps out onto the next tile and walks on with moveToTile in the same call
+[[cases]]
+name = "split_far_target"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.garrison("england", "$garrison_town")', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.status("$gen")', require = 'moves=(?!0(\.0*)? )\S+ town=$garrison_town$' },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 9, 11)', bind = "far" },
+    { lua = 'return M.qa.dist("$gen", $far_x, $far_y)', bind = "start" },
+]
+act = ['return M.qa.walk("$gen", $far_x, $far_y)']
+expect = [
+    { lua = 'return M.qa.status("$gen")', match = 'town=-$' },
+    { lua = 'return M.qa.dist("$gen", $far_x, $far_y)', below = "$start" },
+]
+
+# M.walk's step tile skips a tile someone stands on: a spy is put on it first
+[[cases]]
+name = "occupied_step_tile_skipped"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.garrison("england", "$garrison_town")', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.status("$gen")', require = 'moves=(?!0(\.0*)? )\S+ town=$garrison_town$' },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 9, 11)', bind = "far" },
+    { lua = 'return M.qa.step_tile("$garrison_town", $far_x, $far_y)', bind = "step" },
+    { lua = 'return M.qa.spawn_agent("england", "spy", $step_x, $step_y, "QA Blocker")', bind = "blocker" },
+    { lua = 'return M.qa.where("$blocker")', require = '^$step_x,$step_y$' },
+]
+act = ['return M.qa.walk("$gen", $far_x, $far_y)']
+expect = [
+    { log = 'splits out of $garrison_town with his bodyguard onto \((?!$step_x,$step_y\))' },
+    { lua = 'return M.qa.status("$gen")', match = 'town=-$' },
+]
+
+# live run9 turns 22-35: nobody marches out of a besieged town; M.walk (#297) refuses, naming the
+# besieger and the attack order to copy. A rebel army spawned beside the town besieges it first.
+[[cases]]
+name = "besieged_town_refuses"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.garrison("england", "$garrison_town")', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.status("$gen")', require = 'moves=(?!0(\.0*)? )\S+ town=$garrison_town$' },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 9, 11)', bind = "far" },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 1)', bind = "next" },
+    { lua = 'return M.qa.spawn_army("slave", $next_x, $next_y)', bind = "rebels" },
+    'return M.qa.besiege("slave", "$rebels", "$garrison_town")',
+    { lua = 'return M.qa.sieges("$garrison_town")', require = '^[1-9]', within = 15 },
+]
+act = ['return M.qa.walk("$gen", $far_x, $far_y)']
+expect = [
+    { log = 'qa: walk ok: refused: $garrison_town is under siege' },
+    { lua = 'return M.qa.status("$gen")', match = '^$garrison_town_x,$garrison_town_y .*town=$garrison_town$' },
+]
+
+# live 10-31: M.qa.load of a save that wasn't there (the keep save the restore had renamed) put up
+# EOP's modal "ERROR: Cannot create M2TWEOP save file. 2" box; the game froze and closing the box
+# ended it. M.qa.load now checks the file first and refuses; loadGame never runs. Nothing changes,
+# so it runs on what the case before left (no bench reload).
+[[cases]]
+name = "load_missing_save_refused"
+kind = "instant"
+isolation = "shared"
+act = ['return M.qa.load("mods/parley/saves/qa_no_such.sav")']
+expect = [
+    { log = 'qa: load refused: no save at mods/parley/saves/qa_no_such\.sav' },
+    { lua = 'return M.qa.load("mods/parley/saves/qa_no_such.sav")', equals = "qa: load refused: no save at mods/parley/saves/qa_no_such.sav" },
+    # the game still answers control lines
+    { lua = 'return M.qa.current()', match = '\S' },
+]

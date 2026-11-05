@@ -1,0 +1,93 @@
+# Smoke suite: proves the QA bench's own M.qa setup helpers before any feature suite runs.
+#
+# `$name` placeholders in setup/orders/expect are filled from each case's `targets` dict;
+# the runner fills target coordinates and a target settlement/character at run time
+# (e.g. `$target_x`, `$target_y`, `$target_settlement`, `$target_character`).
+#
+# A setup entry `{ lua = 'return M.qa.spawn_agent(...)', bind = "spy" }` keeps the line's result as
+# `$spy` for later setup lines, orders and expects. The game picks a spawned agent's name from the
+# faction's name list (it ignores ours), so cases use the bound id, never a name of their own.
+#
+# Spawns go on a free tile near (108,153), not on (108,153) itself: live 10-30 19:26, someone stood
+# there and the game put the spy on the next tile, failing a check that was about the tile, not the
+# spawn. A bound "x,y" also binds <name>_x and <name>_y.
+#
+# Skill traits come from the game's `export_descr_character_traits.txt`
+# (as found in `mods/bare_geomod/data`, vanilla-compatible):
+#   - Spies: `GoodSpy` level 5 (Subterfuge +5), `NaturalSpySkill` level 3 (+3),
+#     `GoodConspirator` level 3 (+3, spy and assassin)
+#   - Assassins: `GoodAssassin` level 5 (+5), `GoodConspirator` level 3 (+3)
+
+name = "smoke"
+faction = "england"
+
+# The helpers checked inside one held turn, so smoke also gates a `--kind instant` run (no clicks,
+# turn cases skipped). Each call here is one the instant suites already use live: free_tile (never an
+# occupied tile), spawn_agent, where ("x,y", as envoys/field check it), skill; teleport's log line is
+# the turn case's own. First, so a broken helper stops a run in seconds.
+[[cases]]
+name = "helpers"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.free_tile(108, 153, 1, 3)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "spy", $at_x, $at_y, "QA Spy")', bind = "spy" },
+]
+act = [
+    { lua = 'return M.qa.free_tile($at_x, $at_y, 1, 3)', bind = "to" },
+    'return M.qa.teleport("$spy", $to_x, $to_y)',
+    'return M.qa.skill("$spy", "GoodSpy", 5)',
+]
+expect = [
+    { lua = 'return M.qa.where("$spy")', equals = "$to" },
+    { log = "qa: teleport ok: $to" },
+    { log = "qa: skill ok:" },
+]
+
+[[cases]]
+name = "spawn_agent"
+setup = [
+    { lua = 'return M.qa.free_tile(108, 153, 1, 3)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "spy", $at_x, $at_y, "QA Spy")', bind = "spy" },
+]
+expect = [
+    { state = "agents[id=$spy].x", equals = "$at_x" },
+    { state = "agents[id=$spy].y", equals = "$at_y" },
+]
+
+[[cases]]
+name = "teleport"
+targets = { x = 110, y = 154 }
+setup = [
+    { lua = 'return M.qa.free_tile(108, 153, 1, 3)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "spy", $at_x, $at_y, "QA Spy")', bind = "spy" },
+    'return M.qa.teleport("$spy", $x, $y)',
+    'return M.qa.where("$spy")',
+]
+expect = [
+    { log = "qa: teleport ok: $x,$y" },
+]
+
+# The bridge tops up only a treasury below the target, so one already at or over it logs nothing
+# (live 10-30 21:56: 50723 against 50000, and the case failed on the missing line). Either shows the
+# switch works: the top-up line, or a report treasury at least the target ($playtest_funds, the
+# runner's QA_PLAYTEST_FUNDS, the amount it writes into the QA seat's config).
+[[cases]]
+name = "playtest_funds"
+setup = []
+expect = [
+    { any_of = [
+        { log = "playtest funds: england topped up" },
+        { state = "treasury", at_least = "$playtest_funds" },
+    ] },
+]
+
+[[cases]]
+name = "skill"
+setup = [
+    { lua = 'return M.qa.free_tile(108, 153, 1, 3)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "spy", $at_x, $at_y, "QA Spy")', bind = "spy" },
+    'return M.qa.skill("$spy", "GoodSpy", 5)',
+]
+expect = [
+    { log = "qa: skill ok:" },
+]

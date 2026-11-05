@@ -1,0 +1,136 @@
+2026-10-31 05:38:59 character event: slave: Captain Anselm was struck by a disaster: famine (in York_Province)
+2026-10-31 05:38:59 character event: slave: Dentupes was struck by a disaster: famine (in Caernarvon_Province)
+2026-10-31 05:38:59 character event: slave: Captain Fytor was struck by a disaster: famine (in Pamplona_Province)
+2026-10-31 05:38:59 character event: slave: Captain Zygmunt was struck by a disaster: famine (in Cracow_Province)
+2026-10-31 05:38:59 character event: slave: Abdimilki was struck by a disaster: famine (in Nottingham_Province)
+2026-10-31 05:38:59 character event: slave: Harry Grey was struck by a disaster: famine (in London_Province)
+2026-10-31 05:38:59 playtest funds: england topped up 46329 -> 50000
+2026-10-31 05:38:59 governors england: London build=true recruit=true; Nottingham build=true recruit=true; Caen build=true recruit=true; York build=true recruit=true
+2026-10-31 05:38:59 popup message 201
+2026-10-31 05:38:59 papal-trace: #5 onIncomingMessage: event 201 queued (nothing read from the game) [message:201]
+2026-10-31 05:39:00 autoplay: ending turn 54
+2026-10-31 05:39:00 popup message 202
+2026-10-31 05:39:00 papal-trace: #6 onIncomingMessage: event 202 queued (nothing read from the game) [message:202]
+2026-10-31 05:39:00 papal notice: hands off until the election opens (up to 15s)
+2026-10-31 05:39:00 papal vote: looking for the vote scroll from the tick (hands off its event)
+2026-10-31 05:39:00 papal window: notice; the turn loop presses nothing else for up to 45s
+2026-10-31 05:39:04 papal-trace: #7 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:04 papal-trace: #8 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:06 papal-trace: #9 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:06 papal-trace: #10 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:08 papal-trace: #11 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:08 papal-trace: #12 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:10 papal-trace: #13 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:10 papal-trace: #14 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:12 papal-trace: #15 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:12 papal-trace: #16 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:14 papal-trace: #17 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:14 papal-trace: #18 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:16 papal-trace: #19 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:16 papal-trace: #20 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:16 papal notice: no election after 15s; asking for its check
+2026-10-31 05:39:18 papal-trace: #21 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:18 papal-trace: #22 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:20 papal-trace: #23 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:20 papal-trace: #24 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:22 papal-trace: #25 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:22 papal-trace: #26 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:24 papal-trace: #27 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:24 papal-trace: #28 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:26 papal-trace: #29 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:26 papal-trace: #30 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:28 papal-trace: #31 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:28 papal-trace: #32 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:30 papal-trace: #33 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:30 papal-trace: #34 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:32 papal-trace: #35 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:32 papal-trace: #36 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:34 papal-trace: #37 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:34 papal-trace: #38 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:36 papal-trace: #39 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:36 papal-trace: #40 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:38 papal-trace: #41 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:38 papal-trace: #42 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:40 papal-trace: #43 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:40 papal-trace: #44 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:42 papal-trace: #45 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:42 papal-trace: #46 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:44 papal-trace: #47 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:44 papal-trace: #48 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:46 papal-trace: #49 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:46 papal-trace: #50 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:46 papal window: closed; the turn loop may press again
+2026-10-31 05:39:46 popup handled: game message 202 (acknowledged with its check)
+2026-10-31 05:39:48 papal-trace: #51 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:48 papal-trace: #52 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:50 papal-trace: #53 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:50 papal-trace: #54 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:50 popup handled: game message 201 (clear_messages)
+2026-10-31 05:39:52 papal-trace: #55 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:52 papal-trace: #56 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:54 papal-trace: #57 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:54 papal-trace: #58 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:56 papal-trace: #59 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:56 papal-trace: #60 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:39:58 papal-trace: #61 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:39:58 papal-trace: #62 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:00 papal vote: no vote scroll 60s after the notice; stopped looking
+2026-10-31 05:40:00 autoplay: 27 UI elements open; list in parley_turns/ui_scan-turn-54.txt
+2026-10-31 05:40:00 autoplay: turn 54 stuck? try 1: combined_overview_scroll's tick
+2026-10-31 05:40:00 popup message 202
+2026-10-31 05:40:00 papal-trace: #63 onIncomingMessage: event 202 queued (nothing read from the game) [message:202]
+2026-10-31 05:40:00 papal notice: hands off until the election opens (up to 15s)
+2026-10-31 05:40:00 papal vote: looking for the vote scroll from the tick (hands off its event)
+2026-10-31 05:40:00 papal window: notice; the turn loop presses nothing else for up to 45s
+2026-10-31 05:40:04 papal-trace: #64 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:04 papal-trace: #65 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:06 papal-trace: #66 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:06 papal-trace: #67 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:08 papal-trace: #68 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:08 papal-trace: #69 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:10 papal-trace: #70 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:10 papal-trace: #71 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:12 papal-trace: #72 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:12 papal-trace: #73 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:14 papal-trace: #74 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:14 papal-trace: #75 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:16 papal-trace: #76 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:16 papal-trace: #77 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:16 papal notice: no election after 15s; asking for its check
+2026-10-31 05:40:18 papal-trace: #78 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:18 papal-trace: #79 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:20 papal-trace: #80 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:20 papal-trace: #81 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:22 papal-trace: #82 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:22 papal-trace: #83 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:24 papal-trace: #84 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:24 papal-trace: #85 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:26 papal-trace: #86 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:26 papal-trace: #87 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:28 papal-trace: #88 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:28 papal-trace: #89 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:30 papal-trace: #90 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:30 papal-trace: #91 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:32 papal-trace: #92 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:32 papal-trace: #93 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:34 papal-trace: #94 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:34 papal-trace: #95 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:36 papal-trace: #96 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:36 papal-trace: #97 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:38 papal-trace: #98 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:38 papal-trace: #99 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:40 papal-trace: #100 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:40 papal-trace: #101 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:42 papal-trace: #102 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:42 papal-trace: #103 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:44 papal-trace: #104 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:44 papal-trace: #105 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:46 papal-trace: #106 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:46 papal-trace: #107 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:46 papal window: closed; the turn loop may press again
+2026-10-31 05:40:46 popup handled: game message 202 (left to the game: the papal election's notice)
+2026-10-31 05:40:48 papal-trace: #108 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:48 papal-trace: #109 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:50 papal-trace: #110 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-10-31 05:40:50 papal-trace: #111 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-10-31 05:40:52 papal-trace: #112 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]

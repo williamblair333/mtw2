@@ -18,10 +18,36 @@ class BuildOption(BaseModel):
     turns: int
 
 
+class DamagedBuilding(BaseModel):
+    name: str  # the building level's name, e.g. "small_church"
+    hp: int  # health percentage (0..99 when damaged; 100 is full)
+
+
 class RecruitOption(BaseModel):
     unit: str  # the unit type, e.g. "Italian Spear Militia"; what a recruit order names
     cost: int
     turns: int
+    upkeep: int | None = None  # florins a turn while it lives (live: knights bought broke England)
+
+
+class AgentOption(BaseModel):
+    agent: str  # spy, assassin, diplomat, merchant or priest; what a recruit_agent order names
+    cost: int
+    turns: int
+
+
+class MercOption(BaseModel):
+    """A mercenary unit in the region's pool: what a hire_mercenary order names."""
+    unit: str
+    cost: int  # florins, the pool entry's price (not the unit's own recruit cost)
+    available: int  # how many the pool holds now (it refills a little each turn)
+    max: int = 0  # the most the pool holds
+    exp: int = 0  # experience they join with
+
+
+class AgentLimit(BaseModel):
+    have: int  # on the map or in training
+    limit: int | None = None  # the sum of the faction's settlements' limits for this kind; None when unlimited
 
 
 class Unit(BaseModel):
@@ -39,7 +65,9 @@ class Training(BaseModel):
 class Siege(BaseModel):
     by: str | None = None  # the besieging general
     faction: str | None = None
-    strength: int | None = None
+    strength: int | None = None  # EOP's totalStrength: a strength rating, not men
+    men: int = 0  # soldiers in the stack
+    units: int = 0  # units in the stack
     turns: int | None = None  # how long it has lasted
     holdout: int | None = None  # how many turns the settlement can hold out
 
@@ -48,9 +76,17 @@ class Settlement(BaseModel):
     id: str
     name: str
     region: str
-    garrison_strength: int
+    garrison_strength: int  # EOP's totalStrength: a strength rating, not men
+    garrison_men: int = 0  # soldiers in the garrison
+    garrison_units: int = 0  # units in the garrison
     population: int
     buildings: list[str]
+    damaged_buildings: list[DamagedBuilding] = []
+
+    @field_validator("damaged_buildings", mode="before")
+    @classmethod
+    def _empty_damaged(cls, v):
+        return [] if v == {} else v
     # filled for seats that run their own building, recruiting or taxes
     tax_level: TaxLevel | None = None
     public_order: int | None = None  # percent
@@ -63,13 +99,21 @@ class Settlement(BaseModel):
     queue: list[str] = []  # buildings under construction, first first
     can_build: list[BuildOption] = []
     can_recruit: list[RecruitOption] = []
+    can_recruit_agents: list[AgentOption] = []
     recruit_blocked: bool = False  # units inside: EOP 3.3.1 can't list recruits safely then
     x: int | None = None
     y: int | None = None
     port_x: int | None = None  # the port entrance, where a fleet docks; none inland
     port_y: int | None = None
     training: list[Training] = []  # recruits paid for, joining the garrison when ready
+    recruit_queue: list[str] = []  # the game's own recruitment queue, e.g. "Peasants (1 turn left)" (EOP master)
     siege: Siege | None = None  # besieged now: by whom, and how long it can hold
+    rebelling: bool = False  # EOP isProvokedRebellion: the game has flagged it to revolt
+    plagued: bool = False
+    turmoil: int | None = None  # EOP turmoil, when nonzero
+    rebel_chance: int | None = None  # EOP rebelFactionChance
+    income: int | None = None  # florins a turn, before admin (settlementStats.TotalIncomeWithoutAdmin)
+    taxes_income: int | None = None  # of which taxes
 
 
 class Army(BaseModel):
@@ -77,7 +121,8 @@ class Army(BaseModel):
     leader: str | None = None  # absent, not null: the game's Lua JSON can't write null
     x: int
     y: int
-    strength: int
+    strength: int  # EOP's totalStrength: a strength rating, not men
+    men: int = 0  # soldiers in the stack
     units: int
     in_settlement: str | None = None
     faction: str | None = None  # set for foreign armies in sight
@@ -87,9 +132,23 @@ class Army(BaseModel):
     from_y: int | None = None
     is_fleet: bool = False  # a fleet (led by an admiral)
     carrying: int | None = None  # a fleet: units of the army aboard
+    carrying_men: int | None = None  # a fleet: soldiers of the army aboard
     aboard: str | None = None  # an army at sea: the fleet carrying it
     moves_left: int | None = None
     moves_max: int | None = None
+    besieging: str | None = None  # the town this army keeps besieged
+    siege_turns: int | None = None  # turns it has been besieged
+    siege_queue: int | None = None  # pieces of siege equipment being built
+    holdout_turns: int | None = None  # turns the town holds out before it starves
+    can_assault: bool | None = None  # besieging: EOP canStartAssault on the town now
+    # a general's army: the mercenaries the pool of the region it stands in offers it now (the game's
+    # rules: stock, year, religion, crusading); a pool is shared by the region's neighbours
+    can_hire: list[MercOption] = []
+
+    @field_validator("can_hire", mode="before")
+    @classmethod
+    def _empty_hire(cls, v):
+        return [] if v == {} else v
 
 
 AgentKind = Literal["spy", "assassin", "diplomat", "merchant", "priest", "princess", "admiral",
@@ -130,9 +189,12 @@ class ForeignSettlement(BaseModel):
     faction: str
     x: int
     y: int
-    garrison_strength: int = 0
+    garrison_strength: int = 0  # EOP's totalStrength: a strength rating, not men
+    garrison_men: int = 0  # soldiers in the garrison
+    garrison_units: int = 0  # units in the garrison
     distance: int | None = None
     seen_turn: int | None = None  # remembered, out of sight now: the turn it was last seen
+    by_land: bool | None = None  # False: none of the faction's armies can walk there (across the sea)
 
 
 class TradeResource(BaseModel):
@@ -146,11 +208,20 @@ class TradeResource(BaseModel):
     owner: str | None = None  # the faction holding its region
 
 
+class Shore(BaseModel):
+    """One end of a land crossing: the land tile an army steps onto (live, turn 59: the ruler
+    was given only the water tile and marched onto the sea)."""
+    region: str
+    x: int
+    y: int
+
+
 class Crossing(BaseModel):
     """A land crossing: a strait an army walks across without ships."""
     x: int
     y: int
     regions: list[str] = []  # the land regions on either side
+    shores: list[Shore] = []  # the land tile on each side
     distance: int | None = None
 
 
@@ -162,6 +233,8 @@ class FactionView(BaseModel):
     armies: int | None = None  # stacks, fleets and garrisons included
     leader: str | None = None
     capital: str | None = None
+    treaties: list[str] = []  # "trade rights", "military access", "protectorate" (EOP master only)
+    turns_in_stance: int | None = None  # how long the current stance has held (EOP master only)
 
 
 class OrderResult(BaseModel):
@@ -169,7 +242,18 @@ class OrderResult(BaseModel):
     type: str
     ok: bool
     reason: str = ""
+    note: str = ""
+    brief: str = ""  # the order itself in a few words, for the prompt's refusal block
     now: str = ""  # what the armies the order named look like now (did the merge take?)
+
+
+class MoveNotMade(BaseModel):
+    id: str
+    from_x: int
+    from_y: int
+    target: str
+    order_type: str = "move"
+    moves_left: int | None = None
 
 
 class StateReport(BaseModel):
@@ -185,7 +269,14 @@ class StateReport(BaseModel):
     factions: list[FactionView]
     visible_enemies: list[Army]  # foreign armies in sight (any faction, not only enemies)
     last_results: list[OrderResult]
+    moves_not_made: list[MoveNotMade] = []
     agents: list[Agent] = []  # your own agents
+    agent_limits: dict[str, AgentLimit] = {}  # kind -> how many you have and may have (seats that recruit)
+
+    @field_validator("agent_limits", mode="before")
+    @classmethod
+    def _empty_limits(cls, v):  # the game's Lua JSON writes an empty table as []
+        return {} if v == [] else v
     seen_agents: list[Agent] = []  # foreign agents in sight
     nearby_settlements: list[ForeignSettlement] = []  # foreign settlements in sight
     remembered: list[ForeignSettlement] = []  # seen on earlier turns, out of sight now (filled by the orchestrator)
@@ -282,10 +373,36 @@ class Build(BaseModel):
     building: str
 
 
+class Repair(BaseModel):
+    """Queue the repair of a damaged building in your settlement."""
+    type: Literal["repair"] = "repair"
+    settlement: str
+    building: str
+
+
 class Recruit(BaseModel):
     """Queue a unit your settlement can recruit now (from its "can recruit" list)."""
     type: Literal["recruit"] = "recruit"
     settlement: str
+    unit: str
+
+
+RecruitableAgent = Literal["spy", "assassin", "diplomat", "merchant", "priest"]
+
+
+class RecruitAgent(BaseModel):
+    """Train an agent your settlement offers now (its "can train agents" list); he appears there next turn."""
+    type: Literal["recruit_agent"] = "recruit_agent"
+    settlement: str
+    agent: RecruitableAgent
+
+
+class HireMercenary(BaseModel):
+    """Your army, with a general, hires one mercenary unit from the pool of the region it stands in (the
+    army's "mercenaries for hire" list). You pay the pool entry's price now; the pool shrinks by one; the
+    unit joins that army next turn."""
+    type: Literal["hire_mercenary"] = "hire_mercenary"
+    army: str
     unit: str
 
 
@@ -383,7 +500,7 @@ class Blockade(BaseModel):
 
 Order = Annotated[
     Union[SendGold, CedeSettlement, SetStance, MarchOn, Besiege, Withdraw,
-          Assassinate, Spy, Bribe, Sabotage, Build, Recruit, Retrain, SetTax, MoveArmy, Attack,
+          Assassinate, Spy, Bribe, Sabotage, Build, Repair, Recruit, RecruitAgent, HireMercenary, Retrain, SetTax, MoveArmy, Attack,
           MoveAgent, Marry, MergeArmies, MergeUnits, Disband, Board, Land, Blockade],
     Field(discriminator="type"),
 ]
@@ -403,6 +520,10 @@ class Orders(BaseModel):
     orders: list[Order]
     messages: list[Say] = []
     note: str = ""
+    plan: str = ""  # the ruler's standing plan: 1-3 goals, each with its next step and target turn
+    # settlements (ids or names) the ruler means to leave without a garrison this turn: the steward
+    # (parley/steward.py) won't recruit there
+    hold_empty: list[str] = []
     # set by seats.base.to_orders, never part of the schema: where each kept order sat in the
     # LLM's own list, and the orders/messages dropped as malformed (in that numbering)
     _source_index: list[int] | None = PrivateAttr(default=None)

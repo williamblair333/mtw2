@@ -1,0 +1,272 @@
+# Field suite: army move orders, in the cases that failed live on 10-30 (#261, #263, #267, run8's
+# garrison general), and the bench's own spawn.
+#
+# Instant cases (see instant.toml for how they run) wherever the turn it is ordered in shows the
+# behaviour: orders go through the real handlers with M.qa.order, inside one held turn, and the
+# evidence is read back at once. One turn case goes last and groups what needs the turn start: the
+# orders applied there (march_on and a tired army's move), the game's siege scroll after march_on
+# (popups aren't handled in a held turn), tire()'s refill at turn start, and the report's last_results.
+#
+# Placeholders the runner fills from the faction's newest state.json (parley/qa/runner.py):
+#   $home_x, $home_y                             any own town's tile (one not under siege first): the
+#                                                anchor cases spawn beside
+#   $garrison_town, $garrison_town_x, $garrison_town_y
+#                                                an own town not under siege: one a general leads
+#                                                first, else one with room
+# Setup binds (see smoke.toml): a bound tile ("x,y", as M.qa.free_tile and M.qa.town return) also
+# binds `<name>_x` and `<name>_y` as numbers, for orders and expects.
+#
+# Bench helpers (lua/parley_bridge.lua M.qa):
+#   spawn_army(faction, x, y)   a general with one bodyguard unit in the field; returns the army's
+#                               report id. A town's tile is refused: there he would join its garrison
+#                               and the case would look for an army id that isn't there (QA field
+#                               10-30 23:49-00:03). A tile someone stands on is refused, and an army
+#                               that lands anywhere but the tile asked for fails the helper (QA field
+#                               10-30/31: spawns landed a tile off when the tile was taken). Spawn on
+#                               a free_tile bound beside the anchor, never on $home_x/$home_y (a test
+#                               checks every suite).
+#   leader(faction, army)       the general leading an army, by its report id
+#   free_tile(x, y, near, far)  a land tile near..far tiles away with nobody and no town on it,
+#                               walkable from (x, y)
+#   sea_town(faction, x, y)     the nearest foreign town that can't be walked to from (x, y)
+#   town(name)                  a settlement's tile
+#   hostile_town(faction, x, y) the nearest rebel or at-war town to (x, y) on the whole map
+#   garrison(faction, town)     the town's garrison led by a general: the one inside, or one
+#                               spawned into it when nobody leads it; returns "garrison:<town>"
+#   (spawned generals get LoyaltyStarter, the game's starting loyalty: without it they go over
+#   to the rebels within a turn or two, live 10-30 19:47-19:49)
+#   tire(faction, army)         empties the army's moves now and again at the next 3 turn starts
+#                               (the game refills them before orders apply); a general whose army id
+#                               is gone (he went into a town, live 10-30 23:58:45) is found by name
+#   units(faction, army)        how many units the army has now, or "gone"
+#   (and army, status, where, dist, order, last: see navy.toml, instant.toml and siege.toml)
+#
+# Old cases (turn cases until 10-31) and where they went:
+#   spawn_army               -> spawn_army (instant)
+#   move_army                -> move_army (instant)
+#   march_on_besieges (#261) -> march_on_besieges (instant: the note and the siege) and
+#                               turn_start_orders (turn: the siege scroll maintained after it)
+#   march_on_across_sea      -> march_on_across_sea_refused (instant)
+#   move_army_across_sea     -> move_army_across_sea_refused (instant)
+#   no_moves_left (#267)     -> no_moves_left_refused (instant) and turn_start_orders (turn: tire at
+#                               turn start, the refusal in the report)
+#   withdraw                 -> withdraw (instant; into $garrison_town, which needs no unled town)
+#   merge_armies             -> merge_armies (instant)
+#   garrison_general_leaves  -> garrison_general_leaves (instant)
+#
+# Flakiness the old turn cases had (HANDOFF 10-31), and what this layout does about it:
+#   - a spawn a tile off when its tile was taken: spawn_army refuses a taken tile and fails when the
+#     army lands elsewhere; the frozen world (freeze=*) and the held turn leave nobody to step onto a
+#     free tile between free_tile and the spawn.
+#   - spawned armies absorbed into Nottingham's garrison during AI turns: the instant cases play no
+#     turn, so no AI turn runs between spawn and check. The one turn case spawns beside the hostile
+#     town, away from own towns, and checks the tired army's tile in the report.
+#   - a QA turn stuck on a popup (turn 80): the bench save is England's turn 1 (no papal election in
+#     reach) and the suite ends one turn instead of nine.
+#
+# What can't be forced:
+#   - a coast-free route. The across-the-sea cases need a foreign town no walk reaches from
+#     $home_x/$home_y (sea_town); without one their setup fails, naming why.
+#   - the battle at the end of a turn. turn_start_orders' march_on army may die in a sally once the
+#     besieged town's turn comes (frozen AI should hold it); the case checks the siege scroll and
+#     the order's note, not the army's survival (#272).
+#
+# Unproven live (10-31): every instant case here (moves read back in-turn with M.qa.army/status,
+# polled 15 s: live run9 a split's tile lagged the call a moment), M.qa.units, spawn_army's landing
+# check (stack_pos right after spawnArmy). Run: `just qa field`, or `case=<name>`.
+
+name = "field"
+faction = "england"
+
+# 1. the bench's own tool first: the army is where it was spawned
+[[cases]]
+name = "spawn_army"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.free_tile($home_x, $home_y, 2, 3)', bind = "at" },
+]
+act = [
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+]
+expect = [
+    { log = "qa: spawn_army ok: " },
+    { lua = 'return M.qa.army("england", "$army")', match = '^$at_x,$at_y fleet=no ' },
+]
+
+# 2. move_army to a free tile: taken, and the army ends there
+[[cases]]
+name = "move_army"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.free_tile($home_x, $home_y, 2, 3)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.free_tile($at_x, $at_y, 2, 2)', bind = "dest" },
+]
+act = ['return M.qa.order("england", { type = "move_army", army = "$army", x = $dest_x, y = $dest_y })']
+expect = [
+    { lua = 'return M.qa.last("move_army")', equals = "move_army ok" },
+    { lua = 'return M.qa.army("england", "$army")', match = '^$dest_x,$dest_y ', within = 15 },
+]
+
+# 3. march_on a rebel or enemy town from the next tile besieges it (#261): the note says so and the
+# army's siege shows the town. The town is picked from the whole map (live 10-30 19:51: none was in
+# sight); the army's one unit is infantry (Peasants): live 10-30 21:23 the game's canStartSiege
+# refused a bodyguard-only army beside Bruges
+[[cases]]
+name = "march_on_besieges"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "next" },
+    { lua = 'return M.qa.spawn_army("england", $next_x, $next_y, nil, "Peasants")', bind = "army" },
+]
+act = ['return M.qa.order("england", { type = "march_on", army = "$army", target_settlement = "$hostile" })']
+expect = [
+    { lua = 'return M.qa.last("march_on")', match = '^march_on ok: .*next to .*(so it is besieging it|so it was ordered to besiege it)' },
+    { lua = 'return M.qa.siege("england", "$army")', match = '^besieging=$hostile ', within = 15 },
+]
+
+# 4. march_on a town across the sea is refused with the reason (#263); nobody moves
+[[cases]]
+name = "march_on_across_sea_refused"
+kind = "instant"
+isolation = "shared"
+setup = [
+    { lua = 'return M.qa.free_tile($home_x, $home_y, 1, 3)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.sea_town("england", $at_x, $at_y)', bind = "sea" },
+]
+act = ['return M.qa.order("england", { type = "march_on", army = "$army", target_settlement = "$sea" })']
+expect = [
+    { lua = 'return M.qa.last("march_on")', match = "^march_on refused: \\(\\d+,\\d+\\) can't be reached over land from \\($at_x,$at_y\\): it's across the sea" },
+    { lua = 'return M.qa.where("$gen")', equals = "$at" },
+]
+
+# 5. move_army to a tile beside a town across the sea: refused the same way (#263)
+[[cases]]
+name = "move_army_across_sea_refused"
+kind = "instant"
+isolation = "shared"
+setup = [
+    { lua = 'return M.qa.free_tile($home_x, $home_y, 1, 3)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.sea_town("england", $at_x, $at_y)', bind = "sea" },
+    { lua = 'return M.qa.town("$sea")', bind = "sea_at" },
+    { lua = 'return M.qa.free_tile($sea_at_x, $sea_at_y, 1, 2)', bind = "far" },
+]
+act = ['return M.qa.order("england", { type = "move_army", army = "$army", x = $far_x, y = $far_y })']
+expect = [
+    { lua = 'return M.qa.last("move_army")', match = "^move_army refused: \\($far_x,$far_y\\) can't be reached over land from \\($at_x,$at_y\\): it's across the sea" },
+    { lua = 'return M.qa.where("$gen")', equals = "$at" },
+]
+
+# 6. a mover with no movement points left is refused (#267); nobody moves
+[[cases]]
+name = "no_moves_left_refused"
+kind = "instant"
+isolation = "shared"
+setup = [
+    { lua = 'return M.qa.free_tile($home_x, $home_y, 2, 3)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.free_tile($at_x, $at_y, 1, 1)', bind = "dest" },
+    { lua = 'return M.qa.tire("england", "$army")', require = ' moves=0(\.0*)?$' },
+]
+act = ['return M.qa.order("england", { type = "move_army", army = "$army", x = $dest_x, y = $dest_y })']
+expect = [
+    { lua = 'return M.qa.last("move_army")', match = '^move_army refused: .* has no moves left this turn' },
+    { lua = 'return M.qa.where("$gen")', equals = "$at" },
+]
+
+# 7. merge_armies on the next tile: one army of two units
+[[cases]]
+name = "merge_armies"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.free_tile($home_x, $home_y, 2, 3)', bind = "a" },
+    { lua = 'return M.qa.spawn_army("england", $a_x, $a_y)', bind = "army" },
+    { lua = 'return M.qa.free_tile($a_x, $a_y, 1, 1)', bind = "b" },
+    { lua = 'return M.qa.spawn_army("england", $b_x, $b_y)', bind = "into" },
+    { lua = 'return M.qa.units("england", "$into")', require = '^1$' },
+]
+act = ['return M.qa.order("england", { type = "merge_armies", army = "$army", into = "$into" })']
+expect = [
+    { lua = 'return M.qa.last("merge_armies")', equals = "merge_armies ok" },
+    { lua = 'return M.qa.units("england", "$into")', equals = "2" },
+]
+
+# 8. a general leading a town's garrison, full moves, ordered out (live run8 turn 18: Robert in
+# Paris; live 10-30 22:59-23:29 Rufus in London: "did not happen: still at"). He splits out with
+# his bodyguard (#292/#293) and stands on the tile outside. The town's own general when it has one
+# (the live case); one spawned in when nobody leads it
+[[cases]]
+name = "garrison_general_leaves"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.garrison("england", "$garrison_town")', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+    { lua = 'return M.qa.status("$gen")', require = 'moves=(?!0(\.0*)? )\S+ town=$garrison_town$' },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 1)', bind = "out" },
+]
+act = ['return M.qa.order("england", { type = "move_army", army = "$army", x = $out_x, y = $out_y })']
+expect = [
+    { log = "qa: garrison ok: garrison:" },
+    { lua = 'return M.qa.last("move_army")', match = '^move_army ok' },
+    { lua = 'return M.qa.status("$gen")', match = '^$out_x,$out_y .*town=-$', within = 15 },
+]
+
+# 9. withdraw into an own town: the general ends up inside it, told apart from the town's own
+# general by name. On a fresh bench save (isolation): live 10-31 without reloads, the general this
+# case put in London became the instant and navy suites' garrison leader, and their splits failed
+[[cases]]
+name = "withdraw"
+kind = "instant"
+setup = [
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
+    { lua = 'return M.qa.leader("england", "$army")', bind = "gen" },
+]
+act = ['return M.qa.order("england", { type = "withdraw", army = "$army", to_settlement = "$garrison_town" })']
+expect = [
+    { lua = 'return M.qa.last("withdraw")', match = '^withdraw ok' },
+    { lua = 'return M.qa.status("$gen")', match = 'town=$garrison_town$', within = 15 },
+]
+
+# --- turn case ----------------------------------------------------------------------------------
+
+# 10. what needs the turn start, in one turn: march_on applied there besieges and the game's siege
+# scroll after it is maintained (#261; live 10-30 18:31 the one-unit army was gone by the next
+# report, #272: the scroll and the note are the evidence, not the army); and a tired army (#267)
+# stays tired through the turn start's refill (tire at turn start) and its move is refused in the
+# report. Both scenes are spawned by the hostile town, away from own towns (the absorbed spawns)
+[[cases]]
+name = "turn_start_orders"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "next" },
+    { lua = 'return M.qa.spawn_army("england", $next_x, $next_y, nil, "Peasants")', bind = "army" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 3, 4)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "tired" },
+    { lua = 'return M.qa.free_tile($at_x, $at_y, 1, 1)', bind = "dest" },
+    'return M.qa.tire("england", "$tired")',
+]
+expect = [
+    { order_ok = false },
+    { log = "march_on: done: [^\\n]*next to (?s:.*?)popup handled: a siege \\(siege_scroll -> siege_maintain_button\\)" },
+    { log = "qa: tired $tired at turn start: moves=0" },
+    { state = "last_results", equals = "next to .*(so it is besieging it|so it was ordered to besiege it)" },
+    { state = "last_results", equals = "has no moves left this turn" },
+    { state = "armies[id=$tired].x", equals = "$at_x" },
+    { state = "armies[id=$tired].y", equals = "$at_y" },
+]
+
+[cases.orders]
+1 = [
+    { type = "march_on", army = "$army", target_settlement = "$hostile" },
+    { type = "move_army", army = "$tired", x = "$dest_x", y = "$dest_y" },
+]
