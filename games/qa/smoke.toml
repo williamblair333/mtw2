@@ -56,15 +56,17 @@ expect = [
 
 [[cases]]
 name = "teleport"
-targets = { x = 110, y = 154 }
+# a free tile near (110,154), not that tile: after spawn_agent's played turn something may stand
+# there, and a teleport onto it crashed the game (11-04 10:12:58); M.qa.teleport now refuses one too
 setup = [
     { lua = 'return M.qa.free_tile(108, 153, 1, 3)', bind = "at" },
     { lua = 'return M.qa.spawn_agent("england", "spy", $at_x, $at_y, "QA Spy")', bind = "spy" },
-    'return M.qa.teleport("$spy", $x, $y)',
+    { lua = 'return M.qa.free_tile(110, 154, 1, 3)', bind = "to" },
+    'return M.qa.teleport("$spy", $to_x, $to_y)',
     'return M.qa.where("$spy")',
 ]
 expect = [
-    { log = "qa: teleport ok: $x,$y" },
+    { log = "qa: teleport ok: $to_x,$to_y" },
 ]
 
 # The bridge tops up only a treasury below the target, so one already at or over it logs nothing

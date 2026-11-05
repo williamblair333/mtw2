@@ -279,6 +279,13 @@ strip_bypass() {
 trap strip_bypass EXIT
 relaunch_py set-bypass "$cfg" "$save"
 echo "relaunch: loading $save at start-up"
+# A size cap on the bridge log (STANDARDS log-rotation; 11-05 it was 25-26 MB and growing): with the
+# game stopped (nothing writes) and no QA run reading it by offset (qa.lock), an oversized log is kept
+# as .log.1 (one generation) and the bridge starts a new one. The wait below reads a fresh log whole.
+log_cap_mb="${PARLEY_LOG_CAP_MB:-20}"
+if [ ! -e "$turn_root/qa.lock" ] && [ "$(stat -c %s "$log" 2>/dev/null || echo 0)" -gt $((log_cap_mb * 1024 * 1024)) ]; then
+    mv -f "$log" "$log.1" && echo "relaunch: the bridge log was over ${log_cap_mb} MB: kept as $(basename "$log").1; a new one starts"
+fi
 log_offset=$(stat -c %s "$log" 2>/dev/null || echo 0)  # only map loads after it are this launch's
 start_steam
 

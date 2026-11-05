@@ -3844,9 +3844,9 @@ def frame(lua, seconds):
 def test_a_frozen_seats_turn_that_runs_too_long_unfreezes_its_ai(lua):
     # live, turn 20: a frozen AI never answered its own siege and the turn never ended
     frozen_milan(lua)
-    frame(lua, 5)
+    frame(lua, 2)  # M.FROZEN_TURN_LIMIT is 3 s (11-05: a released AI ends its turn at once)
     assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 1
-    frame(lua, 20)
+    frame(lua, 5)
     assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 0
     assert "milan: turn still running" in (lua.root / "parley_bridge.log").read_text()
     start_turn(lua, "milan")  # its next turn: frozen again
@@ -4431,6 +4431,15 @@ def test_qa_teleport_reports_reached_tile(lua):
                 "c.teleport = function(self, tx, ty) self.xCoord, self.yCoord = tx - 1, ty return true end end end")
     assert lua.eval("BRIDGE.qa.teleport('Marco', 115, 81)") == "114,81"
     assert lua.eval("BRIDGE.qa.where('Marco')") == "114,81"
+
+
+def test_qa_teleport_refuses_a_taken_tile_instead_of_crashing(lua):
+    # 11-04 10:12: a teleport onto a fixed tile crashed the game after a played turn
+    tx, ty = lua.eval("BRIDGE.qa.where('Doge Enrico')").split(",")
+    before = len(calls(lua))
+    assert lua.eval(f"BRIDGE.qa.teleport('Marco', {tx}, {ty})") is None
+    assert not any(c.startswith("teleport Marco") for c in calls(lua)[before:])
+    assert f"tile {tx},{ty} is taken" in bridge_log(lua)
 
 
 def test_qa_helper_failure_is_logged_not_raised(lua):

@@ -277,16 +277,11 @@ def test_suites_load():
             later += [str(e.state) for e in c.expect]
             assert not any("QA " in t for t in later), (c.name, later)
     tp_c = smoke_by_name["teleport"]
-    assert (
-        check(
-            tp_c,
-            f"qa: teleport ok: {tp_c.targets['x']},{tp_c.targets['y']}\n",
-            {},
-            [],
-            turns_used=1,
-        ).outcome
-        == "pass"
-    )
+    # the destination is a free tile bound at setup ($to), not a fixed one (11-04: a taken tile crashed it)
+    assert {"to", "to_x", "to_y"} <= tp_c.binds
+    tp_bound = tp_c.model_copy(update={"targets": {**tp_c.targets, "to": "111,155", "to_x": 111, "to_y": 155}})
+    assert check(tp_bound, "qa: teleport ok: 111,155\n", {}, [], turns_used=1).outcome == "pass"
+    assert check(tp_bound, "qa: teleport ok: 110,154\n", {}, [], turns_used=tp_c.max_turns).outcome == "fail"
     assert (
         check(
             smoke_by_name["playtest_funds"],

@@ -200,6 +200,32 @@ def test_relaunch_loads_the_explicit_save_with_no_clicks_and_strips_the_line(tmp
     _no_x_input(calls)
 
 
+def test_an_oversized_bridge_log_is_rotated_before_the_launch_unless_a_qa_run_reads_it(tmp_path):
+    # STANDARDS log-rotation: 11-05 the log was 25-26 MB and growing
+    env, mod, calls = _game(tmp_path, LOADS)
+    env["PARLEY_LOG_CAP_MB"] = "1"
+    log = Path(env["BRIDGE_LOG"])
+    log.write_text("old line\n" * 150_000)  # ~1.3 MB
+    r = _run(env, "--save", "parley_keep_scratch.sav")
+    assert r.returncode == 0, r.stderr
+    assert "kept as parley_bridge.log.1" in r.stdout
+    assert (log.parent / "parley_bridge.log.1").read_text().startswith("old line")
+    assert "old line" not in log.read_text()
+    assert "campaign loaded at turn 49" in r.stdout  # the wait read the fresh log
+
+    env2, _, _ = _game(tmp_path / "held", HELD_AT_LAUNCH)
+    env2["PARLEY_LOG_CAP_MB"] = "1"
+    turns = Path(env2["PARLEY_TURN_ROOT"])
+    env2["TURNS"] = str(turns)
+    (turns / runner.LOCK_FILE).write_text("{}")
+    log2 = Path(env2["BRIDGE_LOG"])
+    log2.write_text("old line\n" * 150_000)
+    r2 = _run(env2, "--save", "parley_keep_scratch.sav")
+    assert r2.returncode == 0, r2.stderr
+    assert not (log2.parent / "parley_bridge.log.1").exists()  # a QA run reads it by offset
+    assert log2.read_text().startswith("old line")
+
+
 # --- a relaunch during a QA run comes up held --------------------------------------------------
 
 def test_hold_for_qa_holds_only_with_a_qa_lock_and_leaves_a_pause_as_it_is(tmp_path):

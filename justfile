@@ -151,6 +151,10 @@ seat-smoke spec timeout="120":
 seat-bench dir timeout +specs:
     uv run python -m parley.bench {{quote(dir)}} {{timeout}} {{specs}}
 
+# Evaluate seat specs across recorded turn scenarios
+ruler-eval *args:
+    uv run python -m parley.ruler_eval {{args}}
+
 # Run a QA bench suite (or 'all') on the fixed bench save, real campaign parked and restored (kind=instant: no-click cases only)
 [positional-arguments]
 qa suite *args:
@@ -166,3 +170,11 @@ qa-restore *args:
 [positional-arguments]
 qa-bench-save step *args:
     bash scripts/qa.sh bench-save "$@"
+
+# Summarize newest QA bench reports across suites
+qa-summary *args:
+    uv run python -m parley.qa.summary {{args}}
+
+# Hold a standing order: the Stop hook keeps the session working until HH:MM (`off` drops it, `show` prints it)
+work-until arg="show":
+    bash scripts/work_until.sh {{ if arg == "show" { "show" } else if arg == "off" { "off" } else { "set " + arg } }}

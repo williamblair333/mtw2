@@ -61,6 +61,10 @@ def _game(tmp_path: Path, now: dt.datetime, *, import_ok: bool = True) -> dict[s
         + ('echo "$*" >"$(dirname "${@: -1}")/import.args"; printf PNG >"${@: -1}"\n' if import_ok else "exit 1\n")
     )
     fake.chmod(0o755)
+    # one visible "Medieval 2" window (id 44); "ERROR" finds none
+    xdo = bin_dir / "xdotool"
+    xdo.write_text('#!/usr/bin/env bash\ncase "$*" in *"^Medieval 2$"*) echo 44 ;; esac\nexit 0\n')
+    xdo.chmod(0o755)
     return {
         "PATH": f"{bin_dir}:/usr/bin:/bin",
         "HOME": str(tmp_path),
@@ -93,9 +97,10 @@ def test_a_report_holds_the_logs_screenshot_save_and_where_the_game_was(tmp_path
     # only turn logs written in the last 10 min, 100 lines each
     assert sorted(p.name for p in (out / "turns").iterdir()) == ["papal-noA-turns.log"]
     assert len((out / "turns" / "papal-noA-turns.log").read_text().splitlines()) == 100
-    # the whole screen, dialog included
-    assert (out / "screen.png").read_text() == "PNG"
-    assert (out / "import.args").read_text().split()[:2] == ["-window", "root"]
+    # the game's own window, never the whole screen (11-04: a full-desktop capture caught private windows)
+    assert (out / "screen-0.png").read_text() == "PNG"
+    assert (out / "import.args").read_text().split()[:2] == ["-window", "44"]
+    assert "root" not in (out / "import.args").read_text()
     # the newest save, the one Continue Campaign reloads
     assert (out / "Autosave-4.sav").read_bytes() == b"turn-50"
     assert not (out / "Autosave-3.sav").exists()
@@ -118,6 +123,18 @@ def test_a_report_holds_the_logs_screenshot_save_and_where_the_game_was(tmp_path
     assert "papal vote" in window[0] and "acknowledged" in window[1]
     assert window[-1].endswith("stack traceback: (unstamped, belongs to the line above)")
     assert "Report problems" not in md
+
+
+def test_no_game_window_means_no_picture_never_the_desktop(tmp_path, env):
+    now = dt.datetime.now().replace(microsecond=0)
+    e = _game(tmp_path, now)
+    (tmp_path / "bin" / "xdotool").write_text("#!/usr/bin/env bash\nexit 0\n")  # no game window up
+    env(e)
+    out = cr.write("game hung", now=now)
+    assert not list(out.glob("screen*.png"))
+    assert not (out / "import.args").exists()  # import was never called
+    meta = json.loads((out / "meta.json").read_text())
+    assert any("no game window to capture" in p for p in meta["problems"])
 
 
 def test_a_report_never_fails_on_a_missing_part(tmp_path, env):

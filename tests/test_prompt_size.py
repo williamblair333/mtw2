@@ -29,12 +29,12 @@ def turn39() -> StateReport:
 
 
 def test_turn39_prompt_stays_within_its_size_budget():
-    p = build_prompt(turn39(), persona="p", adviser="lord_ipsi", areas=ALL_AREAS)
+    p = build_prompt(turn39(), persona="p", adviser="your_discord_name", areas=ALL_AREAS)
     assert len(p) <= TURN39_BUDGET
 
 
 def test_turn39_prompt_keeps_what_the_ruler_acts_on():
-    p = build_prompt(turn39(), persona="p", adviser="lord_ipsi", areas=ALL_AREAS)
+    p = build_prompt(turn39(), persona="p", adviser="your_discord_name", areas=ALL_AREAS)
     for fact in ("- London (London)", "- Nottingham (Nottingham)", "- Caen (Caen)",
                  "can build (florins/turns): mines 2000/2",
                  "can recruit (florins/turns, upkeep a turn): Town Militia 290/1, free upkeep (3 left)",

@@ -1329,6 +1329,19 @@ class _ProcessManager:
         # "<window id> <title>"
         return res.stdout.strip().partition(" ")[2] or "ERROR"
 
+    def crash_report(self, why: str) -> str | None:
+        """scripts/crash_report.py write: the logs, the game's windows and the save, before a relaunch
+        destroys them. Its path, or None; never raises, never waits more than 20 s."""
+        try:
+            res = subprocess.run(
+                ["python3", str(REPO_ROOT / "scripts" / "crash_report.py"), "write", "--why", why],
+                check=False, capture_output=True, text=True, timeout=20, cwd=str(REPO_ROOT),
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        out = res.stdout.strip().splitlines()
+        return out[-1] if res.returncode == 0 and out else None
+
     def game_answers(self) -> bool:
         """True when the running game answers a question through the bridge (scripts/probe.sh), as
         crash_watch.sh asks before it calls a quiet game dead. A held turn (paused.txt) logs nothing:
@@ -1806,6 +1819,12 @@ def restore(
 
             def relaunch(why: str) -> None:
                 print(f"qa-restore: {why}; relaunching the game", file=sys.stderr)
+                # the crash's evidence goes with the relaunch, as crash-watch keeps it (STANDARDS
+                # crash-repro-report; 11-05 07:18 a QA crash left no report). The real game only.
+                if relaunch_game is None:
+                    report = pm.crash_report(f"QA run: {why}")
+                    if report:
+                        print(f"qa-restore: crash report {report}", file=sys.stderr)
                 _relaunch_and_wait(relaunch_fn, log_path, timeout=relaunch_timeout, poll_interval=poll_interval)
 
             trouble = trouble_fn()

@@ -26,3 +26,5 @@ __pycache__/
 # Local game configs with your real Discord name, server and paths (never published)
 games/local/
 .first-run-gate/
+# a session's standing order (just work-until): local state
+.claude/work-until.local

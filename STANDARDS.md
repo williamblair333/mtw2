@@ -9,18 +9,24 @@ it moved. Rewrite the bar when the phase changes. Ranked by impact, highest firs
 ```yaml
 phase: making it reliable — rulers play run after run unattended; every fix proven on the bench before live
 standards:
+  - id: standing-orders-hold
+    area: process
+    bar: A standing order to keep working ("until 23:00") holds mechanically; a milestone is a one-line report, never the end of the turn
+    why: 11-05 the author said "work until 2300, don't stop" and the session still ended its turn at 06:31 after a merge; an order kept by memory lapses at the first natural stopping point
+    status: done
+    evidence: scripts/work_until.sh (`just work-until HH:MM`) and its Stop hook in .claude/settings.json block ending a turn until the time; tests/test_work_until.py
   - id: phase-order
     area: QA
     bar: No turn-playing or click work starts while the newest no-click run has a fail or inconclusive case; no-click is clean first
     why: a test lead clears the fast, deterministic tier before spending slow turn and click runs; 11-01 a session built quiet-world turn work over phase 1's three open cases until the author asked why
-    status: met
+    status: done
     evidence: scripts/preflight_interrupts.py phase_open() (run before every `just qa` by .claude/preflight.toml) refuses a turn run while the newest runs/qa/*-all.md lists a fail or inconclusive not explained in games/no-click-explained.toml; tests/test_preflight_interrupts.py test_phase_order_*
   - id: no-clicks-first
     area: QA
     bar: Every game action goes through EOP/Lua first; a screen click (xdotool) is a named last resort, and click-dependent work is batched for when the author is away
     why: clicks fight the author's desktop focus (the 10-30/31 papal crash came from a windowactivate) and need him off the keyboard; moved here from memory no-screen-clicks (11-01) so it is checked, not remembered
     status: partial
-    evidence: PARLEY_NO_X_INPUT=1 no-click runs (`just qa all kind=instant`), phase2 = "<why>" marks a click case; papal vote and decision scrolls still need a click (no EOP press yet)
+    evidence: "parley/xinput.py (PARLEY_NO_X_INPUT=1 refuses X input in `just qa all kind=instant`). Still open: the papal vote and family-offer scrolls need a click; asked upstream in EOP-Labs/M2TWEOP-library#91 (11-05)"
   - id: fixed-bench-save
     area: QA
     bar: Every bench suite starts from one fixed, quiet test save, never a copy of a live campaign
@@ -56,13 +62,13 @@ standards:
     bar: Every game crash writes its own report (last bridge/turn-loop lines, screenshot, save) and becomes a repro case
     why: crashes are this project's costliest bug class; read-by-hand doesn't scale
     status: partial
-    evidence: scripts/crash_report.py, called by crash_watch.sh before each relaunch, writes runs/crashes/<time>/ (bridge log tail and its papal lines, fresh turn-log tails, screenshot, newest save, game id and turn, report.md with the last 10 s merged); just crashes lists them; turning a report into a bench case is still by hand
+    evidence: scripts/crash_report.py, called by crash_watch.sh and by the QA restore (parley/qa/runner.py _ProcessManager.crash_report) before each relaunch, writes runs/crashes/<time>/ (bridge log tail and its papal lines, fresh turn-log tails, the game's windows only (tests/test_no_desktop_capture.py), newest save, game id and turn, report.md with the last 10 s merged); just crashes lists them; turning a report into a bench case is still by hand
   - id: ruler-eval-harness
     area: rulers
     bar: Fixed scenarios score each ruler model/prompt on legal orders, timeouts and outcomes
     why: ruler changes are guesses without a score; half the goal is rulers good enough to play
-    status: open
-    evidence: ruler quality judged from live runs only
+    status: partial
+    evidence: "parley/ruler_eval.py (`just ruler-eval --scenario <turn dir>... <seat specs>`): every seat on every recorded turn, legal-order rate, answered, time; JSON and markdown in runs/ruler-eval/. Still open: a fixed, committed scenario set and outcome scoring beyond legality"
   - id: ruler-budget
     area: rulers
     bar: Ruler answers are bounded in tokens and time and never miss a turn by running long
@@ -102,9 +108,9 @@ standards:
   - id: log-rotation
     area: live-ops
     bar: Every log rotates and has a size cap
-    why: parley_bridge.log is 17+ MB and grows every turn
-    status: open
-    evidence: no rotation
+    why: parley_bridge.log is 17+ MB and grows every turn (25-26 MB on 11-05)
+    status: partial
+    evidence: "scripts/relaunch_game.sh keeps a log over PARLEY_LOG_CAP_MB (20) as .log.1 before each launch, never under qa.lock (tests/test_relaunch.py test_an_oversized_bridge_log_is_rotated_*). Still open: a game that never relaunches grows unbounded; logs/*.log have no cap"
   - id: wishes-carried-out
     area: rulers
     bar: Every ruler order is carried out or refused with a reason the ruler can act on
@@ -115,8 +121,8 @@ standards:
     area: release
     bar: A clean-machine install is tested before every release
     why: the community's first contact is the installer
-    status: open
-    evidence: no install test
+    status: partial
+    evidence: "PRODUCT.md verify block, run by first_run_gate.py on a clean python:3.13 image (offline path, PASS 11-05). The game install itself (Proton, EOP, launch option) is not tested on a clean machine"
   - id: versioned-releases
     area: release
     bar: Releases are versioned, tagged and have notes
@@ -127,6 +133,6 @@ standards:
     area: release
     bar: A community tester can follow a guide to run a campaign and file a useful bug
     why: The author wants the community to help; that needs a path in
-    status: open
-    evidence: no guide
+    status: partial
+    evidence: "CONTRIBUTING.md (how to play and report: what to send, which log lines) and docs/WRITEUP.md §4 (install). Not yet followed by a real outside tester"
 ```

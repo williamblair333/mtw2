@@ -275,13 +275,24 @@ def test_save_backed_up_before_turn(tmp_path, venice_state_dict):
 
 
 def test_parallel_seats(tmp_path, venice_state_dict):
+    # both seats must be inside decide() at once: a barrier only two concurrent callers pass. Was a
+    # wall-clock bound (< 1.8 s for two 1 s seats), which failed on slow hardware (11-04).
+    import threading
+
+    barrier = threading.Barrier(2, timeout=10)
+    met = []
+
+    class Meeting(FakeSeat):
+        def decide(self, prompt, **kw):
+            barrier.wait()  # raises BrokenBarrierError if the other seat never arrives (sequential)
+            met.append(kw["faction"])
+            return super().decide(prompt, **kw)
+
     cfg = _config(tmp_path, ("venice", "milan"))
     for f in ("venice", "milan"):
         _pending(cfg, f, venice_state_dict)
-    orch = Orchestrator(cfg, {f: FakeSeat(delay=1.0) for f in ("venice", "milan")})
-    start = time.monotonic()
-    orch.run_once()
-    assert time.monotonic() - start < 1.8
+    Orchestrator(cfg, {f: Meeting() for f in ("venice", "milan")}).run_once()
+    assert sorted(met) == ["milan", "venice"]
 
 
 def test_load_config(tmp_path):
