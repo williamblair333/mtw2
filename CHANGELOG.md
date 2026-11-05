@@ -19,6 +19,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   game runs (pinned run id and sha256; the DLL is byte-identical to the one tested). GitHub
   deletes that build on 2027-01-17.
 
+### Fixed (2026-11-05, phase 2)
+- `M.qa.teleport` refuses a taken or unstandable tile with a clear error (11-04: a teleport onto
+  a fixed tile crashed the game after a played turn); smoke's teleport binds a free tile.
+- A frozen AI faction is let go after 3 s, not 15: once released it ends its turn at once (26
+  releases, median 0 s), so the wait cost ~15 s per AI faction per played turn.
+- `just work-until HH:MM`: a Stop hook holds a standing order to keep working until then.
+
 ### Fixed (2026-11-05, QA over ssh)
 - A held game (paused.txt) logs nothing, and the QA hang check read 240 s of silence as a hang
   and relaunched a healthy game. It now asks the game first (scripts/probe.sh), as crash-watch

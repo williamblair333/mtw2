@@ -2947,6 +2947,21 @@ def test_game_trouble_reports_dead_hung_or_nothing(tmp_path: Path):
     assert game_trouble(lambda: True, log, hang_seconds=1.0).startswith("game hung at ")
 
 
+def test_process_manager_writes_a_crash_report_and_never_raises(tmp_path, monkeypatch):
+    # 11-05 07:18 a QA crash left no report; the restore's relaunch now writes one first
+    from parley.qa import runner as r
+
+    (tmp_path / "scripts").mkdir()
+    script = tmp_path / "scripts" / "crash_report.py"
+    script.write_text("print('writing')\nprint('runs/crashes/2026-11-05-071830')\n")
+    monkeypatch.setattr(r, "REPO_ROOT", tmp_path)
+    assert r._ProcessManager().crash_report("QA run: game crashed") == "runs/crashes/2026-11-05-071830"
+    script.write_text("import sys\nsys.exit(3)\n")
+    assert r._ProcessManager().crash_report("x") is None
+    script.unlink()
+    assert r._ProcessManager().crash_report("x") is None
+
+
 def test_a_quiet_game_that_answers_is_not_hung(tmp_path: Path):
     # live 11-05 05:28: a held turn (paused.txt) logs nothing; the healthy game was read as hung
     from parley.qa.runner import game_trouble

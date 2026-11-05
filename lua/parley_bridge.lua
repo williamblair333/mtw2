@@ -5112,6 +5112,18 @@ M.qa = (function()
         teleport = function(name, x, y)
             return run("teleport", function()
                 local c = find_char(name)
+                -- refuse a tile EOP can't take: someone or a settlement on it, water, or unstandable.
+                -- 11-04 10:12: smoke's teleport to a fixed tile crashed the game (crash dialog) after
+                -- spawn_agent's played turn; a check here is a clean failure, never a native crash
+                if not (math.floor(c.xCoord) == x and math.floor(c.yCoord) == y) then
+                    local t = tile_at(x, y)
+                    if not (t and is_land(t) and standable(t)) then
+                        error(string.format("tile %d,%d isn't land a character can stand on", x, y))
+                    end
+                    if taken_tiles()[x * 1000 + y] then
+                        error(string.format("tile %d,%d is taken (someone or a settlement is on it)", x, y))
+                    end
+                end
                 c:teleport(x, y)
                 return string.format("%d,%d", c.xCoord, c.yCoord)
             end)
@@ -6812,7 +6824,10 @@ end
 -- A frozen AI never makes the calls only it can make (live, turn 20: England's own siege), so its
 -- turn never ends. Past this many seconds the seat's AI lets go for the rest of the turn;
 -- on_turn_start freezes it again next turn. (Unfrozen, that turn closed in five seconds.)
-M.FROZEN_TURN_LIMIT = 15
+-- 3 s, not 15: a frozen AI's turn never ends by itself, and once let go it ends at once (11-05
+-- bench log: 26 releases, median 0 s to the next faction's turn, one over 3 s), so a longer wait
+-- buys no quiet and cost ~15 s per AI faction per played turn
+M.FROZEN_TURN_LIMIT = 3
 function M.release_frozen(now)
     local ft = M.frozen_turn
     if not ft or now - ft.since < M.FROZEN_TURN_LIMIT then return end

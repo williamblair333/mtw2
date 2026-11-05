@@ -7,7 +7,35 @@ bridge now tells the ruler). **Phase 1 is done:** the full no-click bench on the
 clean, 74 pass, 23 skipped (played-turn cases), 0 fail (`runs/qa/2026-11-05-0623-all.md` there,
 37 min 40 s). The phase gate is open for phase 2: the played-turn cases, on the test laptop.
 
-**Open PRs, stacked, merge in order:** #361 (marry fix) → #362 (README, CONTRIBUTING, guide;
+**Phase 2 (from 06:42, the test laptop):** played-turn runs found five bugs, each fixed with a test that
+fails without it. Merged: #367 (frozen AI let go after 3 s: a played turn ~80 s, was ~5 min). Open,
+running together now in the chain (test/phase2-integration 78195fd): #375 (End Turn waits up to
+20 s for this turn's agent missions, the covert sabotage race; M.qa.load defers during an AI turn,
+the envoys crash: a load 2 s after End Turn), #380 (the QA hold applies on the player's turn only:
+it had stopped stuck-turn recovery and Denmark's turn stood 9 min), #381 (a faction whose envoy
+parleys at its turn start stays awake that turn: a frozen AI makes no offer), #372
+(recruit_merchant builds a market on the bench save; one level per town after review).
+Diplomacy's ai_offer_accepted/second_offer_asked_again have never passed (no offer on screen).
+The chain (`/tmp/phase2_chain.sh` there; picks up /tmp/integ.bundle before each suite; stops if
+qa.lock is left or at 22:00) runs field, navy, popups, siege, towns, instant, envoys, covert,
+diplomacy, smoke. Logs `logs/phase2-chain.log`, `logs/phase2-<suite>.log`; `just qa-summary`.
+
+**Privacy (11-05):** scripts/crash_report.py captured the **whole desktop** (`import -window root`)
+before every crash-watch relaunch. Fixed in #376 (game windows only) with
+tests/test_no_desktop_capture.py forbidding any whole-screen capture. **20 old reports in
+runs/crashes/ on the main machine hold full-desktop screen.png files** (gitignored, never published; not opened);
+deleting them is the author's call. Caveat: X11 `import -window <game>` can still include a window lying
+on top of the game window.
+
+**Merged 11-05 later:** #365 `just work-until HH:MM` (a Stop hook holds a standing order; the author
+set 23:00), #366/#370 STANDARDS fixes, #368 parallel-seats test by barrier, #369 bridge log cap
+(20 MB, rotated before a relaunch). Posted EOP-Labs/M2TWEOP-library#91 (papal vote and family
+offers from Lua). agy: only Gemini Argon is out of quota (till 11-06 17:41 UTC); Flash works.
+Then #374 `just qa-summary` (written by agy, checked here), #376 privacy fix, #377 a QA crash writes
+a crash report before the relaunch. agy is building `just ruler-eval` (STANDARDS ruler-eval-harness)
+in <scratch dir> (branch feat/ruler-eval).
+
+**Merged earlier 11-05, stacked:** #361 (marry fix) → #362 (README, CONTRIBUTING, guide;
 `EOP_BUILD=master just install-eop`) → #364 (QA over ssh: a held game isn't hung, the run's own
 probe passes its lock, the run borrows the desktop's display). Then refresh the public GitHub copy
 (`python3 _review/scrub_public.py main <dir>`, gitignored because it lists what it hides; one
@@ -923,7 +951,7 @@ scratch game (England Opus, France Sonnet). Claude's weekly usage was at 74%, so
 
 **State (end of session):** `games/local/scratch.toml` is running, at turn 23. It has 18 LLM rulers;
 the Gemini seats were moved to Claude Haiku mid-game. Old Scratch (Opus, `control = "full"`,
-adviser `lord_ipsi`) plays England, the human slot, under autoplay. He holds York, Rennes and
+adviser `your_discord_name`) plays England, the human slot, under autoplay. He holds York, Rennes and
 Bruges, the last two bought by bribe. PRs #13–#39 are merged, 398 tests pass, `main` is clean.
 The day's story is in `docs/JOURNAL.md`; the guide is `docs/WRITEUP.md` §0 and §9.
 

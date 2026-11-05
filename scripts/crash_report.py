@@ -6,7 +6,7 @@
 
 A report holds what is gone after a relaunch (STANDARDS.md crash-repro-report): the bridge log's
 last 200 lines and the papal-trace lines among them, the last 100 lines of every turn log written in
-the last 10 minutes, a screenshot of the screen (the crash dialog is still up: crash_watch.sh calls
+the last 10 minutes, screenshots of the game's own windows, never the whole screen (the crash dialog is still up: crash_watch.sh calls
 this before relaunch_game.sh kills the game), a copy of the newest save (the one Continue Campaign
 reloads), heartbeat.txt / bridge.txt / papal_trace.txt, and report.md: the game id and turn, why
 crash-watch fired, and the last 10 s of the bridge and the turn loop merged by timestamp.
@@ -39,7 +39,8 @@ TURN_LINES = 100
 TURN_LOG_AGE = 600  # s: a turn log written longer ago belongs to no running loop
 WINDOW = 10  # s of bridge and turn-loop activity merged into report.md
 SCREENSHOT_TIMEOUT = 5  # s
-DEFAULT_KEEP = 20  # a report is ~4 MB, most of it the full-screen screenshot
+GAME_WINDOW_TITLES = ("^Medieval 2$", "^ERROR$")  # the only windows a report may capture
+DEFAULT_KEEP = 20  # a report is a few MB, most of it the game-window screenshots
 NAME_RE = re.compile(r"^\d{4}-\d\d-\d\d-\d{6}(-\d+)?$")
 # bridge: "2026-10-31 06:38:16 ..."; turn loop (logging): "2026-10-31 05:31:14,605 INFO ..."
 TS_RE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)")
@@ -164,14 +165,29 @@ def write(why: str, now: dt.datetime | None = None) -> Path:
             problems.append(f"{name}: {type(e).__name__}: {e}")
             return None
 
-    # the screenshot first: the dialog is what's most likely to change while the rest is read
+    # the screenshot first: the dialog is what's most likely to change while the rest is read.
+    # The game's own windows only, never the whole screen: a full-desktop capture caught the user's
+    # private windows (11-04). The game window and Wine's crash dialog are both titled "Medieval 2"
+    # (crash_dialog.sh), EOP's modal box "ERROR". No such window: no picture, never the desktop.
     def screenshot() -> str:
-        png = out / "screen.png"
-        subprocess.run(
-            ["import", "-window", "root", str(png)],
-            check=True, capture_output=True, timeout=SCREENSHOT_TIMEOUT,
-        )
-        return png.name
+        ids: list[str] = []
+        for title in GAME_WINDOW_TITLES:
+            found = subprocess.run(
+                ["xdotool", "search", "--onlyvisible", "--name", title],
+                capture_output=True, text=True, timeout=SCREENSHOT_TIMEOUT,
+            )
+            ids += [w for w in found.stdout.split() if w.isdigit() and w not in ids]
+        if not ids:
+            raise RuntimeError("no game window to capture (the whole screen is never captured)")
+        names = []
+        for i, w in enumerate(ids):
+            png = out / f"screen-{i}.png"
+            subprocess.run(
+                ["import", "-window", w, str(png)],
+                check=True, capture_output=True, timeout=SCREENSHOT_TIMEOUT,
+            )
+            names.append(png.name)
+        return ", ".join(names)
 
     meta["screenshot"] = part("screenshot", screenshot)
 
@@ -268,7 +284,7 @@ def render(meta: dict, merged: list[str]) -> str:
         *(merged or ["(no timestamped lines)"]),
         "```",
         "",
-        "Files: bridge.log (last 200 lines), papal.log, turns/, screen.png, the save, heartbeat.txt,"
+        "Files: bridge.log (last 200 lines), papal.log, turns/, screen-N.png (the game's windows only), the save, heartbeat.txt,"
         " bridge.txt, papal_trace.txt, meta.json.",
     ]
     if meta.get("problems"):

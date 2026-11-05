@@ -394,8 +394,8 @@ wheels = [
 
 [[package]]
 name = "jigsaw"
-version = "0.1.0"
-source = { git = "https://github.com/williamblair333/jigsaw?tag=v0.1.0#2885b1c660e5e7b0b638ac2dc42fadb17b3f9f7a" }
+version = "0.4.0"
+source = { git = "https://github.com/williamblair333/jigsaw?tag=v0.4.0#ba8389cfbbc78c0287cb95f605604e7e3c3b5385" }
 dependencies = [
     { name = "pydantic" },
 ]
@@ -597,7 +597,7 @@ dev = [
 requires-dist = [
     { name = "discord-py", specifier = ">=2.4" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "jigsaw", git = "https://github.com/williamblair333/jigsaw?tag=v0.1.0" },
+    { name = "jigsaw", git = "https://github.com/williamblair333/jigsaw?tag=v0.4.0" },
     { name = "pillow", specifier = ">=13.0.0" },
     { name = "pydantic", specifier = ">=2.8" },
 ]
