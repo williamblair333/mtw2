@@ -1,5 +1,5 @@
 """CLI entry point: python -m parley.qa run <suite|all> --real <game.toml> | restore --real <game.toml>
-| bench-save start|record --real <game.toml> [--from <save>] | after-relaunch --turn-root <dir> --log-offset <bytes>."""
+| bench-save start|record --real <game.toml> [--from <save>]."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from parley.qa.runner import (
     bench_save_start,
     format_report,
     restore,
-    resume_real_after_relaunch,
     run_suite,
 )
 
@@ -29,8 +28,10 @@ def main(argv: list[str] | None = None) -> int:
                        help="run only this case of the suite (repeatable); smoke still runs first")
     run_p.add_argument("--no-smoke", action="store_true",
                        help="skip smoke for instant cases alone, if a run's smoke suite passed in the last 30 min")
-    run_p.add_argument("--kind", choices=["all", "instant"], default="all",
-                       help="instant: only the instant cases, turn cases reported as skipped; no QA turn "
+    run_p.add_argument("--kind", choices=["all", "instant", "noclick"], default="all",
+                       help="noclick: every case, turn cases too, with every click refused (a case that "
+                            "passes needs none; the QA loop's log names a refused one). "
+                            "instant: only the instant cases, turn cases reported as skipped; no QA turn "
                             "loop, and X input (clicks) refused for the whole run; a relaunch makes no clicks")
 
     rest_p = sub.add_parser("restore", help="restore the real campaign from its kept save")
@@ -49,18 +50,8 @@ def main(argv: list[str] | None = None) -> int:
                               "restores, with no clicks")
     bench_p.add_argument("--faction", default="england", help="record: the bench faction (default england)")
 
-    after_p = sub.add_parser(
-        "after-relaunch",
-        help="after relaunch_game.sh --clicks: load the restored keep save if Continue took the QA game's",
-    )
-    after_p.add_argument("--turn-root", required=True, type=Path, help="the game's parley_turns dir")
-    after_p.add_argument("--log-offset", type=int, default=0, help="bridge log size before the relaunch")
-
     args = ap.parse_args(argv)
     try:
-        if args.cmd == "after-relaunch":
-            print(f"relaunch: {resume_real_after_relaunch(args.turn_root, log_offset=args.log_offset)}")
-            return 0
         if args.cmd == "run":
             extra: dict = {}
             if args.cases:
@@ -72,7 +63,12 @@ def main(argv: list[str] | None = None) -> int:
             results, report_path = run_suite(args.suite, args.real, **extra)
             print(report_path.read_text(encoding="utf-8"), end="")
             print(f"wrote {report_path}")
-            return 1 if any(r.outcome == "fail" for r in results) else 0
+            from parley.qa import quarantine
+            quarantined = quarantine.load()
+            red, held = quarantine.split_failures(results, quarantined)
+            for r in held:
+                print(f"quarantined (not failing the run): {r.name}: {quarantined[r.name]}")
+            return 1 if red else 0
         if args.cmd == "bench-save":
             if args.step == "start":
                 print(bench_save_start(args.real))

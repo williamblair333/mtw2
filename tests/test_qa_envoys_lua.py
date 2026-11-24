@@ -164,7 +164,7 @@ def _calls(rt) -> list[str]:
 
 INSTANT = {
     "recruit_diplomat", "recruit_merchant", "recruit_princess_refused", "recruit_merchant_limit_refused",
-    "move_agent_walks", "move_agent_into_foreign_town_refused", "move_agent_across_sea_refused",
+    "move_agent_walks", "move_agent_into_foreign_town_stops_beside", "move_agent_across_sea_refused",
     "bribe_army", "bribe_agent", "marry_foreign_general", "agent_order_naming_a_general_refused",
     "bribe_settlement",
 }
@@ -198,14 +198,28 @@ def test_the_envoys_suite_s_instant_cases_run_on_the_fake_game_in_one_held_turn(
     assert sorted(t["agent"] for t in queued) == ["diplomat", "merchant"]
 
 
-def test_a_game_with_no_town_that_trains_merchants_skips_the_merchant_recruit(game):
+def test_a_game_with_no_town_that_trains_merchants_builds_one_for_the_merchant_recruit(game):
+    # live 10-31: on the bench save no town trained a merchant; the setup now builds a level that does
     rt, root = game
-    rt.execute("FAKE.settlements.Venice.getBuilding = function() return nil end; FAKE.settlements.Venice.buildingsNum = 0")
+    rt.execute("""
+        local v = FAKE.settlements.Venice
+        v.built = {}
+        v.buildingsNum = 0
+        v.getBuilding = function(self, i)
+            local name = self.built[i + 1]
+            return name and { getName = function() return name end, getType = function() return name end } or nil
+        end
+        v.createBuilding = function(self, name)
+            table.insert(FAKE.calls, 'createBuilding ' .. self.name .. ' ' .. name)
+            self.built[#self.built + 1] = name
+            self.buildingsNum = #self.built
+        end
+    """)
     case = next(c for c in _suite().cases if c.name == "recruit_merchant")
     res, _ = _run_instant_case(case, "qa-envoys", "g1", "venice", root, TickingControl(rt, root), TURN,
                                poll_interval=0.0, turn_wait=1.0)
-    assert res.outcome == "inconclusive", res.evidence
-    assert "'none'" in res.evidence
+    assert res.outcome == "pass", res.evidence
+    assert "createBuilding Venice market" in _calls(rt)
 
 
 def test_a_princess_disgraced_by_a_refusal_reaches_the_news_and_passes_the_case(game):
@@ -217,7 +231,7 @@ def test_a_princess_disgraced_by_a_refusal_reaches_the_news_and_passes_the_case(
                "for _, c in ipairs(ven.characters) do if c.namedCharacter.fullName == 'Agnese' then agnese = c end end\n"
                "agnese.marry = function(self, target)\n"
                "  table.insert(FAKE.calls, 'marry Agnese ' .. target.namedCharacter.fullName)\n"
-               "  agnese.namedCharacter.isAlive = function() return 0 end\n"
+               "  agnese.namedCharacter.isAlive = false\n"
                "end\n"
                "ven.named = { agnese.namedCharacter }; ven.numOfNamedCharacters = 1")
     case = next(c for c in _suite().cases if c.name == "marry_foreign_general")
@@ -244,7 +258,7 @@ def test_a_mission_line_naming_her_oddly_still_settles_the_proposal(game, who):
     # be left pending to read as a disgrace once her record says dead
     rt, _ = game
     rt.execute("local ven = FAKE.byName.venice; ven.named = { { fullName = 'Agnese', "
-               "isAlive = function() return 0 end } }; ven.numOfNamedCharacters = 1")
+               "isAlive = false } }; ven.numOfNamedCharacters = 1")
     rt.eval("BRIDGE.note_proposal('venice', 'Agnese', 'Konrad')")
     char = f"{{ fullName = '{who}' }}" if who else "nil"
     rt.execute("BRIDGE.on_agent_mission('marriage proposal', { faction = FAKE.byName.venice, "

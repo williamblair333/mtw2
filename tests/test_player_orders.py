@@ -66,6 +66,25 @@ def test_a_near_miss_settlement_name_is_read_as_its_id(venice_report):
     assert kept.orders[2].settlement == "York"
 
 
+def test_an_admiral_or_captain_named_without_the_title_is_read_as_its_id(venice_report):
+    # live 11-05 (run 10, turn 11): "Nigel" and "Geiles" for "Admiral Nigel" and "Admiral Geiles"
+    r = _named(venice_report, "Admiral Nigel", "Captain Robin")
+    kept, rej = validate_orders(r, _orders(MoveArmy(army="Nigel", x=120, y=89),
+                                           MoveArmy(army="robin", x=120, y=89)), areas=AREAS)
+    assert rej == [] and [o.army for o in kept.orders] == ["Admiral Nigel", "Captain Robin"]
+
+
+def test_a_title_never_sends_an_order_to_the_wrong_army(venice_report):
+    # #453 lets a near miss drop "captain"; with both "Captain Robin" and "Robin" listed, "ROBIN"
+    # fits two ids and stays unknown, and the exact ids still go to their own armies
+    r = _named(venice_report, "Captain Robin", "Robin")
+    kept, rej = validate_orders(r, _orders(MoveArmy(army="ROBIN", x=120, y=89),
+                                           MoveArmy(army="Robin", x=120, y=89),
+                                           MoveArmy(army="Captain Robin", x=120, y=89)), areas=AREAS)
+    assert [o.army for o in kept.orders] == ["Robin", "Captain Robin"]
+    assert rej and "unknown army 'ROBIN'" in rej[0].reason
+
+
 def test_an_ambiguous_near_miss_stays_unknown(venice_report):
     r = _named(venice_report, "Robert", "Sir Robert")
     _, rej = validate_orders(r, _orders(MoveArmy(army="ROBERT", x=120, y=89)), areas=AREAS)
@@ -114,7 +133,7 @@ def test_recruit_agent_checked_shown_and_charged(venice_report):
     assert "spy limit reached: 2 of 2" in rej[0].reason
     assert "can't train a priest" in rej[1].reason and "treasury too low" in rej[2].reason
     p = build_prompt(r, persona="p", areas=AREAS)
-    assert "can train agents (florins/turns): merchant 550/" in p and "diplomat 1/no limit; merchant 0/1; spy 2/2" in p
+    assert "can train agents: merchant" in p and "diplomat 1/no limit; merchant 0/1; spy 2/2" in p and "merchant 550/1" in p
     assert '"recruit_agent"' in p
 
 
@@ -233,7 +252,7 @@ def test_prompt_shows_options_only_for_the_seats_areas(venice_report):
     r = _full(venice_report)
     full = build_prompt(r, persona="p", areas=AREAS)
     assert "can build (florins/turns): market 1200/3" in full
-    assert "can recruit (florins/turns, upkeep a turn): Italian Spear Militia 350/1" in full
+    assert "can recruit: Italian Spear Militia" in full and "Italian Spear Militia 350/1" in full
     assert "tax normal, public order 85%" in full and "queue: wooden_wall" in full
     assert "Venetian Heavy Infantry 40/60 exp 1" in full and "moves 12/20" in full
     assert '"build"' in full and '"attack"' in full
@@ -249,7 +268,8 @@ def test_recruit_options_show_their_upkeep(venice_report):
     r.settlements[0] = s.model_copy(update={"buildings": ["castle"]})  # no free slots: pays its upkeep
     assert "Italian Spear Militia 350/1, upkeep 120" in build_prompt(r, persona="p", areas=AREAS)
     r.settlements[0] = s.model_copy(update={"buildings": ["stone_wall"], "recruit_queue": []})
-    assert "Italian Spear Militia 350/1, free upkeep (4 left)" in build_prompt(r, persona="p", areas=AREAS)
+    p = build_prompt(r, persona="p", areas=AREAS)
+    assert "- Italian Spear Militia 350/1, upkeep 120, free-slot" in p and "free-upkeep slots 4 of 4 left" in p
 
 
 # --- review fixes -----------------------------------------------------------------------------
@@ -397,6 +417,31 @@ def test_repair_order_refused_when_already_in_queue_or_duplicate(venice_report):
     assert len(kept.orders) == 1 and len(rej) == 1 and "already ordered for" in rej[0].reason
 
 
+def test_a_general_with_nothing_to_hire_is_told_so(venice_report):
+    # live 11-20: England ordered hire_mercenary for Captain Humphrey and Walter Stainey, whose
+    # can_hire was empty; the prompt said nothing for them, so "none" looked like "not mentioned"
+    r = _full(venice_report)
+    a = r.armies[0].model_copy(update={"leader": "Captain Humphrey", "units": 4, "can_hire": []})
+    fleet = a.model_copy(update={"id": "Fleet", "is_fleet": True})
+    p = build_prompt(r.model_copy(update={"armies": [a, fleet]}), persona="p", areas=AREAS)
+    army_line = next(line for line in p.splitlines() if line.startswith(f"- {a.id}:"))
+    assert "no mercenaries here" in army_line
+    fleet_line = next(line for line in p.splitlines() if line.startswith("- Fleet:"))
+    assert "mercenaries" not in fleet_line  # a fleet hires nothing; no need to say it
+
+
+def test_an_attack_that_came_to_no_battle_is_told(venice_report):
+    # live 11-20 turns 2380-2384: England's attacks on the rebel Captain Alfred read "done" five turns
+    # running and no battle came; Alfred stepped two tiles off each time
+    from parley.protocol import MoveNotMade
+    r = _full(venice_report)
+    m = MoveNotMade(id="Captain Roger", from_x=99, from_y=152, target="Captain Alfred", order_type="attack",
+                    target_x=97, target_y=146)
+    p = build_prompt(r.model_copy(update={"moves_not_made": [m]}), persona="p", areas=AREAS)
+    assert ("Captain Roger's attack on Captain Alfred came to no battle: Captain Alfred stepped away "
+            "to (97,146), no men lost.") in p
+
+
 def test_hire_mercenary_checked_shown_and_charged(venice_report):
     from parley.protocol import HireMercenary, MercOption
     r = _full(venice_report)
@@ -421,3 +466,39 @@ def test_hire_mercenary_checked_shown_and_charged(venice_report):
     # only a seat that controls recruiting may hire
     _, rej = validate_orders(r, _orders(HireMercenary(army=a.id, unit="Albanian Mercenaries")))
     assert rej and "recruit" in rej[0].reason
+
+
+def test_one_pools_last_mercenary_is_hired_once_across_armies(venice_report):
+    # live 11-21 (scratch, turn 3130): one Galloglaich in the region's pool, listed under three of
+    # England's armies; two were ordered to hire it and the bridge refused the second, "offers: nothing"
+    from parley.protocol import HireMercenary, MercOption
+    r = _full(venice_report)
+    merc = MercOption(unit="Galloglaich Mercs", cost=830, available=1, max=2, pool="Ireland")
+    a = r.armies[0].model_copy(update={"id": "Alfred", "leader": "Alfred", "units": 1, "can_hire": [merc]})
+    b = a.model_copy(update={"id": "Aston", "leader": "Aston"})
+    r = r.model_copy(update={"armies": [a, b], "treasury": 10000})
+    kept, rej = validate_orders(r, _orders(HireMercenary(army="Alfred", unit="Galloglaich Mercs"),
+                                           HireMercenary(army="Aston", unit="Galloglaich Mercs")), areas=AREAS)
+    assert [o.army for o in kept.orders] == ["Alfred"]
+    assert rej[0].index == 1 and "the Ireland pool has 1 Galloglaich Mercs" in rej[0].reason
+    assert "Alfred" in rej[0].reason
+    p = build_prompt(r, persona="p", areas=AREAS)
+    assert "(the Ireland pool, shared by every army of yours in this region)" in p
+
+
+def test_armies_sharing_one_offer_list_print_it_once(venice_report):
+    # live 11-23 (scratch turn 4377): France's prompt listed the Southern_Germany pool's offers in
+    # full under 21 armies (~6 KB of a 138 KB prompt). The first army prints the list; the rest
+    # name it, and an army with a different list still prints its own.
+    from parley.protocol import MercOption
+    r = _full(venice_report)
+    sg = [MercOption(unit="Landschneckt Pikemen", cost=530, available=4, max=4, pool="Southern_Germany")]
+    a = r.armies[0].model_copy(update={"id": "Alfred", "leader": "Alfred", "units": 1, "can_hire": sg})
+    b = a.model_copy(update={"id": "Aston", "leader": "Aston"})
+    other = [MercOption(unit="Swiss Pikemen Mercs", cost=690, available=2, max=2, pool="Burgundy")]
+    c = a.model_copy(update={"id": "Brice", "leader": "Brice", "can_hire": other})
+    r = r.model_copy(update={"armies": [a, b, c]})
+    p = build_prompt(r, persona="p", areas=AREAS)
+    assert p.count("Landschneckt Pikemen 530, 4/4, exp 0") == 1
+    assert "mercenaries for hire here: same as Alfred (the Southern_Germany pool" in p
+    assert "Swiss Pikemen Mercs 690, 2/2, exp 0" in p

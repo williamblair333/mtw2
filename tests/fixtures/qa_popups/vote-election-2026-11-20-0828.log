@@ -1,0 +1,1463 @@
+2026-11-20 08:24:01 popup: a decision: its scroll never came up; accept not pressed
+2026-11-20 08:24:01 popup: a decision answered by the ruler
+2026-11-20 08:24:01 autoplay: ending turn 2017
+2026-11-20 08:24:02 france: game AI frozen
+2026-11-20 08:24:02 france: EE Peasants trained in Iasi
+2026-11-20 08:24:02 france: Captain Andriet#2's march to Moscow did not happen: still at (234,168)
+2026-11-20 08:24:02 france order 0 attack: done
+2026-11-20 08:24:02 france order 1 march_on: done
+2026-11-20 08:24:02 france order 2 merge_armies: done
+2026-11-20 08:24:02 france order 3 merge_armies: done
+2026-11-20 08:24:02 france recruits Pike Militia in Paris for 150; ready turn 2018
+2026-11-20 08:24:02 france order 4 recruit: done
+2026-11-20 08:24:02 france recruits Pike Militia in Paris for 150; ready turn 2018
+2026-11-20 08:24:02 france order 5 recruit: done
+2026-11-20 08:24:02 france recruits Peasants in Iasi for 110; ready turn 2018
+2026-11-20 08:24:02 france order 6 recruit: done
+2026-11-20 08:24:02 france order 7 set_tax: done
+2026-11-20 08:24:02 france order 8 set_tax: done
+2026-11-20 08:24:02 france order 9 set_tax: done
+2026-11-20 08:24:03 france: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:24:03 popup handled: game message 29 (clear_messages)
+2026-11-20 08:24:03 popup handled: game message 55 (clear_messages)
+2026-11-20 08:24:03 character event: france: Captain Aleamme was struck by a disaster: plague (in Moscow_Province)
+2026-11-20 08:24:04 agent mission: france: Gaston Chanteur's denouncement: slightly successful (chance was 66%)
+2026-11-20 08:24:10 agent mission: scotland: Alexander Forster's bribery: not successful
+2026-11-20 08:24:11 agent mission: scotland: Malcolm Boyd's denouncement: not successful (chance was 90%)
+2026-11-20 08:24:11 agent mission: scotland: Matad of_Bute's acquisition: slightly successful (chance was 90%)
+2026-11-20 08:24:15 character event: england: Geiles of Hartford was struck by a disaster: famine (in York_Province)
+2026-11-20 08:24:15 character event: england: Jasper Harrold was struck by a disaster: famine (in Paris_Province)
+2026-11-20 08:24:15 character event: england: Robin Barnard was struck by a disaster: famine (in Paris_Province)
+2026-11-20 08:24:15 character event: france: Robert de Dijon was struck by a disaster: famine (in Rheims_Province)
+2026-11-20 08:24:15 character event: france: Loys Touchet was struck by a disaster: famine (in Rheims_Province)
+2026-11-20 08:24:15 character event: france: Michiel Veron was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:24:15 character event: france: Charles de Marigny was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:24:15 character event: france: Amaury d Arles was struck by a disaster: famine (in Zaragoza_Province)
+2026-11-20 08:24:15 character event: france: Junien des Roches was struck by a disaster: famine (in Rheims_Province)
+2026-11-20 08:24:15 character event: france: Colet Marcel was struck by a disaster: famine (in Paris_Province)
+2026-11-20 08:24:15 character event: france: Guillemot le Brun was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:24:15 character event: france: Conrrat Plesseraud was struck by a disaster: famine (in Paris_Province)
+2026-11-20 08:24:15 character event: france: Estienne was struck by a disaster: famine (in Toulouse_Province)
+2026-11-20 08:24:15 character event: france: Thierry Richelieu was struck by a disaster: famine (in Paris_Province)
+2026-11-20 08:24:15 character event: france: Bureau de Bouillon was struck by a disaster: famine (in Paris_Province)
+2026-11-20 08:24:15 character event: france: Guillemot Marcel was struck by a disaster: famine (in Paris_Province)
+2026-11-20 08:24:15 character event: france: Pierre d Orleans was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:24:15 character event: france: Captain Philip was struck by a disaster: famine (in Paris_Province)
+2026-11-20 08:24:15 character event: france: Captain Colet was struck by a disaster: famine (in Paris_Province)
+2026-11-20 08:24:15 character event: france: Captain Heliot was struck by a disaster: famine (in Iasi_Province)
+2026-11-20 08:24:15 character event: france: Captain Bohemond was struck by a disaster: famine (in Rheims_Province)
+2026-11-20 08:24:15 character event: france: Francis was struck by a disaster: famine (in Bran_Province)
+2026-11-20 08:24:15 character event: france: Captain Guillaume was struck by a disaster: famine (in Rheims_Province)
+2026-11-20 08:24:15 character event: france: Clement Marcel was struck by a disaster: famine (in Pamplona_Province)
+2026-11-20 08:24:15 character event: france: Rolin was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:24:15 character event: france: Hermant Brunius was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:24:15 character event: france: Emery de Paris was struck by a disaster: famine (in Zaragoza_Province)
+2026-11-20 08:24:15 character event: france: Captain Rolet was struck by a disaster: famine (in Paris_Province)
+2026-11-20 08:24:15 character event: france: Jaquob de Blois was struck by a disaster: famine (in Toulouse_Province)
+2026-11-20 08:24:15 character event: france: Georges was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:24:15 character event: france: Gaspard was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:24:15 character event: france: Bohemond Touchet was struck by a disaster: famine (in Pamplona_Province)
+2026-11-20 08:24:15 character event: france: Captain Gilot was struck by a disaster: famine (in Rheims_Province)
+2026-11-20 08:24:15 character event: france: Captain Marcel was struck by a disaster: famine (in Helsinki_Province)
+2026-11-20 08:24:15 character event: france: Charles du Lac was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:24:15 character event: france: Captain Aubert was struck by a disaster: famine (in Bruges_Province)
+2026-11-20 08:24:15 character event: france: Captain Huguenin was struck by a disaster: famine (in Rheims_Province)
+2026-11-20 08:24:15 character event: france: Junien des Roches lost his father to a natural death (in Rheims_Province)
+2026-11-20 08:24:15 character event: france: Huguenin des Roches lost his father to a natural death
+2026-11-20 08:24:15 character event: france: Thomasse des Roches lost his father to a natural death
+2026-11-20 08:24:15 character event: france: Ysabeau de Balliol lost his father to a natural death
+2026-11-20 08:24:15 character event: scotland: Aidan Comyn was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:24:15 character event: scotland: Broccin the Broiss was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:24:15 character event: scotland: Allan was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Captain Aed was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:24:15 character event: scotland: Domongart of Sutherland was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:24:15 character event: scotland: Aed Buchan was struck by a disaster: famine (in Edessa_Province)
+2026-11-20 08:24:15 character event: scotland: Dougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Morgunn was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Edmund was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Captain Cathal was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:24:15 character event: scotland: Donnchadh Cullane was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:24:15 character event: scotland: Raibert of Renfrewshire was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:24:15 character event: scotland: Matad of Bute was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:24:15 character event: scotland: Captain Donald was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:24:15 character event: scotland: Gille Petair was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Mac Bethad was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Raibert was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Captain Edmund was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Captain Angus was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:24:15 character event: scotland: Broccin was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Kyle was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Cormac was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Morgunn was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Dougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Captain Dauid was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:24:15 character event: scotland: Captain Nevin was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:24:15 character event: scotland: Kirk Mar was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:24:15 character event: scotland: Dauid was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Farquar of East Lothian was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Captain Nevin was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Fearghus of Ayrshire was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Allan Macdougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Eoin of Peeblesshire was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Finguine Forster was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Algune of Bute was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Captain Lulach was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:24:15 character event: scotland: Donald the Boroundoun was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Gille Patrick Feniss was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Captain Hew was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:24:15 character event: scotland: David of Moray was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Donnchadh Maknab was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: scotland: Cormac of Caithness was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: hungary: Erzsebet Mihaly was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: hungary: Orsolya Szabo was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:24:15 character event: hungary: Balind was struck by a disaster: famine (in Tunis_Province)
+2026-11-20 08:24:15 character event: aztecs: Motelchiuh of Tlatelolco was struck by a disaster: famine (in Tenochtitlan_Province)
+2026-11-20 08:24:15 character event: aztecs: Tlacochcalcatl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:24:15 character event: aztecs: Quahcoatl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:24:15 character event: aztecs: Tochintecuhtli of Valsequillo was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:24:15 character event: aztecs: Quahcoatl of Valsequillo was struck by a disaster: famine (in Tenochtitlan_Province)
+2026-11-20 08:24:15 character event: aztecs: Matlalihuitl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:24:15 character event: slave: Captain Vlad was struck by a disaster: famine (in Iasi_Province)
+2026-11-20 08:24:15 character event: slave: Captain Axayactaztin was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:24:15 character event: slave: Finguine was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: slave: Captain Gunnar was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:24:15 character event: slave: Captain Yngwie was struck by a disaster: famine (in Oslo_Province)
+2026-11-20 08:24:15 character event: slave: Domnall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 character event: slave: Captain Nectan was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:24:15 character event: slave: Captain Vladimir was struck by a disaster: famine (in Helsinki_Province)
+2026-11-20 08:24:15 character event: slave: Captain Rogier was struck by a disaster: famine (in Bruges_Province)
+2026-11-20 08:24:15 character event: slave: Gille Petair of East Lothian was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:24:15 england: Admiral Anthony's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:24:15 england: Admiral Morcar's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:24:15 england: Admiral Thomas's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:24:15 england: Admiral Gregory's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:24:15 england: Admiral Richard's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:24:15 england: Admiral Hugh's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:24:15 england: Irish Kerns Mercs trained in Stephen Underwood
+2026-11-20 08:24:15 england: spy trained in Bruges
+2026-11-20 08:24:15 turn start england: autoplay_turn_started
+2026-11-20 08:24:15 turn start england: set_governors
+2026-11-20 08:24:15 governors england: Caernarvon build=false recruit=false; Edinburgh build=false recruit=false; York build=false recruit=false; Dublin build=false recruit=false; Inverness build=false recruit=false; London build=false recruit=false; Nottingham build=false recruit=false; Caen build=false recruit=false; Bruges build=false recruit=false; Antwerp build=false recruit=false
+2026-11-20 08:24:15 turn start england: follow
+2026-11-20 08:24:15 turn start england: apply_orders
+2026-11-20 08:24:15 turn start england: done
+2026-11-20 08:24:17 popup message 201
+2026-11-20 08:24:17 papal-trace: #10 onIncomingMessage: event 201 queued (nothing read from the game) [message:201]
+2026-11-20 08:24:18 popup message 40
+2026-11-20 08:24:18 papal-trace: #11 onIncomingMessage: event 40 queued (nothing read from the game) [message:40]
+2026-11-20 08:24:19 popup message 203
+2026-11-20 08:24:19 papal-trace: #12 onIncomingMessage: event 203 queued (nothing read from the game) [message:203]
+2026-11-20 08:24:20 popup message 211
+2026-11-20 08:24:20 papal-trace: #13 onIncomingMessage: event 211 queued (nothing read from the game) [message:211]
+2026-11-20 08:24:21 popup message 216
+2026-11-20 08:24:21 papal-trace: #14 onIncomingMessage: event 216 queued (nothing read from the game) [message:216]
+2026-11-20 08:24:25 popup handled: game message 201 (clear_messages)
+2026-11-20 08:24:41 popup handled: game message 40 (clear_messages)
+2026-11-20 08:24:45 england order 0 bribe: done
+2026-11-20 08:24:45 agent mission: england: Jasper Harrold's bribery: not successful
+2026-11-20 08:24:53 popup parley_turns/popup-2018-8050218: the turn loop didn't capture it in time
+2026-11-20 08:24:53 popup handled: game message 203 (clear_messages)
+2026-11-20 08:24:53 popup parley_turns/popup-2018-8050219: the turn loop didn't capture it in time
+2026-11-20 08:24:53 popup handled: game message 211 (clear_messages)
+2026-11-20 08:24:55 popup parley_turns/popup-2018-8050220: the turn loop didn't capture it in time
+2026-11-20 08:24:55 popup handled: game message 216 (clear_messages)
+2026-11-20 08:24:59 autoplay: ending turn 2018
+2026-11-20 08:25:07 france: game AI frozen
+2026-11-20 08:25:07 france: Admiral Lucas's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:25:07 france: Admiral Baldwin's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:25:07 france: Admiral Godfrey's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:25:07 france: Pike Militia trained in Paris
+2026-11-20 08:25:07 france: Pike Militia trained in Paris
+2026-11-20 08:25:07 france: Peasants trained in Iasi
+2026-11-20 08:25:07 france order 0 attack: done
+2026-11-20 08:25:07 france recruits Town Militia in Dijon for 290; ready turn 2019
+2026-11-20 08:25:07 france order 1 recruit: done
+2026-11-20 08:25:07 france recruits Town Militia in Dijon for 290; ready turn 2019
+2026-11-20 08:25:07 france order 2 recruit: done
+2026-11-20 08:25:07 france order 3 merge_armies: done
+2026-11-20 08:25:07 france order 4 merge_armies: done
+2026-11-20 08:25:07 france order 5 march_on: done
+2026-11-20 08:25:07 france recruits Town Militia in Riga for 290; ready turn 2019
+2026-11-20 08:25:07 france order 6 recruit: done
+2026-11-20 08:25:07 france recruits Town Militia in Riga for 290; ready turn 2019
+2026-11-20 08:25:07 france order 7 recruit: done
+2026-11-20 08:25:07 france recruits Town Militia in Riga for 290; ready turn 2019
+2026-11-20 08:25:07 france order 8 recruit: done
+2026-11-20 08:25:09 france: turn still running after 2s frozen; game AI unfrozen until its next turn
+2026-11-20 08:25:09 character event: france: Captain Guillemin was struck by a disaster: plague (in Moscow_Province)
+2026-11-20 08:25:09 agent mission: france: Emery's denouncement: slightly successful (chance was 72%)
+2026-11-20 08:25:20 agent mission: scotland: Malcolm Boyd's denouncement: slightly successful (chance was 90%)
+2026-11-20 08:25:21 russia: game AI frozen
+2026-11-20 08:25:21 control: lua -> 1
+2026-11-20 08:25:21 qa: load deferred: russia's turn is running; loading mods/parley/saves/parley_bench.sav when the player's turn comes
+2026-11-20 08:25:21 control: lua -> deferred: mods/parley/saves/parley_bench.sav
+2026-11-20 08:25:22 russia: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:25:22 hungary: game AI frozen
+2026-11-20 08:25:23 hungary: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:25:23 papal_states: game AI frozen
+2026-11-20 08:25:24 papal_states: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:25:24 aztecs: game AI frozen
+2026-11-20 08:25:25 aztecs: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:25:25 mongols: game AI frozen
+2026-11-20 08:25:26 mongols: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:25:26 slave: game AI frozen
+2026-11-20 08:25:27 slave: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:25:27 character event: england: Geiles of Hartford was struck by a disaster: famine (in York_Province)
+2026-11-20 08:25:27 character event: england: Hubert Canton was struck by a disaster: famine (in Nottingham_Province)
+2026-11-20 08:25:27 marriage offer: Udeline Estington for england (a wife)
+2026-11-20 08:25:27 character event: france: Michiel Veron was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:25:27 character event: france: Charles de Marigny was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:25:27 character event: france: Raymond de Bourges was struck by a disaster: famine (in Aleppo_Province)
+2026-11-20 08:25:27 character event: france: Philip Jeannin was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Mathieu d Angers was struck by a disaster: famine (in Toledo_Province)
+2026-11-20 08:25:27 character event: france: Guillemot le Brun was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:25:27 character event: france: Bohemond was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Alixandre de Vesc was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Bohemond Mauclerc was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Geoffroi Mauvoisin was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Robin Tristram was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Oudin de Tarante was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Philip d Albret was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Rolet was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Baudet Meurent was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Guillemot Saisset was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Foucher des Roches was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Galoys de Breze was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Pierre d Orleans was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:25:27 character event: france: Thomas de Lyon was struck by a disaster: famine (in Antioch_Province)
+2026-11-20 08:25:27 character event: france: Rene was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Dimenche de Champagne was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Rolin Fouinon was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Gauchier Philibert was struck by a disaster: famine (in Aleppo_Province)
+2026-11-20 08:25:27 character event: france: Henri Borain was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Huet Febre was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Gilot de Foix was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Emery Touchet was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Francois Sarrasin was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Captain Heliot was struck by a disaster: famine (in Iasi_Province)
+2026-11-20 08:25:27 character event: france: Jaques Plesseraud was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Milet de Brabant was struck by a disaster: famine (in Cordoba_Province)
+2026-11-20 08:25:27 character event: france: Gaspard de Bouillon was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:25:27 character event: france: Loys was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Evrart de Balliol was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Anseau Tanlay was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Estienne de Bourbon was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Adenet Clement was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Etienne de Cleves was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Arthur de Foix was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Francis was struck by a disaster: famine (in Bran_Province)
+2026-11-20 08:25:27 character event: france: Aleamme de Cleves was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Loys des Roches was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:25:27 character event: france: Anseau de Richemont was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Philippe de Calais was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Hugues de Provence was struck by a disaster: famine (in Antioch_Province)
+2026-11-20 08:25:27 character event: france: Arthur de Grasse was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Thomas Marcel was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Volo de Bourges was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Jean de Champagne was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Baldwin de Montfort was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Clement Marcel was struck by a disaster: famine (in Pamplona_Province)
+2026-11-20 08:25:27 character event: france: Rolin was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:25:27 character event: france: Thibault de Poitiers was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Bureau Becot was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Hermant Brunius was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:25:27 character event: france: Guiot Karembeu was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Casin Richelieu was struck by a disaster: famine (in Antioch_Province)
+2026-11-20 08:25:27 character event: france: Emery Tanlay was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Milet de Foix was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Gaston Chanteur was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Casin Clement was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Gautier de Paris was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Perrin was struck by a disaster: famine (in Corinth_Province)
+2026-11-20 08:25:27 character event: france: Heliot Gassou was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:25:27 character event: france: Yves de Neufville was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Georges was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:25:27 character event: france: Arthur d Albret was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:25:27 character event: france: Gaspard was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:25:27 character event: france: Bohemond Touchet was struck by a disaster: famine (in Pamplona_Province)
+2026-11-20 08:25:27 character event: france: Casin Poitevin was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Lucas de Nogaret was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Arthur Marcel was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Conrrat d Angers was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Henri de Bordeaux was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Robert Coeur was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Charles du Lac was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:25:27 character event: france: Gieffroy was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:25:27 character event: france: Noel Mauclerc was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Raoulet d Albret was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: france: Captain Rene was struck by a disaster: famine (in Helsinki_Province)
+2026-11-20 08:25:27 character event: scotland: Aidan Comyn was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:25:27 character event: scotland: Broccin the Broiss was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:25:27 character event: scotland: Farquar of Argyll was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:25:27 character event: scotland: Allan was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Captain Aed was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:25:27 character event: scotland: Captain Mac Bethad was struck by a disaster: famine (in Jerusalem_Province)
+2026-11-20 08:25:27 character event: scotland: Cathal of Ayrshire was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:25:27 character event: scotland: Domongart of Sutherland was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:25:27 character event: scotland: Aed Buchan was struck by a disaster: famine (in Edessa_Province)
+2026-11-20 08:25:27 character event: scotland: Ian Maknauchtan was struck by a disaster: famine (in Jerusalem_Province)
+2026-11-20 08:25:27 character event: scotland: Edmund was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:25:27 character event: scotland: Donald of Fife was struck by a disaster: famine (in Tbilisi_Province)
+2026-11-20 08:25:27 character event: scotland: Dougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Nectan was struck by a disaster: famine (in Timbuktu_Province)
+2026-11-20 08:25:27 character event: scotland: Morgunn was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Aodh Colison was struck by a disaster: famine (in Acre_Province)
+2026-11-20 08:25:27 character event: scotland: Patrick Buchan was struck by a disaster: famine (in Antioch_Province)
+2026-11-20 08:25:27 character event: scotland: Edmund was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Allan Macgoulchane was struck by a disaster: famine (in Aleppo_Province)
+2026-11-20 08:25:27 character event: scotland: Ruadri Colison was struck by a disaster: famine (in Jerusalem_Province)
+2026-11-20 08:25:27 character event: scotland: Captain Cathal was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:25:27 character event: scotland: Matad was struck by a disaster: famine (in Damascus_Province)
+2026-11-20 08:25:27 character event: scotland: Donnchadh Cullane was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:25:27 character event: scotland: Raibert of Renfrewshire was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:25:27 character event: scotland: Captain Micheil was struck by a disaster: famine (in Arguin_Province)
+2026-11-20 08:25:27 character event: scotland: Captain Donald was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:25:27 character event: scotland: Gille Petair was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Mac Bethad was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Feradac Buchan was struck by a disaster: famine (in Jerusalem_Province)
+2026-11-20 08:25:27 character event: scotland: Raibert was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Captain Edmund was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Captain Angus was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:25:27 character event: scotland: Broccin was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Kyle was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Cormac was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Morgunn was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Feradac Makdowall was struck by a disaster: famine (in Antioch_Province)
+2026-11-20 08:25:27 character event: scotland: Gille Petair Macgoulchane was struck by a disaster: famine (in Jerusalem_Province)
+2026-11-20 08:25:27 character event: scotland: Dougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Captain Dauid was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:25:27 character event: scotland: Captain Nevin was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:25:27 character event: scotland: Captain Gawain was struck by a disaster: famine (in Arguin_Province)
+2026-11-20 08:25:27 character event: scotland: Malcolm Boyd was struck by a disaster: famine (in Jerusalem_Province)
+2026-11-20 08:25:27 character event: scotland: Kirk Mar was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:25:27 character event: scotland: Dauid was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Farquar of East Lothian was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Malcolm Canmore was struck by a disaster: famine (in Acre_Province)
+2026-11-20 08:25:27 character event: scotland: Fearghus of Ayrshire was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Allan Macdougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Domnall of Orkney was struck by a disaster: famine (in Jerusalem_Province)
+2026-11-20 08:25:27 character event: scotland: Eoin of Peeblesshire was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Finguine Forster was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Algune of Bute was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Captain James was struck by a disaster: famine (in Timbuktu_Province)
+2026-11-20 08:25:27 character event: scotland: Donald the Boroundoun was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Gille Patrick Feniss was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: David of Moray was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Donnchadh Maknab was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Cormac of Caithness was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: scotland: Farquar Vissman was struck by a disaster: famine (in Jerusalem_Province)
+2026-11-20 08:25:27 character event: scotland: Mac Bethad Cullane was struck by a disaster: famine (in Jerusalem_Province)
+2026-11-20 08:25:27 character event: scotland: Angus the Sowlis was struck by a disaster: famine (in Jerusalem_Province)
+2026-11-20 08:25:27 character event: scotland: Roy the Boroundoun was struck by a disaster: famine (in Acre_Province)
+2026-11-20 08:25:27 character event: scotland: Gawain of West Lothian was struck by a disaster: famine (in Acre_Province)
+2026-11-20 08:25:27 character event: hungary: Kowacz Feher was struck by a disaster: famine (in Tunis_Province)
+2026-11-20 08:25:27 character event: hungary: Gyorgy Szabo was struck by a disaster: famine (in Tripoli_Province)
+2026-11-20 08:25:27 character event: hungary: Erzsebet Mihaly was struck by a disaster: famine (in Jerusalem_Province)
+2026-11-20 08:25:27 character event: hungary: Orsolya Szabo was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:25:27 character event: hungary: Balind was struck by a disaster: famine (in Tunis_Province)
+2026-11-20 08:25:27 character event: aztecs: Motelchiuh of Tlatelolco was struck by a disaster: famine (in Tenochtitlan_Province)
+2026-11-20 08:25:27 character event: aztecs: Tlacochcalcatl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:25:27 character event: aztecs: Quahcoatl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:25:27 character event: aztecs: Tochintecuhtli of Valsequillo was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:25:27 character event: aztecs: Quahcoatl of Valsequillo was struck by a disaster: famine (in Tenochtitlan_Province)
+2026-11-20 08:25:27 character event: aztecs: Matlalihuitl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:25:27 character event: slave: Captain Axayactaztin was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:25:27 character event: slave: Captain Nourreddine was struck by a disaster: famine (in Timbuktu_Province)
+2026-11-20 08:25:27 character event: slave: Khaled was struck by a disaster: famine (in Timbuktu_Province)
+2026-11-20 08:25:27 character event: slave: Finguine was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: slave: Captain Alfredo was struck by a disaster: famine (in Leon_Province)
+2026-11-20 08:25:27 character event: slave: Captain Azedine was struck by a disaster: famine (in Tripoli_Province)
+2026-11-20 08:25:27 character event: slave: Morgunn Mensies was struck by a disaster: famine (in Tripoli_Province)
+2026-11-20 08:25:27 character event: slave: Stephen of Ashbourne was struck by a disaster: famine (in Caernarvon_Province)
+2026-11-20 08:25:27 character event: slave: Captain Gunnar was struck by a disaster: famine (in Stockholm_Province)
+2026-11-20 08:25:27 character event: slave: Galib al-Talamanki was struck by a disaster: famine (in Timbuktu_Province)
+2026-11-20 08:25:27 character event: slave: Captain Yngwie was struck by a disaster: famine (in Oslo_Province)
+2026-11-20 08:25:27 character event: slave: Francis de Grasse was struck by a disaster: famine (in Lisbon_Province)
+2026-11-20 08:25:27 character event: slave: Domnall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 character event: slave: Captain Nectan was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:25:27 character event: slave: Captain Vladimir was struck by a disaster: famine (in Helsinki_Province)
+2026-11-20 08:25:27 character event: slave: Gille Petair of East Lothian was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:25:27 marrying Stephen Underwood age 34
+2026-11-20 08:25:27 character event: england: Stephen Underwood married (in Edinburgh_Province)
+2026-11-20 08:25:27 marrying Toby Dowell age 32
+2026-11-20 08:25:27 character event: england: Toby Dowell married (in Caen_Province)
+2026-11-20 08:25:27 marrying Edgar Morgan age 28
+2026-11-20 08:25:27 character event: england: Edgar Morgan married (in Caen_Province)
+2026-11-20 08:25:27 marrying Gregory Grainger age 22
+2026-11-20 08:25:27 character event: england: Gregory Grainger married (in Caen_Province)
+2026-11-20 08:25:27 qa: england's single men married on the bench: 4
+2026-11-20 08:25:27 qa: marriage offers off on the bench (maxAgeForMarriageMale 75 -> 0)
+2026-11-20 08:25:27 qa: adoption offers off on the bench (maxAdoptionAge 30 -> 0)
+2026-11-20 08:25:27 qa: suitor offers off on the bench (maxAgeForMarriageForFemale 40 -> 0)
+2026-11-20 08:25:27 qa: quiet ok: pope=Gionta Fornarius age=60->45; england leader=Nicholas Webbe age=20->20 heir=Barnaby de Beauchamp age=48->45 towns=10 calmed=10 cured=0
+2026-11-20 08:25:27 turn start england: autoplay_turn_started
+2026-11-20 08:25:27 turn start england: set_governors
+2026-11-20 08:25:27 governors england: Caernarvon build=false recruit=false; Edinburgh build=false recruit=false; York build=false recruit=false; Dublin build=false recruit=false; Inverness build=false recruit=false; London build=false recruit=false; Nottingham build=false recruit=false; Caen build=false recruit=false; Bruges build=false recruit=false; Antwerp build=false recruit=false
+2026-11-20 08:25:27 turn start england: follow
+2026-11-20 08:25:27 turn start england: apply_orders
+2026-11-20 08:25:27 england: no orders for turn 2018 in time; skipped
+2026-11-20 08:25:27 turn start england: done
+2026-11-20 08:25:29 qa: load ok: mods/parley/saves/parley_bench.sav
+2026-11-20 08:25:35 fault catcher: on (installed at the game's launch; parley_turns/fault.bin still mapped by it)
+2026-11-20 08:25:35 bridge loaded campaign at turn 5
+2026-11-20 08:25:35 autoplay: auto-resolve all battles on
+2026-11-20 08:25:35 EOP campaign AI: off (was on)
+2026-11-20 08:25:35 marrying Robert age 26
+2026-11-20 08:25:35 character event: england: Robert married (in Caen_Province)
+2026-11-20 08:25:35 marrying Rufus (null) age 28
+2026-11-20 08:25:35 character event: england: Rufus married (in York_Province)
+2026-11-20 08:25:35 qa: england's single men married on the bench: 2
+2026-11-20 08:25:35 qa: quiet ok: pope=Gregory age=42->42; england leader=William age=52->45 heir=Rufus age=28->28 towns=4 calmed=4 cured=0
+2026-11-20 08:25:35 control: lua -> pope=Gregory age=42->42; england leader=William age=52->45 heir=Rufus age=28->28 towns=4 calmed=4 cured=0
+2026-11-20 08:25:35 paused: qa instant case: holding the turn
+2026-11-20 08:25:35 popup message 29
+2026-11-20 08:25:35 papal-trace: #1 onIncomingMessage: event 29 queued (nothing read from the game) [message:29]
+2026-11-20 08:25:35 qa: report ok: parley_turns/qa-popups/turn-0004/england/state.json
+2026-11-20 08:25:35 control: lua -> parley_turns/qa-popups/turn-0004/england/state.json
+2026-11-20 08:25:35 control: lua -> england 5
+2026-11-20 08:25:35 qa: canary ok: Fraunce de Beauchamp|104,165|103,164
+2026-11-20 08:25:35 control: lua -> Fraunce de Beauchamp|104,165|103,164
+2026-11-20 08:25:36 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:36 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:36 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:36 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:37 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:37 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:37 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:37 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:38 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:38 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:39 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:39 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:39 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:39 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:40 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:40 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:41 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:41 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:41 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:41 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:42 qa: army ok: 103,164 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:42 control: lua -> 103,164 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:42 qa: canary_gone ok: left
+2026-11-20 08:25:42 control: lua -> left
+2026-11-20 08:25:43 qa: canary_gone ok: left
+2026-11-20 08:25:43 control: lua -> left
+2026-11-20 08:25:44 qa: canary_gone ok: gone
+2026-11-20 08:25:44 control: lua -> gone
+2026-11-20 08:25:44 control: lua -> england 5
+2026-11-20 08:25:44 qa: free_tile ok: 107,152
+2026-11-20 08:25:44 control: lua -> 107,152
+2026-11-20 08:25:44 qa: spawn_agent ok: Anthony of Pickering
+2026-11-20 08:25:44 control: lua -> Anthony of Pickering
+2026-11-20 08:25:44 qa: free_tile ok: 106,151
+2026-11-20 08:25:44 control: lua -> 106,151
+2026-11-20 08:25:44 qa: teleport ok: 106,151
+2026-11-20 08:25:44 control: lua -> 106,151
+2026-11-20 08:25:45 qa: skill ok: Anthony of Pickering GoodSpy=5
+2026-11-20 08:25:45 control: lua -> Anthony of Pickering GoodSpy=5
+2026-11-20 08:25:45 popup message 55
+2026-11-20 08:25:45 papal-trace: #2 onIncomingMessage: event 55 queued (nothing read from the game) [message:55]
+2026-11-20 08:25:45 qa: where ok: 106,151
+2026-11-20 08:25:45 control: lua -> 106,151
+2026-11-20 08:25:45 qa: load ok: mods/parley/saves/parley_bench.sav
+2026-11-20 08:25:45 control: lua -> mods/parley/saves/parley_bench.sav
+2026-11-20 08:25:51 fault catcher: on (installed at the game's launch; parley_turns/fault.bin still mapped by it)
+2026-11-20 08:25:51 bridge loaded campaign at turn 5
+2026-11-20 08:25:51 autoplay: auto-resolve all battles on
+2026-11-20 08:25:51 EOP campaign AI: off (was on)
+2026-11-20 08:25:51 marrying Robert age 26
+2026-11-20 08:25:51 character event: england: Robert married (in Caen_Province)
+2026-11-20 08:25:51 marrying Rufus (null) age 28
+2026-11-20 08:25:51 character event: england: Rufus married (in York_Province)
+2026-11-20 08:25:51 qa: england's single men married on the bench: 2
+2026-11-20 08:25:51 qa: quiet ok: pope=Gregory age=42->42; england leader=William age=52->45 heir=Rufus age=28->28 towns=4 calmed=4 cured=0
+2026-11-20 08:25:51 control: lua -> pope=Gregory age=42->42; england leader=William age=52->45 heir=Rufus age=28->28 towns=4 calmed=4 cured=0
+2026-11-20 08:25:51 popup message 29
+2026-11-20 08:25:51 papal-trace: #1 onIncomingMessage: event 29 queued (nothing read from the game) [message:29]
+2026-11-20 08:25:51 control: lua -> england 5
+2026-11-20 08:25:51 qa: canary ok: Fraunce de Beauchamp|104,165|103,164
+2026-11-20 08:25:51 control: lua -> Fraunce de Beauchamp|104,165|103,164
+2026-11-20 08:25:51 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:51 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:52 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:52 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:53 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:53 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:53 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:53 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:54 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:54 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:55 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:55 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:55 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:55 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:56 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:56 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:56 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:56 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:57 qa: army ok: 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:57 control: lua -> 104,165 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:57 qa: army ok: 103,164 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:57 control: lua -> 103,164 fleet=no carrying=- men=- aboard=-
+2026-11-20 08:25:58 qa: canary_gone ok: left
+2026-11-20 08:25:58 control: lua -> left
+2026-11-20 08:25:58 qa: canary_gone ok: left
+2026-11-20 08:25:58 control: lua -> left
+2026-11-20 08:25:59 qa: canary_gone ok: left
+2026-11-20 08:25:59 control: lua -> left
+2026-11-20 08:25:59 qa: canary_gone ok: gone
+2026-11-20 08:25:59 control: lua -> gone
+2026-11-20 08:26:00 qa: give_cardinal ok: Aston (already england's)
+2026-11-20 08:26:00 control: lua -> Aston (already england's)
+2026-11-20 08:26:00 qa: kill_pope ok: Gregory
+2026-11-20 08:26:00 control: lua -> Gregory
+2026-11-20 08:26:00 character event: papal_states: Guido de Avena lost his father to a natural death (in Roman_Province)
+2026-11-20 08:26:00 popup message 201
+2026-11-20 08:26:00 papal-trace: #2 onIncomingMessage: event 201 queued (nothing read from the game) [message:201]
+2026-11-20 08:26:01 resumed
+2026-11-20 08:26:05 autoplay: turn 5: holding End Turn until the turn loop reads a message
+2026-11-20 08:26:07 popup handled: game message 29 (clear_messages)
+2026-11-20 08:26:25 popup handled: game message 201 (clear_messages)
+2026-11-20 08:26:25 autoplay: ending turn 5
+2026-11-20 08:26:25 stance: england|france alliance -> peace (seen at the end of england's turn 5)
+2026-11-20 08:26:25 stance: england|portugal war -> peace (seen at the end of england's turn 5)
+2026-11-20 08:26:25 stance: england|hungary alliance -> peace (seen at the end of england's turn 5)
+2026-11-20 08:26:25 stance: england|papal_states peace -> alliance (seen at the end of england's turn 5)
+2026-11-20 08:26:25 france: game AI frozen
+2026-11-20 08:26:26 france: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:26 hre: game AI frozen
+2026-11-20 08:26:27 hre: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:27 stance: hre|papal_states peace -> alliance (seen at the end of hre's turn 5)
+2026-11-20 08:26:27 spain: game AI frozen
+2026-11-20 08:26:28 spain: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:28 venice: game AI frozen
+2026-11-20 08:26:29 venice: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:29 stance: hungary|venice war -> peace (seen at the end of venice's turn 5)
+2026-11-20 08:26:29 stance: papal_states|venice peace -> alliance (seen at the end of venice's turn 5)
+2026-11-20 08:26:29 sicily: game AI frozen
+2026-11-20 08:26:30 sicily: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:30 stance: hungary|sicily war -> peace (seen at the end of sicily's turn 5)
+2026-11-20 08:26:30 milan: game AI frozen
+2026-11-20 08:26:31 milan: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:31 stance: hungary|milan war -> peace (seen at the end of milan's turn 5)
+2026-11-20 08:26:31 stance: milan|papal_states peace -> alliance (seen at the end of milan's turn 5)
+2026-11-20 08:26:31 scotland: game AI frozen
+2026-11-20 08:26:32 scotland: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:32 agent mission: scotland: Fearghus Campbell's spying: not successful (chance was 50%)
+2026-11-20 08:26:32 stance: russia|scotland alliance -> peace (seen at the end of scotland's turn 5)
+2026-11-20 08:26:32 stance: moors|scotland war -> peace (seen at the end of scotland's turn 5)
+2026-11-20 08:26:32 stance: scotland|turks war -> peace (seen at the end of scotland's turn 5)
+2026-11-20 08:26:32 stance: portugal|scotland war -> peace (seen at the end of scotland's turn 5)
+2026-11-20 08:26:32 stance: hungary|scotland alliance -> peace (seen at the end of scotland's turn 5)
+2026-11-20 08:26:32 stance: papal_states|scotland peace -> alliance (seen at the end of scotland's turn 5)
+2026-11-20 08:26:32 stance: mongols|scotland war -> peace (seen at the end of scotland's turn 5)
+2026-11-20 08:26:32 byzantium: game AI frozen
+2026-11-20 08:26:33 byzantium: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:33 character event: byzantium: Captain Slavos was struck by a disaster: plague (in Constantinople_Province)
+2026-11-20 08:26:33 stance: byzantium|hungary war -> alliance (seen at the end of byzantium's turn 5)
+2026-11-20 08:26:33 stance: byzantium|papal_states war -> peace (seen at the end of byzantium's turn 5)
+2026-11-20 08:26:33 stance: byzantium|mongols war -> peace (seen at the end of byzantium's turn 5)
+2026-11-20 08:26:33 russia: game AI frozen
+2026-11-20 08:26:34 russia: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:34 stance: denmark|russia alliance -> peace (seen at the end of russia's turn 5)
+2026-11-20 08:26:34 stance: russia|timurids war -> peace (seen at the end of russia's turn 5)
+2026-11-20 08:26:34 moors: game AI frozen
+2026-11-20 08:26:35 moors: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:35 stance: hungary|moors war -> peace (seen at the end of moors's turn 5)
+2026-11-20 08:26:35 turks: game AI frozen
+2026-11-20 08:26:36 turks: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:36 stance: hungary|turks war -> peace (seen at the end of turks's turn 5)
+2026-11-20 08:26:36 stance: papal_states|turks war -> peace (seen at the end of turks's turn 5)
+2026-11-20 08:26:36 egypt: game AI frozen
+2026-11-20 08:26:37 egypt: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:37 agent mission: egypt: Tamer Unujur's spying: partly successful (chance was 88%)
+2026-11-20 08:26:37 stance: egypt|hungary alliance -> peace (seen at the end of egypt's turn 5)
+2026-11-20 08:26:37 denmark: game AI frozen
+2026-11-20 08:26:38 denmark: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:38 stance: denmark|papal_states peace -> alliance (seen at the end of denmark's turn 5)
+2026-11-20 08:26:38 portugal: game AI frozen
+2026-11-20 08:26:39 portugal: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:39 agent mission: portugal: Lopo Periz's spying: partly successful (chance was 75%)
+2026-11-20 08:26:39 stance: hungary|portugal war -> peace (seen at the end of portugal's turn 5)
+2026-11-20 08:26:39 stance: papal_states|portugal war -> alliance (seen at the end of portugal's turn 5)
+2026-11-20 08:26:39 poland: game AI frozen
+2026-11-20 08:26:40 poland: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:40 stance: papal_states|poland peace -> alliance (seen at the end of poland's turn 5)
+2026-11-20 08:26:40 hungary: game AI frozen
+2026-11-20 08:26:41 hungary: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:41 stance: hungary|papal_states peace -> alliance (seen at the end of hungary's turn 5)
+2026-11-20 08:26:41 stance: hungary|timurids war -> peace (seen at the end of hungary's turn 5)
+2026-11-20 08:26:41 papal_states: game AI frozen
+2026-11-20 08:26:42 papal_states: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:42 stance: papal_states|timurids war -> peace (seen at the end of papal_states's turn 5)
+2026-11-20 08:26:42 aztecs: game AI frozen (kept)
+2026-11-20 08:26:42 slave: game AI frozen
+2026-11-20 08:26:43 slave: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:26:43 stance: mongols|slave war -> peace (seen at the end of slave's turn 5)
+2026-11-20 08:26:43 stance: slave|timurids war -> peace (seen at the end of slave's turn 5)
+2026-11-20 08:26:43 character event: france: Raoulet Poitevin was struck by a disaster: famine (in Rheims_Province)
+2026-11-20 08:26:43 character event: hre: Dietrich von Saxony was struck by a disaster: famine (in Frankfurt_Province)
+2026-11-20 08:26:43 character event: hre: Maximillian Mandorf was struck by a disaster: famine (in Nuremburg_Province)
+2026-11-20 08:26:43 character event: hre: Henry was struck by a disaster: famine (in Hohenstauffen_Province)
+2026-11-20 08:26:43 character event: hre: Rainald Erlach was struck by a disaster: famine (in Breslau_Province)
+2026-11-20 08:26:43 character event: hre: Peter Scherer was struck by a disaster: famine (in Frankfurt_Province)
+2026-11-20 08:26:43 character event: hre: Leopold was struck by a disaster: famine (in Vienna_Province)
+2026-11-20 08:26:43 character event: hre: Captain Markus was struck by a disaster: famine (in Frankfurt_Province)
+2026-11-20 08:26:43 character event: hre: Captain Wilhelmus was struck by a disaster: famine (in Frankfurt_Province)
+2026-11-20 08:26:43 character event: hre: Captain Helmut was struck by a disaster: famine (in Prague_Province)
+2026-11-20 08:26:43 character event: hre: Captain Johann was struck by a disaster: famine (in Magdeburg_Province)
+2026-11-20 08:26:43 character event: hre: Captain Gottfied was struck by a disaster: famine (in Hohenstauffen_Province)
+2026-11-20 08:26:43 character event: hre: Captain Bernhard was struck by a disaster: famine (in Vienna_Province)
+2026-11-20 08:26:43 character event: venice: Cristiano Selvo was struck by a disaster: famine (in Isle_of_Crete)
+2026-11-20 08:26:43 character event: venice: Guido Batlle was struck by a disaster: famine (in Vienna_Province)
+2026-11-20 08:26:43 character event: venice: Tusco Delogu was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:26:43 character event: venice: Captain Uberto was struck by a disaster: famine (in Isle_of_Crete)
+2026-11-20 08:26:43 character event: venice: Antonio Selvo was struck by a disaster: famine (in Isle_of_Crete)
+2026-11-20 08:26:43 character event: sicily: Roger was struck by a disaster: famine (in Naples_Province)
+2026-11-20 08:26:43 character event: sicily: Simon was struck by a disaster: famine (in Palermo_Province)
+2026-11-20 08:26:43 character event: sicily: Niccolo Amocacci was struck by a disaster: famine (in Naples_Province)
+2026-11-20 08:26:43 character event: sicily: Alberto was struck by a disaster: famine (in Tunis_Province)
+2026-11-20 08:26:43 character event: milan: Lerino Matarrese was struck by a disaster: famine (in Vienna_Province)
+2026-11-20 08:26:43 character event: scotland: Malcolm Canmore was struck by a disaster: famine (in Edinburgh_Province)
+2026-11-20 08:26:43 character event: scotland: Edward Canmore was struck by a disaster: famine (in Edinburgh_Province)
+2026-11-20 08:26:43 character event: scotland: Brian was struck by a disaster: famine (in Edinburgh_Province)
+2026-11-20 08:26:43 character event: russia: Antonina was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:26:43 character event: moors: Qasim was struck by a disaster: famine (in Algiers_Province)
+2026-11-20 08:26:43 character event: moors: Captain Yahya was struck by a disaster: famine (in Algiers_Province)
+2026-11-20 08:26:43 character event: egypt: Saadauri of Hurghada married (in Gaza_Province)
+2026-11-20 08:26:43 character event: denmark: Knud was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:26:43 character event: denmark: Charles was struck by a disaster: famine (in Antwerp_Province)
+2026-11-20 08:26:43 character event: denmark: Haakon Svendsen was struck by a disaster: famine (in Hamburg_Province)
+2026-11-20 08:26:43 character event: denmark: Ingrid was struck by a disaster: famine (in Frankfurt_Province)
+2026-11-20 08:26:43 character event: denmark: Captain Henrik was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:26:43 character event: denmark: Halstan was struck by a disaster: famine (in Hamburg_Province)
+2026-11-20 08:26:43 character event: denmark: Toke was struck by a disaster: famine (in Antwerp_Province)
+2026-11-20 08:26:43 character event: poland: Wladyslaw Herman was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:26:43 character event: poland: Zbigniew Herman was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:26:43 character event: poland: Godzimir was struck by a disaster: famine (in Kiev_Province)
+2026-11-20 08:26:43 character event: poland: Agnes Herman was struck by a disaster: famine (in Vienna_Province)
+2026-11-20 08:26:43 character event: poland: Captain Casimir was struck by a disaster: famine (in Frankfurt_Province)
+2026-11-20 08:26:43 character event: poland: Captain Miron was struck by a disaster: famine (in Kiev_Province)
+2026-11-20 08:26:43 character event: poland: Captain Ryksa was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:26:43 character event: poland: Captain Wenceslaus was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:26:43 character event: hungary: Pioska was struck by a disaster: famine (in Vienna_Province)
+2026-11-20 08:26:43 character event: papal_states: Froderigus was struck by a disaster: famine (in Roman_Province)
+2026-11-20 08:26:43 character event: papal_states: Guido de Avena was struck by a disaster: famine (in Roman_Province)
+2026-11-20 08:26:43 character event: papal_states: Talentus Arlocti was struck by a disaster: famine (in Naples_Province)
+2026-11-20 08:26:43 character event: slave: Captain Smail was struck by a disaster: famine (in Algiers_Province)
+2026-11-20 08:26:43 character event: slave: Dentupes was struck by a disaster: famine (in Frankfurt_Province)
+2026-11-20 08:26:43 character event: slave: Captain Godafrid was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:26:43 character event: slave: Jubal was struck by a disaster: famine (in Metz_Province)
+2026-11-20 08:26:43 qa: quiet ok: pope=Gregory age=42->42; england leader=William age=46->45 heir=Rufus age=29->29 towns=4 calmed=0 cured=0
+2026-11-20 08:26:43 playtest funds: england topped up 16049 -> 50000
+2026-11-20 08:26:43 turn start england: autoplay_turn_started
+2026-11-20 08:26:43 turn start england: set_governors
+2026-11-20 08:26:43 governors england: London build=false recruit=false; Nottingham build=false recruit=false; Caen build=false recruit=false; York build=false recruit=false
+2026-11-20 08:26:43 turn start england: follow
+2026-11-20 08:26:43 turn start england: apply_orders
+2026-11-20 08:26:43 turn start england: done
+2026-11-20 08:26:43 popup message 40
+2026-11-20 08:26:43 papal-trace: #3 onIncomingMessage: event 40 queued (nothing read from the game) [message:40]
+2026-11-20 08:26:44 popup message 202
+2026-11-20 08:26:44 papal-trace: #4 onIncomingMessage: event 202 queued (nothing read from the game) [message:202]
+2026-11-20 08:26:44 papal notice: hands off until the election opens (up to 15s)
+2026-11-20 08:26:44 papal vote: looking for the vote scroll from the tick (hands off its event)
+2026-11-20 08:26:44 papal window: notice; the turn loop presses nothing else for up to 45s
+2026-11-20 08:26:45 autoplay: turn 6: holding End Turn until the turn loop reads a message
+2026-11-20 08:26:45 popup message 15
+2026-11-20 08:26:45 papal-trace: #5 onIncomingMessage: event 15 queued (nothing read from the game) [message:15]
+2026-11-20 08:26:47 papal-trace: #6 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-11-20 08:26:47 papal-trace: #7 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-11-20 08:26:49 papal-trace: #8 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-11-20 08:26:49 papal-trace: #9 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-11-20 08:26:51 papal-trace: #10 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-11-20 08:26:51 papal-trace: #11 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-11-20 08:26:53 papal-trace: #12 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-11-20 08:26:53 papal-trace: #13 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-11-20 08:26:55 papal-trace: #14 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-11-20 08:26:55 papal-trace: #15 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-11-20 08:26:57 papal-trace: #16 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-11-20 08:26:57 papal-trace: #17 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-11-20 08:26:59 papal-trace: #18 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-11-20 08:26:59 papal-trace: #19 tick: getUiElement returned, found=false [papal_election_scroll]
+2026-11-20 08:26:59 papal notice: no election after 15s; asking for its check
+2026-11-20 08:26:59 popup: papal notice: pressed close_tick_button on unnamed by its element
+2026-11-20 08:27:01 papal-trace: #20 tick: calling getUiElement (hands-off vote look) [papal_election_scroll]
+2026-11-20 08:27:01 papal-trace: #21 tick: getUiElement returned, found=true [papal_election_scroll]
+2026-11-20 08:27:01 papal vote: the vote scroll is up (seen from the tick)
+2026-11-20 08:27:01 papal-trace: #22 tick: the vote scroll is up; asking the ruler's vote [papal_election_scroll]
+2026-11-20 08:27:01 papal window: vote; the turn loop presses nothing else for up to 180s
+2026-11-20 08:27:05 papal-trace: #23 calling captured() (asks the turn loop to screenshot it) [papal_election_scroll]
+2026-11-20 08:27:05 papal-trace: #24 captured() returned done=false how=nil [papal_election_scroll]
+2026-11-20 08:27:07 papal-trace: #25 calling captured() (asks the turn loop to screenshot it) [papal_election_scroll]
+2026-11-20 08:27:07 papal-trace: #26 captured() returned done=false how=nil [papal_election_scroll]
+2026-11-20 08:27:09 papal-trace: #27 calling captured() (asks the turn loop to screenshot it) [papal_election_scroll]
+2026-11-20 08:27:09 papal-trace: #28 captured() returned done=false how=nil [papal_election_scroll]
+2026-11-20 08:27:11 papal-trace: #29 calling captured() (asks the turn loop to screenshot it) [papal_election_scroll]
+2026-11-20 08:27:11 papal-trace: #30 captured() returned done=false how=nil [papal_election_scroll]
+2026-11-20 08:27:13 papal-trace: #31 calling captured() (asks the turn loop to screenshot it) [papal_election_scroll]
+2026-11-20 08:27:13 papal-trace: #32 captured() returned done=false how=nil [papal_election_scroll]
+2026-11-20 08:27:15 papal-trace: #33 calling captured() (asks the turn loop to screenshot it) [papal_election_scroll]
+2026-11-20 08:27:15 papal-trace: #34 captured() returned done=false how=nil [papal_election_scroll]
+2026-11-20 08:27:17 papal-trace: #35 calling captured() (asks the turn loop to screenshot it) [papal_election_scroll]
+2026-11-20 08:27:17 papal-trace: #36 captured() returned done=false how=nil [papal_election_scroll]
+2026-11-20 08:27:19 papal-trace: #37 calling captured() (asks the turn loop to screenshot it) [papal_election_scroll]
+2026-11-20 08:27:19 papal-trace: #38 captured() returned done=false how=nil [papal_election_scroll]
+2026-11-20 08:27:21 papal-trace: #39 calling captured() (asks the turn loop to screenshot it) [papal_election_scroll]
+2026-11-20 08:27:21 papal-trace: #40 captured() returned done=false how=nil [papal_election_scroll]
+2026-11-20 08:27:21 autoplay: turn 6: holding End Turn until the ruler answers a papal election vote
+2026-11-20 08:27:23 papal-trace: #41 calling captured() (asks the turn loop to screenshot it) [papal_election_scroll]
+2026-11-20 08:27:23 papal-trace: #42 captured() returned done=false how=nil [papal_election_scroll]
+2026-11-20 08:27:25 papal-trace: #43 calling captured() (asks the turn loop to screenshot it) [papal_election_scroll]
+2026-11-20 08:27:25 papal-trace: #44 captured() returned done=true how=captured [papal_election_scroll]
+2026-11-20 08:27:25 popup: a papal election vote: pressed papal_vote_button on papal_election_scroll by its element
+2026-11-20 08:27:25 popup: a papal election vote answered by the ruler
+2026-11-20 08:27:25 papal window: results; the turn loop presses nothing else for up to 20s
+2026-11-20 08:27:25 autoplay: ending turn 6
+2026-11-20 08:27:25 popup message 203
+2026-11-20 08:27:25 papal-trace: #45 onIncomingMessage: event 203 queued (nothing read from the game) [message:203]
+2026-11-20 08:27:45 papal window: closed; the turn loop may press again
+2026-11-20 08:27:45 papal-trace: #46 calling captured() (asks the turn loop to screenshot it) [message:40]
+2026-11-20 08:27:45 papal-trace: #47 captured() returned done=false how=nil [message:40]
+2026-11-20 08:27:45 papal-trace: #48 calling captured() (asks the turn loop to screenshot it) [message:15]
+2026-11-20 08:27:45 papal-trace: #49 captured() returned done=false how=nil [message:15]
+2026-11-20 08:27:45 popup handled: game message 202 (acknowledged with its check)
+2026-11-20 08:27:45 papal-trace: #50 popup handled; done [message:202]
+2026-11-20 08:27:45 papal-trace: #51 calling captured() (asks the turn loop to screenshot it) [message:203]
+2026-11-20 08:27:45 papal-trace: #52 captured() returned done=false how=nil [message:203]
+2026-11-20 08:27:45 autoplay: 1 UI elements open; list in parley_turns/ui_scan-turn-6.txt
+2026-11-20 08:27:45 autoplay: turn 6 stuck? try 1: reopened minimized message 1 of 3 by its element
+2026-11-20 08:27:45 autoplay: turn 6 stuck? try 1: no known popup open; reopening a minimized message; on screen: unnamed unnamed
+2026-11-20 08:27:47 papal-trace: #53 calling captured() (asks the turn loop to screenshot it) [message:40]
+2026-11-20 08:27:47 papal-trace: #54 captured() returned done=false how=nil [message:40]
+2026-11-20 08:27:47 papal-trace: #55 calling captured() (asks the turn loop to screenshot it) [message:15]
+2026-11-20 08:27:47 papal-trace: #56 captured() returned done=false how=nil [message:15]
+2026-11-20 08:27:47 papal-trace: #57 calling captured() (asks the turn loop to screenshot it) [message:203]
+2026-11-20 08:27:47 papal-trace: #58 captured() returned done=false how=nil [message:203]
+2026-11-20 08:27:47 france: game AI frozen
+2026-11-20 08:27:48 france: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:48 hre: game AI frozen
+2026-11-20 08:27:49 hre: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:49 papal-trace: #59 calling captured() (asks the turn loop to screenshot it) [message:40]
+2026-11-20 08:27:49 papal-trace: #60 captured() returned done=true how=captured [message:40]
+2026-11-20 08:27:49 papal-trace: #61 handle: calling getUiElement [ally_attack_warning_scroll]
+2026-11-20 08:27:49 papal-trace: #62 handle: calling getUiElement [battle_delay_scroll]
+2026-11-20 08:27:49 papal-trace: #63 handle: calling getUiElement [break_siege_confirmation_scroll]
+2026-11-20 08:27:49 papal-trace: #64 handle: calling getUiElement [captive_ransom_scroll]
+2026-11-20 08:27:49 papal-trace: #65 handle: calling getUiElement [captor_ransom_scroll]
+2026-11-20 08:27:49 papal-trace: #66 handle: calling getUiElement [conditions_complete_scroll]
+2026-11-20 08:27:49 papal-trace: #67 handle: calling getUiElement [convert_settlement_warning_scroll]
+2026-11-20 08:27:49 papal-trace: #68 handle: calling getUiElement [diplomacy_scroll]
+2026-11-20 08:27:49 papal-trace: #69 handle: calling getUiElement [end_deployment_scroll]
+2026-11-20 08:27:49 papal-trace: #70 handle: calling getUiElement [event_scroll]
+2026-11-20 08:27:49 papal-trace: #71 handle: calling getUiElement [exchange_scroll]
+2026-11-20 08:27:49 papal-trace: #72 handle: calling getUiElement [excommunication_attack_warning_scroll]
+2026-11-20 08:27:49 papal-trace: #73 handle: calling getUiElement [faction_events_scroll]
+2026-11-20 08:27:49 papal-trace: #74 handle: calling getUiElement [hotseat_message_scroll]
+2026-11-20 08:27:49 papal-trace: #75 handle: calling getUiElement [hotseat_message_scroll]
+2026-11-20 08:27:49 papal-trace: #76 handle: calling getUiElement [join_crusade_against_ally_scroll]
+2026-11-20 08:27:49 papal-trace: #77 handle: calling getUiElement [join_crusade_against_neutral_scroll]
+2026-11-20 08:27:49 papal-trace: #78 handle: calling getUiElement [join_jihad_against_ally_scroll]
+2026-11-20 08:27:49 papal-trace: #79 handle: calling getUiElement [join_jihad_against_neutral_scroll]
+2026-11-20 08:27:49 papal-trace: #80 handle: calling getUiElement [loot_settlement_scroll]
+2026-11-20 08:27:49 papal-trace: #81 handle: calling getUiElement [message_scroll]
+2026-11-20 08:27:49 papal-trace: #82 handle: calling getUiElement [mission_target_scroll]
+2026-11-20 08:27:49 papal-trace: #83 handle: calling getUiElement [neutral_attack_warning_scroll]
+2026-11-20 08:27:49 papal-trace: #84 handle: calling getUiElement [post_battle_scroll]
+2026-11-20 08:27:49 papal-trace: #85 handle: calling getUiElement [post_battle_stats_scroll]
+2026-11-20 08:27:49 papal-trace: #86 handle: calling getUiElement [prebattle_scroll]
+2026-11-20 08:27:49 papal-trace: #87 handle: calling getUiElement [ransom_result_scroll]
+2026-11-20 08:27:49 papal-trace: #88 handle: calling getUiElement [request_assistance_scroll]
+2026-11-20 08:27:49 papal-trace: #89 handle: calling getUiElement [siege_scroll]
+2026-11-20 08:27:49 papal-trace: #90 handle: calling scriptCommand('clear_messages') [message:40]
+2026-11-20 08:27:49 papal-trace: #91 handle: clear_messages returned [message:40]
+2026-11-20 08:27:49 popup handled: game message 40 (clear_messages)
+2026-11-20 08:27:49 papal-trace: #92 popup handled; done [message:40]
+2026-11-20 08:27:49 papal-trace: #93 calling captured() (asks the turn loop to screenshot it) [message:15]
+2026-11-20 08:27:49 papal-trace: #94 captured() returned done=false how=nil [message:15]
+2026-11-20 08:27:49 papal-trace: #95 calling captured() (asks the turn loop to screenshot it) [message:203]
+2026-11-20 08:27:49 papal-trace: #96 captured() returned done=false how=nil [message:203]
+2026-11-20 08:27:49 agent mission: hre: Peter Scherer's denouncement: slightly successful (chance was 95%)
+2026-11-20 08:27:49 spain: game AI frozen
+2026-11-20 08:27:50 spain: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:50 venice: game AI frozen
+2026-11-20 08:27:51 venice: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:51 papal-trace: #97 calling captured() (asks the turn loop to screenshot it) [message:15]
+2026-11-20 08:27:51 papal-trace: #98 captured() returned done=false how=nil [message:15]
+2026-11-20 08:27:51 papal-trace: #99 calling captured() (asks the turn loop to screenshot it) [message:203]
+2026-11-20 08:27:51 papal-trace: #100 captured() returned done=false how=nil [message:203]
+2026-11-20 08:27:51 sicily: game AI frozen
+2026-11-20 08:27:52 sicily: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:52 milan: game AI frozen
+2026-11-20 08:27:53 milan: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:53 papal-trace: #101 calling captured() (asks the turn loop to screenshot it) [message:15]
+2026-11-20 08:27:53 papal-trace: #102 captured() returned done=true how=captured [message:15]
+2026-11-20 08:27:53 papal-trace: #103 handle: calling getUiElement [ally_attack_warning_scroll]
+2026-11-20 08:27:53 papal-trace: #104 handle: calling getUiElement [battle_delay_scroll]
+2026-11-20 08:27:53 papal-trace: #105 handle: calling getUiElement [break_siege_confirmation_scroll]
+2026-11-20 08:27:53 papal-trace: #106 handle: calling getUiElement [captive_ransom_scroll]
+2026-11-20 08:27:53 papal-trace: #107 handle: calling getUiElement [captor_ransom_scroll]
+2026-11-20 08:27:53 papal-trace: #108 handle: calling getUiElement [conditions_complete_scroll]
+2026-11-20 08:27:53 papal-trace: #109 handle: calling getUiElement [convert_settlement_warning_scroll]
+2026-11-20 08:27:53 papal-trace: #110 handle: calling getUiElement [diplomacy_scroll]
+2026-11-20 08:27:53 papal-trace: #111 handle: calling getUiElement [end_deployment_scroll]
+2026-11-20 08:27:53 papal-trace: #112 handle: calling getUiElement [event_scroll]
+2026-11-20 08:27:53 papal-trace: #113 handle: calling getUiElement [exchange_scroll]
+2026-11-20 08:27:53 papal-trace: #114 handle: calling getUiElement [excommunication_attack_warning_scroll]
+2026-11-20 08:27:53 papal-trace: #115 handle: calling getUiElement [faction_events_scroll]
+2026-11-20 08:27:53 papal-trace: #116 handle: calling getUiElement [hotseat_message_scroll]
+2026-11-20 08:27:53 papal-trace: #117 handle: calling getUiElement [hotseat_message_scroll]
+2026-11-20 08:27:53 papal-trace: #118 handle: calling getUiElement [join_crusade_against_ally_scroll]
+2026-11-20 08:27:53 papal-trace: #119 handle: calling getUiElement [join_crusade_against_neutral_scroll]
+2026-11-20 08:27:53 papal-trace: #120 handle: calling getUiElement [join_jihad_against_ally_scroll]
+2026-11-20 08:27:53 papal-trace: #121 handle: calling getUiElement [join_jihad_against_neutral_scroll]
+2026-11-20 08:27:53 papal-trace: #122 handle: calling getUiElement [loot_settlement_scroll]
+2026-11-20 08:27:53 papal-trace: #123 handle: calling getUiElement [message_scroll]
+2026-11-20 08:27:53 papal-trace: #124 handle: calling getUiElement [mission_target_scroll]
+2026-11-20 08:27:53 papal-trace: #125 handle: calling getUiElement [neutral_attack_warning_scroll]
+2026-11-20 08:27:53 papal-trace: #126 handle: calling getUiElement [post_battle_scroll]
+2026-11-20 08:27:53 papal-trace: #127 handle: calling getUiElement [post_battle_stats_scroll]
+2026-11-20 08:27:53 papal-trace: #128 handle: calling getUiElement [prebattle_scroll]
+2026-11-20 08:27:53 papal-trace: #129 handle: calling getUiElement [ransom_result_scroll]
+2026-11-20 08:27:53 papal-trace: #130 handle: calling getUiElement [request_assistance_scroll]
+2026-11-20 08:27:53 papal-trace: #131 handle: calling getUiElement [siege_scroll]
+2026-11-20 08:27:53 papal-trace: #132 handle: calling scriptCommand('clear_messages') [message:15]
+2026-11-20 08:27:53 papal-trace: #133 handle: clear_messages returned [message:15]
+2026-11-20 08:27:53 popup handled: game message 15 (clear_messages)
+2026-11-20 08:27:53 papal-trace: #134 popup handled; done [message:15]
+2026-11-20 08:27:53 papal-trace: #135 calling captured() (asks the turn loop to screenshot it) [message:203]
+2026-11-20 08:27:53 papal-trace: #136 captured() returned done=false how=nil [message:203]
+2026-11-20 08:27:53 scotland: game AI frozen
+2026-11-20 08:27:54 scotland: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:54 byzantium: game AI frozen
+2026-11-20 08:27:55 byzantium: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:55 papal-trace: #137 calling captured() (asks the turn loop to screenshot it) [message:203]
+2026-11-20 08:27:55 papal-trace: #138 captured() returned done=false how=nil [message:203]
+2026-11-20 08:27:55 russia: game AI frozen
+2026-11-20 08:27:56 russia: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:56 moors: game AI frozen
+2026-11-20 08:27:57 moors: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:57 papal-trace: #139 calling captured() (asks the turn loop to screenshot it) [message:203]
+2026-11-20 08:27:57 papal-trace: #140 captured() returned done=false how=nil [message:203]
+2026-11-20 08:27:57 turks: game AI frozen
+2026-11-20 08:27:58 turks: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:58 egypt: game AI frozen
+2026-11-20 08:27:59 egypt: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:27:59 papal-trace: #141 calling captured() (asks the turn loop to screenshot it) [message:203]
+2026-11-20 08:27:59 papal-trace: #142 captured() returned done=false how=nil [message:203]
+2026-11-20 08:27:59 agent mission: egypt: Tamer Unujur's spying: partly successful (chance was 88%)
+2026-11-20 08:27:59 denmark: game AI frozen
+2026-11-20 08:28:00 denmark: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:00 portugal: game AI frozen
+2026-11-20 08:28:01 portugal: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:01 papal-trace: #143 calling captured() (asks the turn loop to screenshot it) [message:203]
+2026-11-20 08:28:01 papal-trace: #144 captured() returned done=false how=nil [message:203]
+2026-11-20 08:28:01 agent mission: portugal: Lopo Periz's spying: partly successful (chance was 75%)
+2026-11-20 08:28:01 poland: game AI frozen
+2026-11-20 08:28:02 poland: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:02 hungary: game AI frozen
+2026-11-20 08:28:03 hungary: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:03 papal-trace: #145 calling captured() (asks the turn loop to screenshot it) [message:203]
+2026-11-20 08:28:03 papal-trace: #146 captured() returned done=false how=nil [message:203]
+2026-11-20 08:28:03 papal_states: game AI frozen
+2026-11-20 08:28:04 papal_states: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:04 aztecs: game AI frozen (kept)
+2026-11-20 08:28:04 slave: game AI frozen
+2026-11-20 08:28:05 slave: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:05 papal-trace: #147 calling captured() (asks the turn loop to screenshot it) [message:203]
+2026-11-20 08:28:05 papal-trace: #148 captured() returned done=true how=captured [message:203]
+2026-11-20 08:28:05 papal-trace: #149 handle: calling getUiElement [ally_attack_warning_scroll]
+2026-11-20 08:28:05 papal-trace: #150 handle: calling getUiElement [battle_delay_scroll]
+2026-11-20 08:28:05 papal-trace: #151 handle: calling getUiElement [break_siege_confirmation_scroll]
+2026-11-20 08:28:05 papal-trace: #152 handle: calling getUiElement [captive_ransom_scroll]
+2026-11-20 08:28:05 papal-trace: #153 handle: calling getUiElement [captor_ransom_scroll]
+2026-11-20 08:28:05 papal-trace: #154 handle: calling getUiElement [conditions_complete_scroll]
+2026-11-20 08:28:05 papal-trace: #155 handle: calling getUiElement [convert_settlement_warning_scroll]
+2026-11-20 08:28:05 papal-trace: #156 handle: calling getUiElement [diplomacy_scroll]
+2026-11-20 08:28:05 papal-trace: #157 handle: calling getUiElement [end_deployment_scroll]
+2026-11-20 08:28:05 papal-trace: #158 handle: calling getUiElement [event_scroll]
+2026-11-20 08:28:05 papal-trace: #159 handle: calling getUiElement [exchange_scroll]
+2026-11-20 08:28:05 papal-trace: #160 handle: calling getUiElement [excommunication_attack_warning_scroll]
+2026-11-20 08:28:05 papal-trace: #161 handle: calling getUiElement [faction_events_scroll]
+2026-11-20 08:28:05 papal-trace: #162 handle: calling getUiElement [hotseat_message_scroll]
+2026-11-20 08:28:05 papal-trace: #163 handle: calling getUiElement [hotseat_message_scroll]
+2026-11-20 08:28:05 papal-trace: #164 handle: calling getUiElement [join_crusade_against_ally_scroll]
+2026-11-20 08:28:05 papal-trace: #165 handle: calling getUiElement [join_crusade_against_neutral_scroll]
+2026-11-20 08:28:05 papal-trace: #166 handle: calling getUiElement [join_jihad_against_ally_scroll]
+2026-11-20 08:28:05 papal-trace: #167 handle: calling getUiElement [join_jihad_against_neutral_scroll]
+2026-11-20 08:28:05 papal-trace: #168 handle: calling getUiElement [loot_settlement_scroll]
+2026-11-20 08:28:05 papal-trace: #169 handle: calling getUiElement [message_scroll]
+2026-11-20 08:28:05 papal-trace: #170 handle: calling getUiElement [mission_target_scroll]
+2026-11-20 08:28:05 papal-trace: #171 handle: calling getUiElement [neutral_attack_warning_scroll]
+2026-11-20 08:28:05 papal-trace: #172 handle: calling getUiElement [post_battle_scroll]
+2026-11-20 08:28:05 papal-trace: #173 handle: calling getUiElement [post_battle_stats_scroll]
+2026-11-20 08:28:05 papal-trace: #174 handle: calling getUiElement [prebattle_scroll]
+2026-11-20 08:28:05 papal-trace: #175 handle: calling getUiElement [ransom_result_scroll]
+2026-11-20 08:28:05 papal-trace: #176 handle: calling getUiElement [request_assistance_scroll]
+2026-11-20 08:28:05 papal-trace: #177 handle: calling getUiElement [siege_scroll]
+2026-11-20 08:28:05 papal-trace: #178 handle: calling scriptCommand('clear_messages') [message:203]
+2026-11-20 08:28:05 papal-trace: #179 handle: clear_messages returned [message:203]
+2026-11-20 08:28:05 popup handled: game message 203 (clear_messages)
+2026-11-20 08:28:05 papal-trace: #180 popup handled; done [message:203]
+2026-11-20 08:28:05 character event: england: William was struck by a disaster: famine (in London_Province)
+2026-11-20 08:28:05 character event: england: Rufus was struck by a disaster: famine (in York_Province)
+2026-11-20 08:28:05 character event: england: Aston was struck by a disaster: famine (in Nottingham_Province)
+2026-11-20 08:28:05 character event: england: Cecilia was struck by a disaster: famine (in Nottingham_Province)
+2026-11-20 08:28:05 character event: france: Raoulet Poitevin was struck by a disaster: famine (in Rheims_Province)
+2026-11-20 08:28:05 character event: france: Constance was struck by a disaster: famine (in Hohenstauffen_Province)
+2026-11-20 08:28:05 character event: hre: Henry was struck by a disaster: famine (in Hohenstauffen_Province)
+2026-11-20 08:28:05 character event: hre: Captain Gottfied was struck by a disaster: famine (in Hohenstauffen_Province)
+2026-11-20 08:28:05 character event: venice: Cristiano Selvo was struck by a disaster: famine (in Isle_of_Crete)
+2026-11-20 08:28:05 character event: venice: Captain Uberto was struck by a disaster: famine (in Isle_of_Crete)
+2026-11-20 08:28:05 character event: venice: Antonio Selvo was struck by a disaster: famine (in Isle_of_Crete)
+2026-11-20 08:28:05 character event: sicily: Roger was struck by a disaster: famine (in Naples_Province)
+2026-11-20 08:28:05 character event: sicily: Simon was struck by a disaster: famine (in Palermo_Province)
+2026-11-20 08:28:05 character event: sicily: Niccolo Amocacci was struck by a disaster: famine (in Naples_Province)
+2026-11-20 08:28:05 character event: sicily: Captain Rolando was struck by a disaster: famine (in Cagliari_Province)
+2026-11-20 08:28:05 character event: scotland: Patrick Macdougall was struck by a disaster: famine (in Nottingham_Province)
+2026-11-20 08:28:05 character event: byzantium: Anna Comnenus was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:28:05 character event: russia: Antonina was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:28:05 character event: egypt: Saadauri of Hurghada was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:28:05 character event: egypt: Mubarak was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:28:05 character event: egypt: Captain Naguib was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:28:05 character event: egypt: Captain Hazem was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:28:05 character event: egypt: Captain Nasir ad Din was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:28:05 character event: denmark: Charles was struck by a disaster: famine (in Antwerp_Province)
+2026-11-20 08:28:05 character event: denmark: Haakon Svendsen was struck by a disaster: famine (in Hamburg_Province)
+2026-11-20 08:28:05 character event: denmark: Ingrid was struck by a disaster: famine (in Magdeburg_Province)
+2026-11-20 08:28:05 character event: denmark: Captain Henrik was struck by a disaster: famine (in Hamburg_Province)
+2026-11-20 08:28:05 character event: denmark: Halstan was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:28:05 character event: denmark: Toke was struck by a disaster: famine (in Antwerp_Province)
+2026-11-20 08:28:05 character event: poland: Zbigniew Herman was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:28:05 character event: poland: Captain Casimir was struck by a disaster: famine (in Magdeburg_Province)
+2026-11-20 08:28:05 character event: poland: Captain Pawol was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:28:05 character event: papal_states: Froderigus was struck by a disaster: famine (in Roman_Province)
+2026-11-20 08:28:05 character event: papal_states: Guido de Avena was struck by a disaster: famine (in Roman_Province)
+2026-11-20 08:28:05 character event: papal_states: Talentus Arlocti was struck by a disaster: famine (in Naples_Province)
+2026-11-20 08:28:05 character event: papal_states: Tomascius Capitaneus was struck by a disaster: famine (in Roman_Province)
+2026-11-20 08:28:05 character event: slave: Cocozca was struck by a disaster: famine (in North_America)
+2026-11-20 08:28:05 character event: slave: Jubal was struck by a disaster: famine (in Metz_Province)
+2026-11-20 08:28:05 qa: quiet ok: pope=Tomascius Capitaneus age=40->40; england leader=William age=45->45 heir=Rufus age=29->29 towns=4 calmed=0 cured=0
+2026-11-20 08:28:05 turn start england: autoplay_turn_started
+2026-11-20 08:28:05 turn start england: set_governors
+2026-11-20 08:28:05 governors england: London build=false recruit=false; Nottingham build=false recruit=false; Caen build=false recruit=false; York build=false recruit=false
+2026-11-20 08:28:05 turn start england: follow
+2026-11-20 08:28:05 turn start england: apply_orders
+2026-11-20 08:28:05 turn start england: done
+2026-11-20 08:28:05 popup message 40
+2026-11-20 08:28:05 papal-trace: #181 onIncomingMessage: event 40 queued (nothing read from the game) [message:40]
+2026-11-20 08:28:07 autoplay: turn 7: holding End Turn until the turn loop reads a message
+2026-11-20 08:28:09 papal-trace: #182 calling captured() (asks the turn loop to screenshot it) [message:40]
+2026-11-20 08:28:09 papal-trace: #183 captured() returned done=false how=nil [message:40]
+2026-11-20 08:28:11 papal-trace: #184 calling captured() (asks the turn loop to screenshot it) [message:40]
+2026-11-20 08:28:11 papal-trace: #185 captured() returned done=false how=nil [message:40]
+2026-11-20 08:28:13 papal-trace: #186 calling captured() (asks the turn loop to screenshot it) [message:40]
+2026-11-20 08:28:13 papal-trace: #187 captured() returned done=true how=captured [message:40]
+2026-11-20 08:28:13 papal-trace: #188 handle: calling getUiElement [ally_attack_warning_scroll]
+2026-11-20 08:28:13 papal-trace: #189 handle: calling getUiElement [battle_delay_scroll]
+2026-11-20 08:28:13 papal-trace: #190 handle: calling getUiElement [break_siege_confirmation_scroll]
+2026-11-20 08:28:13 papal-trace: #191 handle: calling getUiElement [captive_ransom_scroll]
+2026-11-20 08:28:13 papal-trace: #192 handle: calling getUiElement [captor_ransom_scroll]
+2026-11-20 08:28:13 papal-trace: #193 handle: calling getUiElement [conditions_complete_scroll]
+2026-11-20 08:28:13 papal-trace: #194 handle: calling getUiElement [convert_settlement_warning_scroll]
+2026-11-20 08:28:13 papal-trace: #195 handle: calling getUiElement [diplomacy_scroll]
+2026-11-20 08:28:13 papal-trace: #196 handle: calling getUiElement [end_deployment_scroll]
+2026-11-20 08:28:13 papal-trace: #197 handle: calling getUiElement [event_scroll]
+2026-11-20 08:28:13 papal-trace: #198 handle: calling getUiElement [exchange_scroll]
+2026-11-20 08:28:13 papal-trace: #199 handle: calling getUiElement [excommunication_attack_warning_scroll]
+2026-11-20 08:28:13 papal-trace: #200 handle: calling getUiElement [faction_events_scroll]
+2026-11-20 08:28:13 papal-trace: #201 handle: calling getUiElement [hotseat_message_scroll]
+2026-11-20 08:28:13 papal-trace: #202 handle: calling getUiElement [hotseat_message_scroll]
+2026-11-20 08:28:13 papal-trace: #203 handle: calling getUiElement [join_crusade_against_ally_scroll]
+2026-11-20 08:28:13 papal-trace: #204 handle: calling getUiElement [join_crusade_against_neutral_scroll]
+2026-11-20 08:28:13 papal-trace: #205 handle: calling getUiElement [join_jihad_against_ally_scroll]
+2026-11-20 08:28:13 papal-trace: #206 handle: calling getUiElement [join_jihad_against_neutral_scroll]
+2026-11-20 08:28:13 papal-trace: #207 handle: calling getUiElement [loot_settlement_scroll]
+2026-11-20 08:28:13 papal-trace: #208 handle: calling getUiElement [message_scroll]
+2026-11-20 08:28:13 papal-trace: #209 handle: calling getUiElement [mission_target_scroll]
+2026-11-20 08:28:13 papal-trace: #210 handle: calling getUiElement [neutral_attack_warning_scroll]
+2026-11-20 08:28:13 papal-trace: #211 handle: calling getUiElement [post_battle_scroll]
+2026-11-20 08:28:13 papal-trace: #212 handle: calling getUiElement [post_battle_stats_scroll]
+2026-11-20 08:28:13 papal-trace: #213 handle: calling getUiElement [prebattle_scroll]
+2026-11-20 08:28:13 papal-trace: #214 handle: calling getUiElement [ransom_result_scroll]
+2026-11-20 08:28:13 papal-trace: #215 handle: calling getUiElement [request_assistance_scroll]
+2026-11-20 08:28:13 papal-trace: #216 handle: calling getUiElement [siege_scroll]
+2026-11-20 08:28:13 papal-trace: #217 handle: calling scriptCommand('clear_messages') [message:40]
+2026-11-20 08:28:13 papal-trace: #218 handle: clear_messages returned [message:40]
+2026-11-20 08:28:13 popup handled: game message 40 (clear_messages)
+2026-11-20 08:28:13 papal-trace: #219 popup handled; done [message:40]
+2026-11-20 08:28:13 autoplay: ending turn 7
+2026-11-20 08:28:13 france: game AI frozen
+2026-11-20 08:28:14 france: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:14 hre: game AI frozen
+2026-11-20 08:28:14 control: lua -> 0
+2026-11-20 08:28:14 control: lua -> 0
+2026-11-20 08:28:15 hre: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:15 spain: game AI frozen
+2026-11-20 08:28:15 control: lua -> 0
+2026-11-20 08:28:16 spain: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:16 venice: game AI frozen
+2026-11-20 08:28:16 control: lua -> 0
+2026-11-20 08:28:16 control: lua -> 0
+2026-11-20 08:28:17 venice: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:17 sicily: game AI frozen
+2026-11-20 08:28:17 control: lua -> 0
+2026-11-20 08:28:18 sicily: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:18 milan: game AI frozen
+2026-11-20 08:28:18 control: lua -> 0
+2026-11-20 08:28:19 milan: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:19 control: lua -> 0
+2026-11-20 08:28:19 scotland: game AI frozen
+2026-11-20 08:28:19 control: lua -> 0
+2026-11-20 08:28:20 scotland: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:20 control: lua -> 0
+2026-11-20 08:28:20 byzantium: game AI frozen
+2026-11-20 08:28:20 control: lua -> 0
+2026-11-20 08:28:21 byzantium: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:21 russia: game AI frozen
+2026-11-20 08:28:21 control: lua -> 0
+2026-11-20 08:28:22 russia: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:22 moors: game AI frozen
+2026-11-20 08:28:22 control: lua -> 0
+2026-11-20 08:28:22 control: lua -> 0
+2026-11-20 08:28:23 moors: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:23 turks: game AI frozen
+2026-11-20 08:28:23 control: lua -> 0
+2026-11-20 08:28:24 control: lua -> 0
+2026-11-20 08:28:24 turks: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:24 egypt: game AI frozen
+2026-11-20 08:28:24 control: lua -> 0
+2026-11-20 08:28:25 egypt: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:25 agent mission: egypt: Tamer Unujur's spying: partly successful (chance was 88%)
+2026-11-20 08:28:25 denmark: game AI frozen
+2026-11-20 08:28:25 control: lua -> 0
+2026-11-20 08:28:26 control: lua -> 0
+2026-11-20 08:28:26 denmark: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:26 portugal: game AI frozen
+2026-11-20 08:28:26 control: lua -> 0
+2026-11-20 08:28:27 portugal: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:27 agent mission: portugal: Lopo Periz's spying: not successful (chance was 75%)
+2026-11-20 08:28:27 poland: game AI frozen
+2026-11-20 08:28:27 control: lua -> 0
+2026-11-20 08:28:28 control: lua -> 0
+2026-11-20 08:28:28 poland: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:28 hungary: game AI frozen
+2026-11-20 08:28:28 control: lua -> 0
+2026-11-20 08:28:29 hungary: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:29 papal_states: game AI frozen
+2026-11-20 08:28:29 control: lua -> 0
+2026-11-20 08:28:29 control: lua -> 0
+2026-11-20 08:28:30 papal_states: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:30 aztecs: game AI frozen (kept)
+2026-11-20 08:28:30 slave: game AI frozen
+2026-11-20 08:28:30 control: lua -> 0
+2026-11-20 08:28:31 slave: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:31 character event: england: William was struck by a disaster: famine (in London_Province)
+2026-11-20 08:28:31 character event: england: Rufus was struck by a disaster: famine (in York_Province)
+2026-11-20 08:28:31 character event: england: Aston was struck by a disaster: famine (in Nottingham_Province)
+2026-11-20 08:28:31 character event: england: Cecilia was struck by a disaster: famine (in Nottingham_Province)
+2026-11-20 08:28:31 character event: england: Henry was struck by a disaster: famine (in London_Province)
+2026-11-20 08:28:31 character event: france: Raoulet Poitevin was struck by a disaster: famine (in Rheims_Province)
+2026-11-20 08:28:31 character event: france: Constance was struck by a disaster: famine (in Hohenstauffen_Province)
+2026-11-20 08:28:31 character event: hre: Henry was struck by a disaster: famine (in Hohenstauffen_Province)
+2026-11-20 08:28:31 character event: hre: Captain Gottfied was struck by a disaster: famine (in Hohenstauffen_Province)
+2026-11-20 08:28:31 character event: venice: Cristiano Selvo was struck by a disaster: famine (in Isle_of_Crete)
+2026-11-20 08:28:31 character event: venice: Antonio Selvo was struck by a disaster: famine (in Isle_of_Crete)
+2026-11-20 08:28:31 character event: sicily: Roger was struck by a disaster: famine (in Naples_Province)
+2026-11-20 08:28:31 character event: sicily: Simon was struck by a disaster: famine (in Palermo_Province)
+2026-11-20 08:28:31 character event: sicily: Niccolo Amocacci was struck by a disaster: famine (in Naples_Province)
+2026-11-20 08:28:31 character event: scotland: Patrick Macdougall was struck by a disaster: famine (in Nottingham_Province)
+2026-11-20 08:28:31 character event: byzantium: Anna Comnenus was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:28:31 character event: russia: Antonina was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:28:31 character event: egypt: Saadauri of Hurghada was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:28:31 character event: egypt: Mubarak was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:28:31 character event: egypt: Captain Naguib was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:28:31 character event: egypt: Captain al Mahdi was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:28:31 character event: egypt: Captain Hazem was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:28:31 character event: egypt: Captain Nasir ad Din was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:28:31 character event: egypt: Captain al Wathiq was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:28:31 character event: denmark: Charles was struck by a disaster: famine (in Hamburg_Province)
+2026-11-20 08:28:31 character event: denmark: Haakon Svendsen was struck by a disaster: famine (in Hamburg_Province)
+2026-11-20 08:28:31 character event: denmark: Ingrid was struck by a disaster: famine (in Magdeburg_Province)
+2026-11-20 08:28:31 character event: denmark: Captain Henrik was struck by a disaster: famine (in Hamburg_Province)
+2026-11-20 08:28:31 character event: denmark: Halstan was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:28:31 character event: denmark: Toke was struck by a disaster: famine (in Antwerp_Province)
+2026-11-20 08:28:31 character event: poland: Zbigniew Herman was struck by a disaster: famine (in Halych_Province)
+2026-11-20 08:28:31 character event: papal_states: Froderigus was struck by a disaster: famine (in Roman_Province)
+2026-11-20 08:28:31 character event: papal_states: Guido de Avena was struck by a disaster: famine (in Roman_Province)
+2026-11-20 08:28:31 character event: papal_states: Talentus Arlocti was struck by a disaster: famine (in Palermo_Province)
+2026-11-20 08:28:31 character event: papal_states: Tomascius Capitaneus was struck by a disaster: famine (in Roman_Province)
+2026-11-20 08:28:31 character event: papal_states: Captain Barone was struck by a disaster: famine (in Roman_Province)
+2026-11-20 08:28:31 character event: slave: Cocozca was struck by a disaster: famine (in North_America)
+2026-11-20 08:28:31 character event: slave: Captain Allam was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:28:31 marrying Henry age 16
+2026-11-20 08:28:31 character event: england: Henry married (in London_Province)
+2026-11-20 08:28:31 qa: england's single men married on the bench: 1
+2026-11-20 08:28:31 qa: quiet ok: pope=Tomascius Capitaneus age=41->41; england leader=William age=46->45 heir=Rufus age=30->30 towns=4 calmed=0 cured=0
+2026-11-20 08:28:31 turn start england: autoplay_turn_started
+2026-11-20 08:28:31 turn start england: set_governors
+2026-11-20 08:28:31 governors england: London build=false recruit=false; Nottingham build=false recruit=false; Caen build=false recruit=false; York build=false recruit=false
+2026-11-20 08:28:31 turn start england: follow
+2026-11-20 08:28:31 turn start england: apply_orders
+2026-11-20 08:28:31 turn start england: done
+2026-11-20 08:28:31 popup message 40
+2026-11-20 08:28:31 papal-trace: #220 onIncomingMessage: event 40 queued (nothing read from the game) [message:40]
+2026-11-20 08:28:31 control: lua -> 1
+2026-11-20 08:28:32 qa: load ok: mods/parley/saves/parley_keep_scratch.sav
+2026-11-20 08:28:32 control: lua -> mods/parley/saves/parley_keep_scratch.sav
+2026-11-20 08:28:33 paused: qa instant case: holding the turn
+2026-11-20 08:28:39 papal-trace: PREVIOUS RUN ENDED MID-STEP (papal scrolls so far: 64), last=onIncomingMessage: event 40 queued (nothing read from the game) scroll=message:40 at=2026-11-20 08:28:31 turn=8
+2026-11-20 08:28:39 fault catcher: on (installed at the game's launch; parley_turns/fault.bin still mapped by it)
+2026-11-20 08:28:39 bridge loaded campaign at turn 2018
+2026-11-20 08:28:39 autoplay: auto-resolve all battles on
+2026-11-20 08:28:39 france: Admiral Lucas's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:28:39 france: Admiral Baldwin's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:28:39 france: Admiral Godfrey's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:28:39 EOP campaign AI: off (was on)
+2026-11-20 08:28:39 marriage offers back on (maxAgeForMarriageMale -> 75)
+2026-11-20 08:28:39 adoption offers back on (maxAdoptionAge -> 30)
+2026-11-20 08:28:39 suitor offers back on (maxAgeForMarriageForFemale -> 40)
+2026-11-20 08:28:39 resumed
+2026-11-20 08:28:39 england order 0 bribe: done
+2026-11-20 08:28:39 autoplay: ending turn 2018
+2026-11-20 08:28:41 agent mission: england: Jasper Harrold's bribery: not successful
+2026-11-20 08:28:48 stance: england|france peace -> alliance (seen at the end of england's turn 2018)
+2026-11-20 08:28:48 stance: england|portugal peace -> war (seen at the end of england's turn 2018)
+2026-11-20 08:28:48 stance: england|hungary peace -> alliance (seen at the end of england's turn 2018)
+2026-11-20 08:28:48 stance: england|papal_states alliance -> peace (seen at the end of england's turn 2018)
+2026-11-20 08:28:48 france: game AI frozen
+2026-11-20 08:28:48 france order 0 attack: done
+2026-11-20 08:28:48 france recruits Town Militia in Dijon for 290; ready turn 2019
+2026-11-20 08:28:48 france order 1 recruit: done
+2026-11-20 08:28:48 france recruits Town Militia in Dijon for 290; ready turn 2019
+2026-11-20 08:28:48 france order 2 recruit: done
+2026-11-20 08:28:48 france order 3 merge_armies: done
+2026-11-20 08:28:48 france order 4 merge_armies: done
+2026-11-20 08:28:48 france order 5 march_on: done
+2026-11-20 08:28:48 france recruits Town Militia in Riga for 290; ready turn 2019
+2026-11-20 08:28:48 france order 6 recruit: done
+2026-11-20 08:28:48 france recruits Town Militia in Riga for 290; ready turn 2020
+2026-11-20 08:28:48 france order 7 recruit: done
+2026-11-20 08:28:48 france recruits Town Militia in Riga for 290; ready turn 2020
+2026-11-20 08:28:48 france order 8 recruit: done
+2026-11-20 08:28:50 france: turn still running after 2s frozen; game AI unfrozen until its next turn
+2026-11-20 08:28:50 character event: france: Captain Guillaume was struck by a disaster: plague (in Moscow_Province)
+2026-11-20 08:28:50 agent mission: france: Emery's denouncement: not successful (chance was 72%)
+2026-11-20 08:29:01 agent mission: scotland: Malcolm Boyd's denouncement: slightly successful (chance was 90%)
+2026-11-20 08:29:04 stance: russia|scotland peace -> alliance (seen at the end of scotland's turn 2018)
+2026-11-20 08:29:04 stance: moors|scotland peace -> war (seen at the end of scotland's turn 2018)
+2026-11-20 08:29:04 stance: scotland|turks peace -> war (seen at the end of scotland's turn 2018)
+2026-11-20 08:29:04 stance: portugal|scotland peace -> war (seen at the end of scotland's turn 2018)
+2026-11-20 08:29:04 stance: hungary|scotland peace -> alliance (seen at the end of scotland's turn 2018)
+2026-11-20 08:29:04 stance: papal_states|scotland alliance -> peace (seen at the end of scotland's turn 2018)
+2026-11-20 08:29:04 stance: mongols|scotland peace -> war (seen at the end of scotland's turn 2018)
+2026-11-20 08:29:04 stance: denmark|russia peace -> alliance (seen at the end of russia's turn 2018)
+2026-11-20 08:29:04 stance: russia|timurids peace -> war (seen at the end of russia's turn 2018)
+2026-11-20 08:29:04 stance: hungary|venice peace -> war (seen at the end of hungary's turn 2018)
+2026-11-20 08:29:04 stance: hungary|sicily peace -> war (seen at the end of hungary's turn 2018)
+2026-11-20 08:29:04 stance: hungary|milan peace -> war (seen at the end of hungary's turn 2018)
+2026-11-20 08:29:04 stance: byzantium|hungary alliance -> war (seen at the end of hungary's turn 2018)
+2026-11-20 08:29:04 stance: hungary|moors peace -> war (seen at the end of hungary's turn 2018)
+2026-11-20 08:29:04 stance: hungary|turks peace -> war (seen at the end of hungary's turn 2018)
+2026-11-20 08:29:04 stance: egypt|hungary peace -> alliance (seen at the end of hungary's turn 2018)
+2026-11-20 08:29:04 stance: hungary|portugal peace -> war (seen at the end of hungary's turn 2018)
+2026-11-20 08:29:04 stance: hungary|papal_states alliance -> peace (seen at the end of hungary's turn 2018)
+2026-11-20 08:29:04 stance: hungary|timurids peace -> war (seen at the end of hungary's turn 2018)
+2026-11-20 08:29:04 stance: hre|papal_states alliance -> peace (seen at the end of papal_states's turn 2018)
+2026-11-20 08:29:04 stance: papal_states|venice alliance -> peace (seen at the end of papal_states's turn 2018)
+2026-11-20 08:29:04 stance: milan|papal_states alliance -> peace (seen at the end of papal_states's turn 2018)
+2026-11-20 08:29:04 stance: byzantium|papal_states peace -> war (seen at the end of papal_states's turn 2018)
+2026-11-20 08:29:04 stance: papal_states|turks peace -> war (seen at the end of papal_states's turn 2018)
+2026-11-20 08:29:04 stance: denmark|papal_states alliance -> peace (seen at the end of papal_states's turn 2018)
+2026-11-20 08:29:04 stance: papal_states|portugal alliance -> war (seen at the end of papal_states's turn 2018)
+2026-11-20 08:29:04 stance: papal_states|poland alliance -> peace (seen at the end of papal_states's turn 2018)
+2026-11-20 08:29:04 stance: papal_states|timurids peace -> war (seen at the end of papal_states's turn 2018)
+2026-11-20 08:29:04 stance: byzantium|mongols peace -> war (seen at the end of mongols's turn 2018)
+2026-11-20 08:29:05 stance: mongols|slave peace -> war (seen at the end of slave's turn 2018)
+2026-11-20 08:29:05 stance: slave|timurids peace -> war (seen at the end of slave's turn 2018)
+2026-11-20 08:29:05 character event: england: Geiles of Hartford was struck by a disaster: famine (in York_Province)
+2026-11-20 08:29:05 character event: england: Hubert Canton was struck by a disaster: famine (in Nottingham_Province)
+2026-11-20 08:29:05 character event: france: Volo Tristram was struck by a disaster: famine (in Genoa_Province)
+2026-11-20 08:29:05 character event: france: Mahiet Mauvoisin married (in Ragusa_Province)
+2026-11-20 08:29:05 character event: france: Guillemot le Brun was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:29:05 character event: france: Gaspard de Bouillon was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:29:05 character event: france: Francis was struck by a disaster: famine (in Bran_Province)
+2026-11-20 08:29:05 character event: france: Loys des Roches was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:29:05 character event: france: Clement Marcel was struck by a disaster: famine (in Pamplona_Province)
+2026-11-20 08:29:05 character event: france: Hermant Brunius was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:29:05 character event: france: Perrin was struck by a disaster: famine (in Corinth_Province)
+2026-11-20 08:29:05 character event: france: Bohemond Touchet was struck by a disaster: famine (in Pamplona_Province)
+2026-11-20 08:29:05 character event: france: Captain Colet was struck by a disaster: famine (in Genoa_Province)
+2026-11-20 08:29:05 character event: france: Gieffroy was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:29:05 character event: france: Captain Volo was struck by a disaster: famine (in Helsinki_Province)
+2026-11-20 08:29:05 character event: scotland: Farquar of Argyll was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:29:05 character event: scotland: Allan was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Cathal of Ayrshire was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:29:05 character event: scotland: Domongart of Sutherland was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:29:05 character event: scotland: Aed Buchan was struck by a disaster: famine (in Edessa_Province)
+2026-11-20 08:29:05 character event: scotland: Edmund was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:29:05 character event: scotland: Dougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Morgunn was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Edmund was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Raibert of Renfrewshire was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:29:05 character event: scotland: Gille Petair was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Mac Bethad was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Raibert was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Captain Edmund was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Broccin was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Kyle was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Cormac was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Morgunn was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Dougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Kirk Mar was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:29:05 character event: scotland: Dauid was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Farquar of East Lothian was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Fearghus of Ayrshire was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Allan Macdougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Eoin of Peeblesshire was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Finguine Forster was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Algune of Bute was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Donald the Boroundoun was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Gille Patrick Feniss was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: David of Moray was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Donnchadh Maknab was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: scotland: Cormac of Caithness was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: hungary: Orsolya Szabo was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:29:05 character event: papal_states: Gionta Fornarius was struck by a disaster: famine (in Florence_Province)
+2026-11-20 08:29:05 character event: aztecs: Motelchiuh of Tlatelolco was struck by a disaster: famine (in Tenochtitlan_Province)
+2026-11-20 08:29:05 character event: aztecs: Tlacochcalcatl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:29:05 character event: aztecs: Quahcoatl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:29:05 character event: aztecs: Tochintecuhtli of Valsequillo was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:29:05 character event: aztecs: Quahcoatl of Valsequillo was struck by a disaster: famine (in Tenochtitlan_Province)
+2026-11-20 08:29:05 character event: aztecs: Matlalihuitl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:29:05 character event: mongols: Kaiblis of the Arulad was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:29:05 character event: mongols: Batudai of the Oirat was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:29:05 character event: mongols: Captain Jebu was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:29:05 character event: mongols: Jagadai of the Borjigin was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:29:05 character event: slave: Captain Axayactaztin was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:29:05 character event: slave: Finguine was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: slave: Heliot Gassou was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:29:05 character event: slave: Cerzula was struck by a disaster: famine (in Florence_Province)
+2026-11-20 08:29:05 character event: slave: Captain Perrot was struck by a disaster: famine (in Genoa_Province)
+2026-11-20 08:29:05 character event: slave: Domnall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: slave: Captain Nectan was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:29:05 character event: slave: Gille Petair of East Lothian was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:05 character event: slave: Guillaume Meurent was struck by a disaster: famine (in Isle_of_Crete)
+2026-11-20 08:29:05 character event: slave: Stephen of Ashbourne was struck by a disaster: famine (in Caernarvon_Province)
+2026-11-20 08:29:05 turn start england: autoplay_turn_started
+2026-11-20 08:29:05 turn start england: set_governors
+2026-11-20 08:29:05 governors england: Caernarvon build=false recruit=false; Edinburgh build=false recruit=false; York build=false recruit=false; Dublin build=false recruit=false; Inverness build=false recruit=false; London build=false recruit=false; Nottingham build=false recruit=false; Caen build=false recruit=false; Bruges build=false recruit=false; Antwerp build=false recruit=false
+2026-11-20 08:29:05 turn start england: follow
+2026-11-20 08:29:05 turn start england: apply_orders
+2026-11-20 08:29:05 turn start england: done
+2026-11-20 08:29:07 popup message 40
+2026-11-20 08:29:07 papal-trace: #1 onIncomingMessage: event 40 queued (nothing read from the game) [message:40]
+2026-11-20 08:29:08 popup message 9
+2026-11-20 08:29:08 papal-trace: #2 onIncomingMessage: event 9 queued (nothing read from the game) [message:9]
+2026-11-20 08:29:09 popup message 209
+2026-11-20 08:29:09 papal-trace: #3 onIncomingMessage: event 209 queued (nothing read from the game) [message:209]
+2026-11-20 08:29:15 popup handled: game message 40 (clear_messages)
+2026-11-20 08:29:19 popup handled: game message 9 (clear_messages)
+2026-11-20 08:29:23 popup handled: game message 209 (clear_messages)
+2026-11-20 08:29:33 england order 0 set_tax: done
+2026-11-20 08:29:33 england order 1 bribe: done
+2026-11-20 08:29:33 england order 2 assassinate: done: 'William of Glastonbury' is 8 tiles from Thomas de Bouillon: walking there instead; act from the next tile
+2026-11-20 08:29:33 england order 3 move_army: Caernarvon's garrison has 20 units and this army 18: 38, over the 20 a settlement holds, so it would stay outside. Disband or leave units out first, or merge_units to fold worn ones
+2026-11-20 08:29:33 autoplay: ending turn 2019
+2026-11-20 08:29:34 france: game AI frozen
+2026-11-20 08:29:34 france: Town Militia trained in Dijon
+2026-11-20 08:29:34 france: Town Militia trained in Dijon
+2026-11-20 08:29:34 france: Town Militia trained in Riga
+2026-11-20 08:29:34 france: Town Militia trained in Riga
+2026-11-20 08:29:34 france: Town Militia trained in Riga
+2026-11-20 08:29:34 france: Town Militia trained in Dijon
+2026-11-20 08:29:34 france: Town Militia trained in Dijon
+2026-11-20 08:29:34 france: Town Militia trained in Riga
+2026-11-20 08:29:34 france order 0 merge_armies: unknown army 'Captain Rene': not one of your armies by that name now; the game AI that also runs your realm moves armies and renames their captains between your turns, so use the ids in your latest report
+2026-11-20 08:29:34 france order 1 merge_armies: unknown army 'Captain Guillemin': not one of your armies by that name now; the game AI that also runs your realm moves armies and renames their captains between your turns, so use the ids in your latest report
+2026-11-20 08:29:34 france disband garrison:Iasi: 1 EE Peasants released
+2026-11-20 08:29:34 france order 2 disband: done
+2026-11-20 08:29:34 france order 3 set_tax: done
+2026-11-20 08:29:34 france order 4 set_tax: done
+2026-11-20 08:29:34 agent mission: england: Jasper Harrold's bribery: not successful
+2026-11-20 08:29:35 france: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:29:35 agent mission: france: Gieffroy's denouncement: slightly successful (chance was 82%)
+2026-11-20 08:29:35 agent mission: france: Emery's denouncement: not successful (chance was 72%)
+2026-11-20 08:29:49 character event: england: Geiles of Hartford was struck by a disaster: famine (in York_Province)
+2026-11-20 08:29:49 character event: england: Hubert Canton was struck by a disaster: famine (in Nottingham_Province)
+2026-11-20 08:29:49 character event: france: Volo Tristram was struck by a disaster: famine (in Genoa_Province)
+2026-11-20 08:29:49 character event: france: Guillemot le Brun was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:29:49 character event: france: Philippe de Valence was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:29:49 character event: france: Guillemot Marcel married (in Paris_Province)
+2026-11-20 08:29:49 character event: france: Gaspard de Bouillon was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:29:49 character event: france: Captain Raymond was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:29:49 character event: france: Francis was struck by a disaster: famine (in Bran_Province)
+2026-11-20 08:29:49 character event: france: Loys des Roches was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:29:49 character event: france: Perrin was struck by a disaster: famine (in Corinth_Province)
+2026-11-20 08:29:49 character event: france: Arthur d Albret was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:29:49 character event: france: Bohemond Touchet was struck by a disaster: famine (in Pamplona_Province)
+2026-11-20 08:29:49 character event: france: Captain Colet was struck by a disaster: famine (in Genoa_Province)
+2026-11-20 08:29:49 character event: france: Fulk de Montfort was struck by a disaster: famine (in Florence_Province)
+2026-11-20 08:29:49 character event: france: Gieffroy was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:29:49 character event: scotland: Allan was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Cathal of Ayrshire was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:29:49 character event: scotland: Domongart of Sutherland was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:29:49 character event: scotland: Aed Buchan was struck by a disaster: famine (in Edessa_Province)
+2026-11-20 08:29:49 character event: scotland: Dougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Morgunn was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Raibert of Renfrewshire was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:29:49 character event: scotland: Gille Calline of Bute was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:29:49 character event: scotland: Gille Petair was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Mac Bethad was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Raibert was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Captain Edmund was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Broccin was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Kyle was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Cormac was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Morgunn was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Gille Petair Macgoulchane was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Dougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Kirk Mar was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:29:49 character event: scotland: Dauid was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Farquar of East Lothian was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Fearghus of Ayrshire was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Allan Macdougall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Eoin of Peeblesshire was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Finguine Forster was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Algune of Bute was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Donald the Boroundoun was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Captain Hew was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:29:49 character event: scotland: David of Moray was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Donnchadh Maknab was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: scotland: Cormac of Caithness was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: russia: Zaiats Vasilievich married (in Trebizond_Province)
+2026-11-20 08:29:49 character event: hungary: Harkany married (in Isle_of_Rhodes)
+2026-11-20 08:29:49 character event: hungary: Orsolya Szabo was struck by a disaster: famine (in Alexandria_Province)
+2026-11-20 08:29:49 character event: papal_states: Gionta Fornarius was struck by a disaster: famine (in Florence_Province)
+2026-11-20 08:29:49 character event: aztecs: Motelchiuh of Tlatelolco was struck by a disaster: famine (in Tenochtitlan_Province)
+2026-11-20 08:29:49 character event: aztecs: Tlacochcalcatl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:29:49 character event: aztecs: Quahcoatl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:29:49 character event: aztecs: Tochintecuhtli of Valsequillo was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:29:49 character event: aztecs: Quahcoatl of Valsequillo was struck by a disaster: famine (in Tenochtitlan_Province)
+2026-11-20 08:29:49 character event: aztecs: Matlalihuitl of Tlatelolco was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:29:49 character event: mongols: Kaiblis of the Arulad was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:29:49 character event: mongols: Batudai of the Oirat was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:29:49 character event: mongols: Captain Jebu was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:29:49 character event: mongols: Jagadai of the Borjigin was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:29:49 character event: slave: Captain Axayactaztin was struck by a disaster: famine (in Cholula_Province)
+2026-11-20 08:29:49 character event: slave: Finguine was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: slave: Cerzula was struck by a disaster: famine (in Florence_Province)
+2026-11-20 08:29:49 character event: slave: Stephen of Ashbourne was struck by a disaster: famine (in Caernarvon_Province)
+2026-11-20 08:29:49 character event: slave: Domnall was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 character event: slave: Captain Nectan was struck by a disaster: famine (in Arhus_Province)
+2026-11-20 08:29:49 character event: slave: Gille Petair of East Lothian was struck by a disaster: famine (in Gaza_Province)
+2026-11-20 08:29:49 england: Admiral Anthony's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:29:49 england: Admiral Morcar's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:29:49 england: Admiral Thomas's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:29:49 england: Admiral Gregory's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:29:49 england: Admiral Richard's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:29:49 england: Admiral Hugh's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:29:49 turn start england: autoplay_turn_started
+2026-11-20 08:29:49 turn start england: set_governors
+2026-11-20 08:29:49 governors england: Caernarvon build=false recruit=false; Edinburgh build=false recruit=false; York build=false recruit=false; Dublin build=false recruit=false; Inverness build=false recruit=false; London build=false recruit=false; Nottingham build=false recruit=false; Caen build=false recruit=false; Bruges build=false recruit=false; Antwerp build=false recruit=false
+2026-11-20 08:29:49 turn start england: follow
+2026-11-20 08:29:49 turn start england: apply_orders
+2026-11-20 08:29:49 turn start england: done
+2026-11-20 08:29:51 popup message 40
+2026-11-20 08:29:51 papal-trace: #4 onIncomingMessage: event 40 queued (nothing read from the game) [message:40]
+2026-11-20 08:29:52 popup message 27
+2026-11-20 08:29:52 papal-trace: #5 onIncomingMessage: event 27 queued (nothing read from the game) [message:27]
+2026-11-20 08:29:53 popup message 211
+2026-11-20 08:29:53 papal-trace: #6 onIncomingMessage: event 211 queued (nothing read from the game) [message:211]
+2026-11-20 08:29:59 popup handled: game message 40 (clear_messages)
+2026-11-20 08:30:03 popup handled: game message 27 (clear_messages)
+2026-11-20 08:30:07 popup handled: game message 211 (clear_messages)
+2026-11-20 08:30:39 england order 0 move_army: done
+2026-11-20 08:30:39 england order 1 move_army: done
+2026-11-20 08:30:39 england order 2 bribe: done
+2026-11-20 08:30:39 england order 3 move_agent: done
+2026-11-20 08:30:39 autoplay: ending turn 2020
+2026-11-20 08:30:40 france: game AI frozen
+2026-11-20 08:30:40 france: Admiral Lucas's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:30:40 france: Admiral Baldwin's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:30:40 france: Admiral Godfrey's age held at 50 (was 51): an admiral's death crashes the game
+2026-11-20 08:30:40 france: Town Militia trained in Riga
+2026-11-20 08:30:40 france: Town Militia trained in Riga
+2026-11-20 08:30:40 france order 0 merge_armies: done
+2026-11-20 08:30:40 france order 1 set_tax: done
+2026-11-20 08:30:40 france order 2 merge_armies: done
+2026-11-20 08:30:40 merge_armies: Vilain de Marigny is walking to join garrison:Hamburg (3 tiles); it merges when it arrives
+2026-11-20 08:30:40 france order 3 merge_armies: done
+2026-11-20 08:30:40 france order 4 set_tax: done
+2026-11-20 08:30:40 france recruits Peasants in Helsinki for 110; ready turn 2021
+2026-11-20 08:30:40 france order 5 recruit: done
+2026-11-20 08:30:40 france disband Captain Gaspard: 8 Peasants released
+2026-11-20 08:30:40 france order 6 disband: done
+2026-11-20 08:30:41 france: turn still running after 1s frozen; game AI unfrozen until its next turn
+2026-11-20 08:30:41 agent mission: england: Jasper Harrold's bribery: not successful
+2026-11-20 08:30:41 agent mission: france: Philippe de_Calais's denouncement: slightly successful (chance was 52%)
+2026-11-20 08:30:52 character event: england: Geiles of Hartford was struck by a disaster: famine (in York_Province)
+2026-11-20 08:30:52 character event: england: Hubert Canton was struck by a disaster: famine (in Nottingham_Province)
+2026-11-20 08:30:52 character event: england: Josias Allen was struck by a disaster: famine (in Edinburgh_Province)
+2026-11-20 08:30:52 character event: england: Stephen Underwood was struck by a disaster: famine (in Edinburgh_Province)
+2026-11-20 08:30:52 character event: england: Captain Nigel was struck by a disaster: famine (in York_Province)
+2026-11-20 08:30:52 character event: england: John Sparke was struck by a disaster: famine (in Edinburgh_Province)
+2026-11-20 08:30:52 character event: france: Loys Touchet married (in Rheims_Province)
+2026-11-20 08:30:52 character event: france: Volo Tristram was struck by a disaster: famine (in Genoa_Province)
+2026-11-20 08:30:52 character event: france: Marc de Paris was struck by a disaster: famine (in Thorn_Province)
+2026-11-20 08:30:52 character event: france: Milet de Brabant was struck by a disaster: famine (in Magdeburg_Province)
+2026-11-20 08:30:52 character event: france: Philippe de Valence was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:30:52 character event: france: Jaques de Paris was struck by a disaster: famine (in Prague_Province)
+2026-11-20 08:30:52 character event: france: Francois Veron was struck by a disaster: famine (in Dongola_Province)
+2026-11-20 08:30:52 character event: france: Adenin de Breze was struck by a disaster: famine (in Dongola_Province)
+2026-11-20 08:30:52 character event: france: Bohemond d Albret was struck by a disaster: famine (in Mosul_Province)
+2026-11-20 08:30:52 character event: france: Lucas de Richemont was struck by a disaster: famine (in Bologna_Province)
+2026-11-20 08:30:52 character event: france: Captain Heliot was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:30:52 character event: france: Captain Raymond was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:30:52 character event: france: Robin de Foix was struck by a disaster: famine (in Dongola_Province)
+2026-11-20 08:30:52 character event: france: Francis was struck by a disaster: famine (in Bran_Province)
+2026-11-20 08:30:52 character event: france: Loys des Roches was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:30:52 character event: france: Gieffroy was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:30:52 character event: france: Germain de Bordeaux was struck by a disaster: famine (in Prague_Province)
+2026-11-20 08:30:52 character event: france: Geoffroi de Calais was struck by a disaster: famine (in Dongola_Province)
+2026-11-20 08:30:52 character event: france: Simon de Bourbon was struck by a disaster: famine (in Prague_Province)
+2026-11-20 08:30:52 character event: france: Emery de Paris was struck by a disaster: famine (in Pamplona_Province)
+2026-11-20 08:30:52 character event: france: Arthur d Albret was struck by a disaster: famine (in Prague_Province)
+2026-11-20 08:30:52 character event: france: Bohemond Touchet was struck by a disaster: famine (in Pamplona_Province)
+2026-11-20 08:30:52 character event: france: Fulk de Montfort was struck by a disaster: famine (in Florence_Province)
+2026-11-20 08:30:52 character event: france: Captain Oudart was struck by a disaster: famine (in Thorn_Province)
+2026-11-20 08:30:52 character event: scotland: Cathal of Ayrshire was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:30:52 character event: scotland: Domongart of Sutherland was struck by a disaster: famine (in Stettin_Province)
+2026-11-20 08:30:52 character event: scotland: Nevin Cwnyngame was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:30:52 character event: scotland: Domnall of Argyll was struck by a disaster: famine (in Mosul_Province)
+2026-11-20 08:30:52 character event: scotland: Cormac Maknakill was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:30:52 character event: scotland: Raibert of Renfrewshire was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:30:52 character event: scotland: James of Sutherland was struck by a disaster: famine (in Baghdad_Province)
+2026-11-20 08:30:52 character event: scotland: Captain Micheil was struck by a disaster: famine (in Mosul_Province)
+2026-11-20 08:30:52 character event: scotland: Gille Calline of Bute was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:30:52 character event: scotland: Farquar Cwnyngame was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:30:52 character event: scotland: Alexander Forster was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:30:52 character event: scotland: Gawain Wallace was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:30:52 character event: scotland: Kirk Mar was struck by a disaster: famine (in Constantinople_Province)
+2026-11-20 08:30:52 character event: scotland: Aed Buchan lost his father to a natural death (in Edessa_Province)
+2026-11-20 08:30:52 character event: papal_states: Gionta Fornarius was struck by a disaster: famine (in Florence_Province)
+2026-11-20 08:30:52 character event: mongols: Kaiblis of the Arulad was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:30:52 character event: mongols: Batudai of the Oirat married (in Ajaccio_Province)
+2026-11-20 08:30:52 character event: mongols: Batudai of the Oirat was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:30:52 character event: mongols: Captain Jebu was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:30:52 character event: mongols: Jagadai of the Borjigin was struck by a disaster: famine (in Ajaccio_Province)
+2026-11-20 08:30:52 character event: slave: Radoslaw of Elblag was struck by a disaster: famine (in Cracow_Province)
+2026-11-20 08:30:52 character event: slave: Cerzula was struck by a disaster: famine (in Bologna_Province)
+2026-11-20 08:30:52 character event: slave: Captain al Labi was struck by a disaster: famine (in Baghdad_Province)
+2026-11-20 08:30:52 character event: slave: Captain Camargo was struck by a disaster: famine (in Brazil)
+2026-11-20 08:30:52 character event: slave: Stephen of Ashbourne was struck by a disaster: famine (in Caernarvon_Province)
+2026-11-20 08:30:52 character event: slave: Captain Canbius was struck by a disaster: famine (in Roman_Province)
+2026-11-20 08:30:52 turn start england: autoplay_turn_started
+2026-11-20 08:30:52 turn start england: set_governors
+2026-11-20 08:30:52 governors england: Caernarvon build=false recruit=false; Edinburgh build=false recruit=false; York build=false recruit=false; Dublin build=false recruit=false; Inverness build=false recruit=false; London build=false recruit=false; Nottingham build=false recruit=false; Caen build=false recruit=false; Bruges build=false recruit=false; Antwerp build=false recruit=false
+2026-11-20 08:30:52 turn start england: follow
+2026-11-20 08:30:52 turn start england: apply_orders
+2026-11-20 08:30:52 turn start england: done
+2026-11-20 08:30:54 popup message 40
+2026-11-20 08:30:54 papal-trace: #7 onIncomingMessage: event 40 queued (nothing read from the game) [message:40]

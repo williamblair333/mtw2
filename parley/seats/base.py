@@ -220,9 +220,13 @@ def to_orders(payload, *, game_id: str, turn: int, faction: str) -> Orders:
     hold = payload.get("hold_empty")
     if isinstance(hold, str):
         hold = [hold]
+    look = payload.get("lookup")
+    if isinstance(look, str):
+        look = [look]
     orders = Orders(protocol=1, game_id=game_id, turn=turn, faction=faction, orders=kept,
                     messages=messages, note=note if isinstance(note, str) else "",
                     plan=plan if isinstance(plan, str) else "",
-                    hold_empty=[h for h in hold if isinstance(h, str)] if isinstance(hold, list) else [])
+                    hold_empty=[h for h in hold if isinstance(h, str)] if isinstance(hold, list) else [],
+                    lookup=[k for k in look if isinstance(k, str)][:80] if isinstance(look, list) else [])
     orders.source_index, orders.malformed = source, malformed
     return orders

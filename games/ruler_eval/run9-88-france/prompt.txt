@@ -1,0 +1,412 @@
+You are Philip I, King of the Franks: shrewd, idle-seeming and greedy, ruling a small royal domain while your great vassals, Normandy above all, outshine you. You prefer cunning to battle: set your enemies against each other and collect the profit. Your promises are worth exactly what they cost you to keep. You are charming and evasive, and you never say no outright.
+
+YOUR GOAL
+To win the campaign: hold Jerusalem, rule 45 regions in all (you hold 5). The campaign ends after turn 225: 137 turns left. If it ends first, you have lost.
+Economy: income 2185 a turn (was 2582 10 turns ago; -15%); treasury 2823 (was 99). Army upkeep is 55% of your regular costs (5754 of 10379 a turn). Settlements: 5 now (5 10 turns ago, 5 20 turns ago).
+Neither income nor land has grown in 15 turns (5 settlements then, 5 now): something has to change.
+
+HOW THE GAME WORKS (a primer; your report and order rules below take precedence)
+### 1. Money
+Income comes from farming, taxes, trade, mines and merchants. Taxes draw gold by population and tax rate; mines pay a fixed sum per turn; trade comes from road and port links. The main expenses are unit upkeep, paid every turn for every fielded unit, and wages for generals and agents. A city has free-upkeep slots by wall level (palisade 2, wooden 3, stone 4, large stone 5, huge stone 6). A slot holds one unit the game marks free: a militia type that city can recruit now (Town, Spear, Archer or the author Militia and the like; Peasants are not free). It costs 0 instead of its upkeep (Town Militia 125 a turn) while it stays in that city. Castles have no free slots, so a militia moved to a castle pays full upkeep. Militia are garrison troops: they keep order cheaply and defend a settlement under attack or siege; they are not a field army. Unspent gold earns nothing: spend surplus on economy and order, then armies.
+
+### 2. Agents
+Agents are recruited in settlements with the prerequisite building (market, inn, church, council chamber).
+* **Spy**: scouts armies and settlements, infiltrates walls, may open a besieged settlement's gates; risks execution on failure.
+* **Assassin**: kills enemy agents and generals, or sabotages buildings; risks capture and execution.
+* **Diplomat**: negotiates treaties, trade rights and bribes; a failed bribe loses only the attempt.
+* **Merchant**: stands on a resource tile for gold each turn; rival merchants can buy him out.
+* **Priest**: converts a region to your religion and raises his piety; high piety can make a cardinal, low piety a heretic.
+* **Princess**: acts as a diplomat; accepts suitors the game offers (they join your family as generals) or marries a foreign general to bind an alliance; her charm fades if she stays unmarried.
+
+### 3. The Church
+Catholic factions manage Papal Standing: churches, converted provinces and the Pope's missions (some ask for gold) raise it. Attacking Catholic factions after a papal warning lowers it and leads to excommunication: severe public order penalties everywhere, and Catholic neighbours and Crusades may attack you. At high standing you can call a Crusade against excommunicated Catholics, rebels or non-Christian cities; crusaders have cheap upkeep and move faster, and a successful Crusade pays 1,000-2,000 florins plus a chevron per unit. It crosses water by ship: lose the fleet and you lose the army.
+
+### 4. Sieges
+A settlement with no walls can be stormed at once. Against walls the besiegers build rams, ladders or towers (a big army builds rams or ladders on the first turn and can storm then; towers and several engines take longer). Artillery (ballista, catapult, trebuchet; bombard and cannon after gunpowder) breaches walls without engines, so an army that brings it can storm the turn it arrives. It moves 20% slower, costs 370-870 plus 150-250 upkeep a turn, and comes from a siege works (ballista, then catapult, then trebuchet by upgrade) or a gunsmith; pools hold 3. Worth it for a campaign, not one town. Or hold the blockade until the holdout counter reaches zero and the defenders starve into surrender. Besieged garrisons suffer attrition and may sally. A spy inside the settlement has a chance each turn to open the gates, allowing an immediate assault.
+
+### 5. Armies
+In auto-resolved battles the general's Command stars weigh heavily beside troop quality and numbers. Judge an army by units, men, quality and the general's stars. The strength rating is the game's combat score, not a head count: never quote it as troops. Damaged units fight worse; merge them, or bring them into a settlement with the right military building to retrain to full size. Recruitment is limited by local pools that refill fractionally over turns.
+Reinforcements: when an army fights or besieges, friendly armies next to it (allies too) join the battle and count in the odds; the radius isn't documented. To bring two stacks, park the second beside the target one turn, attack the next. An army holds 20 units; reinforcements enter as slots open.
+War runs on money: a rich realm keeps big armies paid and takes towns fast; early on build income. Scout by sea: a spare ship or two shows an invasion fleet before it lands. A fleet full of soldiers is easy prey at sea: one big fleet stack sinks it and the army aboard with it, and you never fight the army.
+
+### 6. Order and Growth
+Public order rises with garrisons, law buildings, low taxes and a governor's Chivalry, Dread or Piety. It falls with high taxes, squalor (big population), religious unrest, devastation and distance from the capital. Aim for 80%+. Below about 70% citizens riot, damaging buildings and killing troops, and long enough riots end in revolt: the settlement and its garrison go over to the rebels.
+
+### 7. Diplomacy
+Reputation measures how reliably you keep agreements. Attacking allies, breaking treaties or executing prisoners lowers it, so factions accept fewer deals and attack more. Trade rights cost nothing and raise port and road income for both once borders touch or ports connect. Alliances deter attacks, but AI factions break them when your borders are weak.
+
+### 8. Family
+Family members serve as generals and governors. Governors pick up traits from how their city is run (high taxes and idleness breed bad ones); battles and building give good ones. New family come only from sons coming of age, marrying off princesses, and adopting "Man of the Hour" captains or suitors. The game names the heir from the adult men of the family.
+
+### 9. Rules of thumb
+- Never leave a settlement with no garrison while an enemy or rebel army is within a few tiles: thin garrisons fall to small forces. Make a field army from spare units, never by stripping the homeland.
+- Before raising a tax, read the settlement's public order. Near 70% don't tax higher; a thin garrison plus a tax hike is how settlements revolt.
+- Keep new conquests on low tax with a garrison until order passes 80%. In unhappy cities build law and order buildings before extra income.
+- Debt is a tool: going negative to take a town is often right. In debt, gold orders are refused, so recruit and build first. Disband only units that serve no goal.
+- Overextension (falling income, rioting distant cities, garrisons needed everywhere): consolidate before the next push.
+- Cities earn, castles train troops: castles on the borders, cities inside.
+- Refill a garrison with free militia up to the city's slots before paying for other garrison units. Castles have their own law buildings.
+- Starve a walled town unless you have artillery or far more men than its garrison; storming walls with too few men loses the army.
+- Don't break a treaty or attack an ally: reputation drives every faction's willingness to deal. Keep garrisons on allied borders.
+- The clock: 2 years a turn, 225 turns (1080-1530). Mongols arrive about T64-80, gunpowder T105-110, Black Death T133, Timurids T144-156.
+
+You are the ruler. You command: diplomacy, armies, agents, build, recruit, taxes. The game's own AI also acts for this realm between your orders (recruiting, building and moving armies); your orders come first.
+
+YOUR ORDERS REFUSED LAST TURN: don't give these again as they were
+- merge_units army=Captain Henri: nothing to merge in Captain Henri: no two worn units of one type that can combine. Refused 2 turns running.
+
+TURN 88, YEAR 1256. You rule france.
+Treasury: 2823 florins at the end of your last turn (orders are paid from this balance; this turn's income has not arrived yet). Income: 2185 per turn after upkeep and wages.
+Income items: army upkeep -5754, taxes +5219, wages (generals and agents) -4450, trade +2667, farming +2215, king's purse +1500, administration +411, merchants +292, mining +260, devastation -175. Last turn you also spent 1976 on buildings, recruits and diplomacy (bribes, gifts).
+
+YOUR SETTLEMENTS
+- Paris (Paris), region Paris_Province at (113,131): garrison 2 units, 80 men (strength rating 1464, not men), population 20350, buildings: large_stone_wall, militia_drill_square, abbey, city_hall, great_market, paved_roads, farms+2, catapult_range, armourer, m_thieves_guild, inn, ballista_towers; free-upkeep slots 0 of 5 left
+  in training: Town Militia (joins the garrison on turn 89); Town Militia (joins the garrison on turn 89); Town Militia (joins the garrison on turn 89); Town Militia (joins the garrison on turn 90); tax high, public order 75% (squalor -50%, law +30%, buildings +30%, high tax -20%, health +20%, excommunication -20%, cultural unrest -15%); income +2348/turn (taxes 1221)
+  queue: empty
+  can build (florins/turns): theatre 4800/4; cathedral 6400/4; farms+3 4800/6; siege_works 6400/5; heavy_armourer 6400/5; tavern 3200/4
+  recruiting: Crossbow Militia (1 turn left)
+  can recruit (florins/turns, upkeep a turn): Town Militia 290/1, upkeep 125; Spear Militia 310/1, upkeep 125; NE Ballista 370/1, upkeep 150; Crossbow Militia 220/1, upkeep 100; NE Catapult 400/1, upkeep 150; Partisan Militia 390/1, upkeep 150
+  can train agents (florins/turns): spy 350/1; assassin 500/1; diplomat 250/1; priest 200/1
+- Caen (Caen), region Caen_Province at (104,134), port at (105,137): garrison 2 units, 98 men (strength rating 2989, not men), population 7461, buildings: drill_square, fortress, c_port, farms+2, knights_stables, c_roads, practice_range, c_ballista_range, c_blacksmith, chapel
+  in training: Peasants (joins the garrison on turn 89); Peasants (joins the garrison on turn 89); tax normal, public order 140% (law +20%, governor +20%, garrison +10%, excommunication -10%, squalor -10%, buildings +5%, population boom +5%); income +1468/turn (taxes 777)
+  queue: (the building under construction: its name can't be read on this EOP)
+  can build (florins/turns): jousting_lists 1504/2; large_castle_to_city 3200/2; c_shipwright 1504/3; farms+3 4512/6; barons_stables 4512/4; c_paved_roads 1128/3; archery_range 4512/4; c_catapult_range 3008/4; c_armourer 2256/4
+  recruiting: Dismounted Feudal Knights (1 turn left)
+  can recruit (florins/turns, upkeep a turn): Peasants 110/1, upkeep 90; Mailed Knights 680/1, upkeep 250; Hobilars 280/1, upkeep 150; cog 500/1, upkeep 150; Peasant Archers 220/1, upkeep 100; Sergeant Spearmen 420/1, upkeep 155; Mounted Sergeants 470/1, upkeep 175; NE Ballista 370/1, upkeep 150; Armored Sergeants 540/1, upkeep 155; Peasant Crossbowmen 220/1, upkeep 100; Feudal Knights 730/1, upkeep 250
+  can train agents (florins/turns): priest 200/1
+- Angers (Angers), region Angers_Province at (102,126): garrison 2 units, 135 men (strength rating 2195, not men), population 9819, buildings: fortress, barons_stables, c_paved_roads, c_catapult_range, barracks, practice_range, farms+2, c_armourer, chapel, jousting_lists; tax normal, public order 110% (law +20%, squalor -15%, garrison +10%, excommunication -10%, buildings +5%); income +1455/turn (taxes 770)
+  queue: empty
+  can build (florins/turns): large_castle_to_city 3200/2; citadel 9600/4; archery_range 4800/4; farms+3 4800/6
+  recruiting: Dismounted Feudal Knights (1 turn left), Armored Sergeants (1 turn left)
+  can recruit (florins/turns, upkeep a turn): Mailed Knights 680/1, upkeep 250; Mounted Sergeants 470/1, upkeep 175; Peasants 110/1, upkeep 90; NE Ballista 370/1, upkeep 150; Peasant Archers 220/1, upkeep 100; Sergeant Spearmen 420/1, upkeep 155; Armored Sergeants 540/1, upkeep 155; Peasant Crossbowmen 220/1, upkeep 100; Feudal Knights 730/1, upkeep 250; Dismounted Feudal Knights 570/1, upkeep 225; NE Catapult 400/1, upkeep 150; Voulgier 510/1, upkeep 150
+  can train agents (florins/turns): priest 200/1
+- Rheims (Rheims), region Rheims_Province at (119,133): garrison 3 units, 165 men (strength rating 2512, not men), population 12821, buildings: stone_wall, farms+2, city_watch, tavern, fairground, paved_roads, abbey, catapult_range, mines, armourer, council_chambers, thieves_guild; free-upkeep slots 2 of 4 left; tax normal, public order 125% (law +65%, cultural unrest -35%, buildings +30%, unrest -30%, squalor -30%, excommunication -20%, governor +15%, health +10%, garrison +10%, population boom +10%); income +2258/turn (taxes 902)
+  queue: empty
+  can build (florins/turns): large_stone_wall 4560/3; farms+3 4560/6; mines+1 3325/3
+  can recruit (florins/turns, upkeep a turn): Town Militia 290/1, free upkeep (2 left); Spear Militia 310/1, free upkeep (2 left); NE Ballista 370/1, upkeep 150; Crossbow Militia 220/1, free upkeep (2 left); NE Catapult 400/1, upkeep 150
+  can train agents (florins/turns): spy 350/1; assassin 500/1; diplomat 250/1; priest 200/1
+- Rennes (Rennes), region Rennes_Province at (94,130), port at (92,128): garrison 2 units, 103 men (strength rating 1801, not men), population 8142, buildings: stone_wall, city_watch, market, paved_roads, blacksmith, brothel, church, farms+2, ballista_range, shipwright, town_hall, thieves_guild; free-upkeep slots 3 of 4 left; tax extortionate, public order 105% (law +60%, high tax -40%, squalor -25%, excommunication -20%, buildings +15%, garrison +10%, cultural unrest -5%, health +5%, unrest -5%, population boom +5%, governor +5%); rebel chance 3, income +2854/turn (taxes 1243)
+  queue: empty
+  can build (florins/turns): merchants_wharf 1584/3; fairground 2376/4; armourer 2376/4; inn 1584/3; abbey 3168/3; farms+3 4752/6; catapult_range 3168/4; council_chambers 1188/3
+  can recruit (florins/turns, upkeep a turn): Town Militia 290/1, free upkeep (3 left); NE Ballista 370/1, upkeep 150; cog 500/1, upkeep 150; Spear Militia 310/1, free upkeep (3 left); holk 670/1, upkeep 200; Crossbow Militia 220/1, free upkeep (3 left)
+  can train agents (florins/turns): spy 350/1; diplomat 250/1; priest 200/1
+
+YOUR ARMIES (a strength rating is not a head count: a general's bodyguard of a few dozen men rates in the thousands. Count men; walls need siege equipment before you storm)
+- Admiral Oudart: 2 units, 74 men (strength rating 708, not men), at (91,121), led by Admiral Oudart (a fleet, empty), moves 1/80
+  troops: 2x holk 37/37 exp 0
+- garrison:Rennes: 2 units, 103 men (strength rating 1801, not men), in Rennes, led by Arthur de Cleves (marching this army moves only the general and his bodyguard; to bring the garrison, merge_armies it into a field army)
+  mercenaries for hire here (florins, available/max, experience): Mercenary Frankish Knights 1080, 2/2, exp 0; Mercenary Crossbowmen 860, 4/4, exp 0; Mercenary Spearmen 660, 2/2, exp 0
+  troops: NE Bodyguard 28/20 exp 1; Town Militia 75/75 exp 0
+- garrison:Rheims: 3 units, 165 men (strength rating 2512, not men), in Rheims, led by Michiel (marching this army moves only the general and his bodyguard; to bring the garrison, merge_armies it into a field army)
+  mercenaries for hire here (florins, available/max, experience): Mercenary Frankish Knights 1080, 1/1, exp 0; Mercenary Crossbowmen 860, 2/2, exp 0; Mercenary Spearmen 660, 2/2, exp 0
+  troops: NE Bodyguard 30/20 exp 2; Town Militia 75/75 exp 0; Crossbow Militia 60/60 exp 0
+- Admiral Adenet: 4 units, 100 men (strength rating 596, not men), at (94,118), led by Admiral Adenet (a fleet, empty), moves 43/80
+  troops: 4x cog 25/25 exp 0
+- garrison:Angers: 2 units, 135 men (strength rating 2195, not men), in Angers
+  troops: Dismounted Feudal Knights 60/60 exp 1; Armored Sergeants 75/75 exp 0
+- garrison:Caen: 2 units, 98 men (strength rating 2989, not men), in Caen, led by Bureau Magliorie (marching this army moves only the general and his bodyguard; to bring the garrison, merge_armies it into a field army)
+  mercenaries for hire here (florins, available/max, experience): Mercenary Frankish Knights 1080, 2/2, exp 0; Mercenary Crossbowmen 860, 4/4, exp 0; Mercenary Spearmen 660, 2/2, exp 0
+  troops: NE Bodyguard 38/20 exp 0; Dismounted Feudal Knights 60/60 exp 0
+- Captain Jaquob: 3 units, 175 men (strength rating 1963, not men), at (111,130), led by Captain Jaquob
+  mercenaries for hire here (florins, available/max, experience): Mercenary Frankish Knights 1080, 2/2, exp 0; Mercenary Crossbowmen 860, 4/4, exp 0; Mercenary Spearmen 660, 2/2, exp 0, moves 6/80
+  troops: Mailed Knights 40/40 exp 0; Armored Sergeants 75/75 exp 0; Peasant Crossbowmen 60/60 exp 0
+- Michault de Bourges: 8 units, 371 men (strength rating 3428, not men), at (115,131), led by Michault de Bourges
+  mercenaries for hire here (florins, available/max, experience): Mercenary Frankish Knights 1080, 2/2, exp 0; Mercenary Crossbowmen 860, 4/4, exp 0; Mercenary Spearmen 660, 2/2, exp 0, moves 14/80
+  troops: NE Bodyguard 26/20 exp 1; Town Militia 75/75 exp 1; Armored Sergeants 43/75 exp 2; Crossbow Militia 4/60 exp 2; 2x Town Militia 75/75 exp 0; Crossbow Militia 60/60 exp 0; Town Militia 13/75 exp 0
+- garrison:Paris: 2 units, 80 men (strength rating 1464, not men), in Paris, led by Adenet (marching this army moves only the general and his bodyguard; to bring the garrison, merge_armies it into a field army)
+  mercenaries for hire here (florins, available/max, experience): Mercenary Frankish Knights 1080, 2/2, exp 0; Mercenary Crossbowmen 860, 4/4, exp 0; Mercenary Spearmen 660, 2/2, exp 0
+  troops: NE Bodyguard 20/20 exp 0; Crossbow Militia 60/60 exp 0
+- Colet Magliorie: 3 units, 170 men (strength rating 1846, not men), at (110,127), led by Colet Magliorie
+  mercenaries for hire here (florins, available/max, experience): Mercenary Frankish Knights 1080, 2/2, exp 0; Mercenary Crossbowmen 860, 4/4, exp 0; Mercenary Spearmen 660, 2/2, exp 0, moves 5/88
+  troops: NE Bodyguard 20/20 exp 0; Armored Sergeants 75/75 exp 0; Peasants 75/75 exp 0
+- Captain Henri: 11 units, 434 men (strength rating 3710, not men), at (115,129), led by Captain Henri
+  mercenaries for hire here (florins, available/max, experience): Mercenary Frankish Knights 1080, 2/2, exp 0; Mercenary Crossbowmen 860, 4/4, exp 0; Mercenary Spearmen 660, 2/2, exp 0, moves 8/80
+  troops: 2x Crossbow Militia 60/60 exp 0; Spear Militia 75/75 exp 1; Crossbow Militia 11/60 exp 0; Levy Spearmen 18/75 exp 4; Peasants 53/75 exp 3; Sergeant Spearmen 43/75 exp 5; Dismounted Feudal Knights 23/60 exp 2; Peasant Crossbowmen 26/60 exp 4; Town Militia 48/75 exp 1; Armored Sergeants 17/75 exp 6
+- Captain Etienne: 3 units, 118 men (strength rating 1559, not men), at (118,133), led by Captain Etienne
+  mercenaries for hire here (florins, available/max, experience): Mercenary Frankish Knights 1080, 1/1, exp 0; Mercenary Crossbowmen 860, 2/2, exp 0; Mercenary Spearmen 660, 2/2, exp 0, moves 0/60
+  troops: NE Ballista 20/20 exp 1; Dismounted Feudal Knights 23/60 exp 1; Armored Sergeants 75/75 exp 2
+
+YOUR AGENTS
+- Germain Sarrasin: merchant, at (138,109)
+- Charles de Grasse: spy, at (119,133)
+- Rogier Oudet: priest, at (121,133)
+- Huet de Lyon: spy, at (102,126)
+- Gassot de Balliol: priest, at (119,133)
+- Francis de Tarante: spy, at (94,130)
+- Gautier Plesseraud: spy, at (115,131)
+- Marcel le Gris: merchant, at (179,132)
+- Andry de Neufville: diplomat, at (96,115)
+- Honnore Magliorie: princess, at (112,137)
+- Andriet de Luynes: spy, at (104,134)
+- Jourdain Sorel: priest, at (119,133)
+- Marc d Artois: assassin, at (121,123)
+- Regnault de Valence: spy, at (105,104)
+- Fulk Bliaud: priest, at (119,133)
+- Richart Mauclerc: assassin, at (102,127)
+- Ysabel: princess, at (149,148)
+- Geoffroi d Albret: spy, at (112,129)
+- Regnault de Dampierre: spy, at (111,130)
+- Casin du Guesclin: spy, at (118,133)
+- Thierry Maquereau: priest, at (119,133)
+- Adam de Toulouse: merchant, at (163,140)
+- Audenin de Vendome: spy, at (115,129)
+- Lanfrank Robert: spy, at (113,131)
+- Vilain de Loches: spy, at (110,127)
+- Heliot de Mauchaut: spy, at (113,131)
+- Admiral Adenet: admiral, at (94,118)
+- Gautier de Bouillon: spy, at (113,131)
+- Denisot de Vesc: spy, at (113,131)
+- Admiral Oudart: admiral, at (91,121)
+- Robin de Dijon: diplomat, at (96,114)
+- Francoys de Coligny: diplomat, at (120,147)
+- Conrrat Tanlay: diplomat, at (127,120)
+- Georges de Blois: diplomat, at (127,150)
+
+AGENT LIMITS (yours, counting those in training / most you may have)
+assassin 2/no limit; diplomat 5/no limit; merchant 3/3; priest 5/7; spy 15/no limit
+
+YOUR FAMILY (from the game's records; the dead stay listed)
+- Philip: dead (at 63)
+- Louis: dead (at 49)
+- Bureau Magliorie, 61, leader, general, married to Phlipote Magliorie (france), child of Louis, leads garrison:Caen in Caen
+- Denisette: dead (at 61)
+- Eustace: dead (at 40)
+- Constance: dead (at 40)
+- Michiel, 46, general, married to Isabelle (france), child of Philip, leads garrison:Rheims in Rheims
+- Henry: left your service, alive and now with england
+- Bertrada de Montfort: dead (at 61)
+- Ysabel, 38, princess, unmarried: her hand can be offered to a foreign general in sight ("marry"), child of Louis, at (149,148)
+- Gilbert: dead (at 26)
+- Colet Magliorie, 20, general, married to Plantee Magliorie (france), child of Bureau Magliorie, leads Colet Magliorie at (110,127)
+- Phlipote Magliorie, 44, married to Bureau Magliorie (france)
+- Thomasse de Cleves, 28, married to Arthur de Cleves (france)
+- Perrette, 37, married to Gilbert (france)
+- Michault de Bourges, 31, general, married to Loyse de Bourges (france), child of Michiel, leads Michault de Bourges at (115,131)
+- Arthur de Cleves, 35, heir, general, married to Thomasse de Cleves (france), child of Bureau Magliorie, leads garrison:Rennes in Rennes
+- Georges de Brienne: dead (at 21)
+- Adenet, 16, general, child of Gilbert, leads garrison:Paris in Paris
+- Honnore Magliorie, 16, princess, unmarried: her hand can be offered to a foreign general in sight ("marry"), child of Bureau Magliorie, at (112,137)
+- Emery de Plaisians: dead (at 22)
+- Isabelle, 29, married to Michiel (france)
+- Loyse de Bourges, 22, married to Michault de Bourges (france)
+- Plantee Magliorie, 30, married to Colet Magliorie (france)
+
+WHAT BEFELL YOUR PEOPLE SINCE YOUR LAST TURN (from the game itself)
+- Charles de Grasse was struck by a disaster: famine (in Paris_Province)
+- Huet de Lyon was struck by a disaster: famine (in Paris_Province)
+- Bureau Magliorie was struck by a disaster: famine (in Caen_Province)
+- Gautier Plesseraud was struck by a disaster: famine (in Caen_Province)
+- Captain Jaquob was struck by a disaster: famine (in Paris_Province)
+- Andriet de Luynes was struck by a disaster: famine (in Caen_Province)
+- Michault de Bourges was struck by a disaster: famine (in Paris_Province)
+- Michiel was struck by a disaster: famine (in Paris_Province)
+- Arthur de Cleves was struck by a disaster: famine (in Rennes_Province)
+- Regnault de Dampierre was struck by a disaster: famine (in Caen_Province)
+- Audenin de Vendome was struck by a disaster: famine (in Paris_Province)
+- Lanfrank Robert was struck by a disaster: famine (in Paris_Province)
+- Captain Etienne was struck by a disaster: famine (in Paris_Province)
+- Vilain de Loches was struck by a disaster: famine (in Paris_Province)
+- Heliot de Mauchaut was struck by a disaster: famine (in Paris_Province)
+- Gautier de Bouillon was struck by a disaster: famine (in Paris_Province)
+- Denisot de Vesc was struck by a disaster: famine (in Paris_Province)
+- Captain Henri was struck by a disaster: famine (in Caen_Province)
+- Adenet was struck by a disaster: famine (in Paris_Province)
+- Honnore Magliorie was struck by a disaster: famine (in Caen_Province)
+
+OTHER FACTIONS (stance with you). A faction with a ruler answers messages, and its game AI's wars are undone. One run by the game's AI alone makes real wars, and setting peace with it does not stop its armies: judge it by what its armies do
+- england (England): peace for 14 turns (trade rights), has a ruler; 3 settlements, capital Dijon, led by Rufus, 3 armies
+- hre (The Holy Roman Empire): alliance for 83 turns (trade rights), run by the game's AI; 9 settlements, capital Nuremburg, led by Ortwinus, 17 armies
+- spain (Spain): alliance for 2 turns (trade rights), run by the game's AI; 5 settlements, capital Zaragoza, led by Johan de Magas, 12 armies
+- milan (Milan): peace for 14 turns (trade rights), run by the game's AI; 6 settlements, capital Milan, led by Puccio Rossi, 17 armies
+- scotland (Scotland): alliance for 83 turns (trade rights), run by the game's AI; 6 settlements, capital Edinburgh, led by Comgell Canmore, 14 armies
+- byzantium (The Byzantine Empire): peace for 88 turns (trade rights), run by the game's AI; 11 settlements, capital Constantinople, led by Konstantinos of Ermeleia, 23 armies
+- russia (Russia): peace for 88 turns (trade rights), run by the game's AI; 5 settlements, capital Novgorod, led by Ivan, 9 armies
+- moors (Moors): alliance for 2 turns (trade rights), run by the game's AI; 6 settlements, capital Cordoba, led by Faraj, 14 armies
+- denmark (Denmark): peace for 88 turns (trade rights), run by the game's AI; 8 settlements, capital Arhus, led by Haakon Svendsen, 12 armies
+- portugal (Portugal): peace for 5 turns (trade rights), run by the game's AI; 5 settlements, capital Pamplona, led by Fytor Armea, 13 armies
+- poland (Poland): peace for 88 turns (trade rights), run by the game's AI; 2 settlements, capital Damascus, led by Chrosciszko of Gdansk, 2 armies
+- hungary (Hungary): peace for 88 turns (trade rights), run by the game's AI; 8 settlements, capital Budapest, led by Andras Balazs, 14 armies
+- papal_states (The Papal States): alliance for 3 turns (trade rights), run by the game's AI; 4 settlements, capital Rome, led by Lanfrancus de Verde, 9 armies
+- At peace with no treaties, nothing of theirs in sight, run by the game's AI (settlements): sicily (3), turks (4), egypt (12), aztecs (3), mongols (0)
+- Destroyed: venice, timurids
+
+You see only what your armies, agents and settlements can see. Use only names, settlements and positions listed here.
+
+FOREIGN ARMIES IN SIGHT
+- Wikerus (hre): 7 units, 339 men (strength rating 7136, not men), at (163,141), 1 tile away
+  troops: 2x NE Bodyguard (cavalry), 3x Pavise Crossbowmen (missile), 2x Dismounted Feudal Knights (infantry)
+- Captain Maczeus (papal_states): 2 units, 80 men (strength rating 1347, not men), at (127,121) (last turn at (119,115)), 1 tile away
+  troops: 2x Mailed Knights (cavalry)
+- Captain Piotr (slave): 2 units, 113 men (strength rating 454, not men), at (164,141), 1 tile away
+  troops: Town Militia (infantry), Spear Militia (infantry)
+- Areas Hortiz (spain): 7 units, 402 men (strength rating 4512, not men), at (104,102), 2 tiles away
+  troops: SE Bodyguard (cavalry), 3x Swordsmen Militia (infantry), 2x Peasants (infantry), Pavise Crossbowmen (missile)
+- Admiral Gomez (portugal): a fleet of 2 ships, empty, at (118,146), 2 tiles away
+- Admiral Sallvador (portugal): a fleet of 2 ships, empty, at (118,145), 2 tiles away
+- Captain Baldwin (slave): 1 units, 60 men (strength rating 335, not men), at (107,104) (last turn at (107,105)), 2 tiles away
+- Captain Banchello (milan): 7 units, 269 men (strength rating 3631, not men), at (104,100) (last turn at (112,102)), 4 tiles away
+- Admiral Sallvador#2 (portugal), led by Admiral Sallvador: a fleet of 5 ships, empty, at (102,141), 7 tiles away
+
+FOREIGN AGENTS IN SIGHT
+- milan spy at (105,104), 0 tiles away: Benicio Delicati
+- hre diplomat at (119,132), 1 tile away: Philipp von Lubeck
+- spain princess at (120,123), 1 tile away: Serena el Valiente
+- spain princess at (120,132), 1 tile away: Elvira el Valiente
+- spain priest at (106,103), 1 tile away: Val Caluela
+- milan assassin at (104,103), 1 tile away: Moreno Florioli
+- byzantium diplomat at (105,103), 1 tile away: Manouel Zerbos
+- russia princess at (118,134), 1 tile away: Raina
+- moors diplomat at (95,115), 1 tile away: Lukman of Badajoz
+- moors diplomat at (101,127), 1 tile away: Rushdi Chiba
+- moors diplomat at (95,113), 1 tile away: Tashfin Ta anari
+- portugal diplomat at (122,123), 1 tile away: Ruy de Calvelo
+
+LAND CROSSINGS NEAR YOU (an army walks across the water here, no ships needed: move_army onto the land tile on the far side)
+- at (145,161), joining Arhus_Province (144,161), 13 tiles away
+- at (141,162), joining Arhus_Province (140,162), 14 tiles away
+- at (149,163), joining Arhus_Province (148,163) and Stockholm_Province (150,163), 15 tiles away
+- at (94,168), joining Dublin_Province (93,168) and Edinburgh_Province (95,168), 26 tiles away
+
+TRADE RESOURCES IN SIGHT (a merchant standing on one trades there every turn)
+- amber at (179,132), Cracow_Province, value 12, held by denmark, 0 tiles away
+- textiles at (138,110), Milan_Province, value 8, held by milan, 1 tile away
+- timber at (150,147), Magdeburg_Province, value 6, held by hre, 1 tile away
+- timber at (129,121), Bern_Province, value 6, held by papal_states, 2 tiles away
+- coal at (119,121), Dijon_Province, value 4, held by england, 2 tiles away
+- grain at (94,128), Rennes_Province, value 5, held by france, 2 tiles away
+- wine at (101,124), Angers_Province, value 8, held by france, 2 tiles away
+- timber at (119,131), Rheims_Province, value 6, held by france, 2 tiles away
+(and 4 farther ones)
+
+SETTLEMENTS NEAR YOU
+- Toulouse (spain): garrison 3 units, 180 men (strength rating 3783, not men), at (105,104), 0 tiles away
+- Magdeburg (hre): garrison 7 units, 273 men (strength rating 3295, not men), at (148,147), 1 tile away
+- Dijon (england): garrison 3 units, 192 men (strength rating 953, not men), at (121,122), 1 tile away
+- Bordeaux (portugal): garrison 1 units, 60 men (strength rating 1142, not men), at (97,114), 1 tile away
+- Bern (papal_states): garrison 3 units, 135 men (strength rating 2388, not men), at (129,119), 2 tiles away
+- Milan (milan): garrison 1 units, 25 men (strength rating 1137, not men), at (136,111), 2 tiles away
+- Antwerp (portugal): garrison 10 units, 541 men (strength rating 6564, not men), at (120,144), 3 tiles away
+- Breslau (denmark): garrison 17 units, 1000 men (strength rating 8064, not men), at (163,143), 3 tiles away
+- Metz (scotland): garrison 9 units, 530 men (strength rating 5416, not men), at (125,131), 4 tiles away
+- Cracow (denmark): garrison 9 units, 487 men (strength rating 6196, not men), at (174,136), 5 tiles away
+- Bruges (scotland): garrison 2 units, 95 men (strength rating 1316, not men), at (115,143), 5 tiles away
+- Bologna (hre): garrison 16 units, 796 men (strength rating 7637, not men), at (143,105), 5 tiles away
+
+SETTLEMENTS SEEN BEFORE (out of sight now, as last seen; the rest of the map is unexplored)
+- Ajaccio (milan): garrison 13 units, 646 men (strength rating 6155, not men), at (131,92), seen turn 19
+- Arhus (denmark): garrison 1 units, 27 men (strength rating 1282, not men), at (141,166), seen turn 67
+- Budapest (hungary): garrison 4 units, 202 men (strength rating 4147, not men), at (172,122), seen turn 82
+- Caernarvon (portugal): garrison 1 units, 30 men (strength rating 1364, not men), at (94,157), seen turn 78
+- Constantinople (byzantium): garrison 7 units, 437 men (strength rating 4890, not men), at (213,92), seen turn 61
+- Cordoba (moors): garrison 6 units, 320 men (strength rating 4142, not men), at (71,80), seen turn 40
+- Corinth (byzantium): garrison 2 units, 135 men (strength rating 702, not men), at (191,71), seen turn 22
+- Dublin (scotland): garrison 4 units, 256 men (strength rating 2570, not men), at (90,162), seen turn 78
+- Durazzo (byzantium): garrison 4 units, 217 men (strength rating 756, not men), at (175,87), seen turn 17
+- Florence (papal_states): garrison 3 units, 170 men (strength rating 3151, not men), at (142,100), seen turn 87
+- Frankfurt (hre): garrison 3 units, 148 men (strength rating 2383, not men), at (138,139), seen turn 84
+- Genoa (milan): garrison 2 units, 83 men (strength rating 2040, not men), at (133,104), seen turn 85
+- Granada (moors): garrison 7 units, 397 men (strength rating 3432, not men), at (77,73), seen turn 44
+- Halych (hungary): garrison 1 units, 60 men (strength rating 1049, not men), at (192,140), seen turn 79
+- Hamburg (denmark): garrison 3 units, 153 men (strength rating 4157, not men), at (141,154), seen turn 80
+- Innsbruck (venice): garrison 1 units, 30 men (strength rating 1486, not men), at (143,120), seen turn 48
+- Inverness (scotland): garrison 1 units, 20 men (strength rating 909, not men), at (99,181), seen turn 77
+- Leon (spain): garrison 1 units, 31 men (strength rating 1472, not men), at (74,104), seen turn 64
+- London (scotland): garrison 3 units, 160 men (strength rating 2489, not men), at (109,147), seen turn 86
+- Naples (sicily): garrison 2 units, 106 men (strength rating 2208, not men), at (157,82), seen turn 11
+- Nicaea (byzantium): garrison 15 units, 721 men (strength rating 5709, not men), at (216,88), seen turn 61
+- Nottingham (england): garrison 5 units, 260 men (strength rating 2037, not men), at (107,155), seen turn 45
+- Nuremburg (hre): garrison 1 units, 60 men (strength rating 555, not men), at (147,132), seen turn 84
+- Palermo (sicily): garrison 3 units, 110 men (strength rating 2737, not men), at (150,70), seen turn 14
+- Pamplona (portugal): garrison 1 units, 22 men (strength rating 1000, not men), at (90,101), seen turn 84
+- Prague (hre): garrison 1 units, 75 men (strength rating 471, not men), at (157,136), seen turn 86
+- Ragusa (venice): garrison 1 units, 22 men (strength rating 1000, not men), at (168,95), seen turn 18
+- Rome (papal_states): garrison 1 units, 60 men (strength rating 939, not men), at (147,90), seen turn 64
+- Sofia (hungary): garrison 3 units, 120 men (strength rating 1905, not men), at (194,99), seen turn 22
+- Hohenstauffen (hre): garrison 1 units, 22 men (strength rating 1000, not men), at (132,126), seen turn 85
+- Stettin (denmark): garrison 2 units, 80 men (strength rating 1659, not men), at (155,155), seen turn 80
+- Thorn (poland): garrison 8 units, 317 men (strength rating 5722, not men), at (169,151), seen turn 71
+- Toledo (spain): garrison 9 units, 382 men (strength rating 4970, not men), at (78,90), seen turn 19
+- Valencia (slave): garrison 8 units, 358 men (strength rating 4158, not men), at (92,83), seen turn 30
+- Venice (slave): garrison 8 units, 434 men (strength rating 3634, not men), at (146,108), seen turn 74
+- Vienna (hre): garrison 2 units, 102 men (strength rating 1753, not men), at (163,124), seen turn 46
+- Vilnius (denmark): garrison 6 units, 303 men (strength rating 3398, not men), at (189,158), seen turn 63
+- Zagreb (hre): garrison 1 units, 75 men (strength rating 445, not men), at (160,108), seen turn 61
+- Zaragoza (spain): garrison 3 units, 69 men (strength rating 1694, not men), at (93,95), seen turn 66
+
+TAX AND UNREST
+- Paris: public order 75%, tax high (high tax 4 in its order breakdown). Low order risks riots; set_tax lower or add garrison.
+
+LAST TURN'S ORDER RESULTS
+- order 0 (set_tax): done
+- order 1 (recruit): done
+- order 2 (recruit): done
+- order 3 (recruit): done
+- order 4 (recruit): done
+- order 5 (recruit): done
+- order 6 (recruit): done
+- order 8 (move_army): done. Now: Colet Magliorie has 3 units, at (110,127)
+
+SINCE YOUR LAST TURN
+- Treasury: 2371 → 2823 (+452).
+- Paris: farms+2 finished, replacing farms+1.
+- Rheims: farms+2 finished, replacing farms+1.
+- Rennes: paved_roads finished, replacing roads.
+- Eustace (princess, aged 40) is gone since your last turn. The game's records list them as dead. Plausible causes, likeliest first by the evidence: 1) assassination: milan's assassin Moreno Florioli stood 4 tiles away last turn; 2) married into another house (the game usually announces it; check the game messages); 3) old age or illness at 40 (unlikely so young); 4) plague (the game doesn't report it per person). Weigh who gained from it, write your theory in your note, and decide what to do about it.
+- Gieffroy Jeannin (spy, aged 46) is gone since your last turn. They are no longer in your family's records. Plausible causes, likeliest first by the evidence: 1) assassination: assassins of milan, portugal were in sight last turn; 2) old age or illness at 46 (unlikely so young); 3) plague (the game doesn't report it per person). Weigh who gained from it, write your theory in your note, and decide what to do about it.
+- The same order was refused the same way two turns running (merge_units: nothing to merge in Captain Henri: no two worn units of one type that can combine).
+
+YOUR STANDING PLAN (from your last turn: 1-3 goals, each with its next step and target turn)
+Stabilize core territories and secure garrisons by lowering Rheims tax and recruiting militias in Paris and Caen. Consolidate field armies by merging worn units in Captain Henri's stack to reduce upkeep. Monitor Spanish and Milanese movements, preparing to exploit any overextension. Target completion by turn 90.
+
+LESSONS FROM YOUR PAST GAMES (reviews of your own earlier play; weigh them, they can be wrong, and this game's report comes first)
+- I will prioritize paying Papal tribute to lift excommunication over funding expensive building queues during economic strain. I delayed lifting excommunication while queueing abbeys from turns 32 to 37; public order in Paris, Rheims, and Antwerp remained suppressed by the penalty through turn 40.
+- I will disband or recall armies immediately when famine strikes, rather than keeping them on campaign or recruiting in affected provinces. I continued moving forces and recruiting peasants in famine zones from turns 26 to 36; multiple armies and fleets were wiped out by attrition by turn 37.
+- I will stabilize tax rates instead of oscillating them, as frequent changes collapse public order. I oscillated taxes in Paris and Rheims from turns 23 to 31; public order in both settlements collapsed to 60% and 65% respectively by turn 32.
+- Do not rely on a static treasury buffer of 500 florins as your sole constraint; your treasury dropped to 13 florins by Turn 20 despite a massive income increase to 3521, indicating that high income was not being captured or was immediately spent on upkeep/recruitment failures. The note in Turn 7 states a decision to 'gate all major expenditures behind a 500-florin buffer,' yet the treasury crashed to single digits by the end of the campaign.
+- Do not attempt to recruit units in provinces where that unit type is currently unavailable; specifying invalid recruitment types wastes turns and gold opportunities. I repeatedly tried to recruit Peasants in Toulouse despite it being able to recruit Mailed Knights/Mounted Sergeants, and in Angers despite restrictions, leading to multiple rejections.
+
+YOUR RECENT NOTES (your own private plans, oldest first)
+[turn 86] Treasury has dipped to one hundred and ten florins after recent expenditures. While income remains healthy, upkeep and wages drain the coffers faster than taxes replenish them. I shall pause all major building queues and recruitment until the treasury recovers past five hundred florins. Paris garrison stands at 28 men across 1 unit; Caen holds 38 men in 1 unit. I will recruit 2 Town Militia to Paris immediately to bolster defenses, and let the treasury rebound before reinforcing Caen, relying on field armies to deter incursions.
+
+Two of our commanders have vanished without cause. The proximity of Portuguese and Spanish agents suggests targeted assassination rather than battle or illness. I will deploy agents to monitor their borders and ensure our remaining captains are protected. The Moors alliance holds, but Papal standing is low; I will wait for a more opportune moment to address the excommunication penalty rather than spending gold needlessly.
+
+Field armies are repositioned to cover Paris, Caen, and Rheims. Worn units are merged to maintain combat effectiveness. We shall wait for the realm to bleed strength elsewhere, then strike when the profit outweighs the risk.
+[turn 87] Rheims stands on the brink of revolt; its tax is lowered immediately to stem the rot. Paris and Caen lack defenders; I fill their walls with militia and peasants to secure the core. Two captains have vanished without battle. The Spanish princess and Milanese assassin lurk nearby, and famine plagues our agents. I suspect coordinated sabotage or decay. I will tighten our perimeter and watch the treasury. Let our enemies bleed themselves dry while we rebuild. When they overextend, we shall strike with profit in hand.
+
+DIPLOMACY (most recent last)
+Public messages are seen by everyone; private ones only by the two sides. Promises bind nothing in the game: a deal is kept only if someone acts on it.
+(20 older messages not shown)
+[turn 63] [private with england] Old Scratch (england): Philip, the French harvest remains our shared prize. England's coffers are full of goodwill, and our fleets patrol only to remind our rivals that peace is a profitable venture. Keep your ledgers balanced; we shall meet as partners, or as rivals, when the hour strikes. Signed, Old Scratch
+[turn 64] [private with england] Old Scratch (england): Our fleets patrol only to remind our rivals that peace is profitable. Keep your ledgers balanced; we shall meet as partners, or as rivals, when the hour strikes. Signed, Old Scratch
+[turn 64] [private with england] Philip I of France (france): Our ledgers remain balanced. Paris sleeps soundly while our coffers swell. England's patience is noted and rewarded with gold. Keep your borders guarded and your promises honest. Signed, Philip I
+[turn 65] [private with england] Old Scratch (england): Our ledgers remain balanced, Philip. The harvest waits, but our patience is a blade kept sharp. Keep your gates oiled and your coffers full. England honors our peace until the hour strikes. Signed, Old Scratch
+[turn 66] [private with england] Philip I of France (france): Our ledgers remain balanced, Old Scratch. Keep your fleets calm; Paris honors our peace. Trade rights shall endure until the harvest is ripe.
+[turn 67] [private with england] Philip I of France (france): Old Scratch, our ledgers remain balanced. Keep your fleets calm; Paris honors our peace. Trade rights shall endure until the harvest is ripe.
+[turn 68] [private with england] Philip I of France (france): Old Scratch, our ledgers remain balanced. Keep your fleets calm; Paris honors our peace. Trade rights shall endure until the harvest is ripe.
+[turn 69] [private with england] Old Scratch (england): Our ledgers remain balanced, Philip. Keep your fleets calm; Paris honors our peace. Trade rights shall endure until the harvest is ripe. Signed, Old Scratch
+[turn 70] [private with england] Old Scratch (england): Our ledgers remain balanced, Philip. The harvest waits, but our patience is a blade kept sharp. Keep your gates oiled and your coffers full. England honors our peace until the hour strikes. Signed, Old Scratch
+[turn 71] [private with england] Old Scratch (england): The ledger balances, Philip. Our fleets watch the tides, but Paris need not fear the storm. We drink to peace, and to the folly of those who would break it. Signed, Old Scratch
+
+OUTPUT RULES
+- Answer with JSON matching the given schema, and nothing else.
+- Use IDs exactly as written before the parentheses, e.g. "hre", never "Holy Roman Empire".
+- Never claim gold, armies or settlements you don't have. Bluff in conversation if you like, never in orders.
+- An empty "orders" list is allowed when nothing needs doing.
+- To speak, add "messages": {"to": "lobby"} is public; {"to": "<faction id>"} is private to that faction. At most 3 per recipient per turn, 600 characters each. Speak only when you have something new to say; don't repeat what you said before.
+- Put private reasoning in "note"; no other faction sees it. Notes come back to you next turn, so record plans, grudges and promises there. A human reads them: plain sentences in short paragraphs, one topic each, no shorthand like "T17" or "+2279".
+- An order result of "done" means the order was carried out, not that it succeeded; check your next report.
+- Return "plan": your standing plan, 1 to 3 goals, each with its next concrete step and the turn you mean to reach it by. Keep it until a goal is done or you drop it for a reason you state in your note. If a target turn has passed with the step not taken, take it now or say in your note why not.
+- Give army and garrison sizes as units and men, never as a strength rating or a bare 4-5 digit number, even where your older notes did.
+- Diplomacy orders: "send_gold", "cede_settlement", "set_stance".
+- Army orders (name an army by its id): "march_on" (toward a settlement), "move_army" (toward a tile x,y), "attack" (a foreign army in sight, outside a settlement), "besiege" (add "assault": true to storm now; otherwise you wait while it starves; walls need siege equipment, a village has none. While you besiege, siege equipment is built each turn automatically: assault when it is ready, or starve the town), "withdraw", "disband" (an army by its id, a unit type from its troops list, a count, 1 if left out: releases the weakest first to save upkeep; a bodyguard is never released).
+- "merge_armies": one of your armies, a garrison too, walks to join another (20 units at most). The joining happens as it walks, so an attack ordered the same turn fights with the army as it stood before: merge one turn, attack the next. To move a garrison with no general, merge it into an army that has one, or march the general into the settlement.
+- "move_army" also takes a general's own name (from YOUR FAMILY): he steps out alone with his bodyguard, even from a garrison he doesn't lead. That is how a field army is made: step a general out onto a tile beside the settlement, then "merge_armies" the garrison (or other armies) into him next turn. A general in a garrison is an army waiting to be formed.
+- A land army moves only onto land; an order onto sea is refused with the nearest land tile. It goes only as far as its moves allow and continues only if you order it again.
+- Ships: a fleet sails with "move_army" to a sea tile; "board" puts an army (by its id) or an agent aboard one of your fleets standing next to it (one army per fleet); "land" puts an army ashore on a land tile next to its fleet; "blockade" closes a foreign port; "attack" works fleet against fleet. Crossing water: board, sail, land, over several turns.
+- "merge_units" (an army by its id) folds that army's under-strength units of one type together: soldiers move into the fullest units, emptied units disband, the bodyguard is untouched. It costs nothing and no moves, and is refused (nothing to merge) unless the army has two worn units of one type (its troops line shows them).
+- Merge worn units of one type when an army has two that can combine; keep units at full strength: a few full units fight far better than many weak ones.
+- Agent orders: "assassinate" (your own assassin, a character in sight), "sabotage" (your own assassin, a settlement in sight), "spy" (your own spy, a settlement or character in sight; a spy inside a settlement keeps spying on it, so ordering him to spy on it is refused), "bribe" (your own diplomat, a character or settlement in sight). In these "agent" is your own agent by its id from your agents list, and "target" is who or what it acts on, from your sight lists. "move_agent" walks any of your agents (a princess too) toward a tile x,y; agents cannot cross the sea alone. Merchants: move_agent one onto a tile from TRADE RESOURCES IN SIGHT and he trades there each turn he stands on it; far resources pay more, and rival merchants may take his trade. "marry": your princess offers her hand to a foreign general in sight. Each agent acts once a turn and may fail or die; the next report tells you.
+- "build": queue a building from a settlement's "can build" list. It costs its price when queued; a settlement builds one thing at a time. Never order what is already in its queue.
+- "repair": queue the repair of a damaged building in a settlement (from its damaged buildings list).
+- "recruit": a unit from a settlement's "can recruit" list. You pay now; it joins that garrison when trained (usually next turn). Nobody recruits for you. "retrain" (a settlement) refills its damaged garrison units whose type its pool still offers, for the missing share of the price; the men arrive next turn. Bring damaged units into a settlement that can recruit their type first. "hire_mercenary" (an army with a general, a unit from its "mercenaries for hire" list) pays now, takes one from the pool of the region the army stands in, and the unit joins that army next turn. "recruit_agent" (a settlement and an agent from its "can train agents" list) pays now; the agent appears there next turn. Agents work only if you order them: a merchant earns from a trade resource, a priest converts a region, a spy scouts and opens gates, an assassin removes generals and agents, a diplomat negotiates and bribes.
+- "set_tax": low, normal, high or extortionate. Higher taxes bring gold and lower public order; a settlement below about 70% public order risks riots and revolt.

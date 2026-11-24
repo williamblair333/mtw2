@@ -253,8 +253,8 @@ def test_the_turn_case_setup_runs_on_the_fake_game(lua, game):
         assert res is not None, code
         if not isinstance(step, str) and step.bind:
             targets[step.bind] = res
-    assert (targets["u"], targets["w"], targets["idle"], targets["b"], targets["empty"]) == (
-        "Spear Militia", "Spear Militia", "Ragusa", "town_watch", "Ragusa")
+    assert (targets["u"], targets["w"], targets["b"], targets["empty"]) == (
+        "Spear Militia", "Spear Militia", "town_watch", "Ragusa")
     log = (root / "parley_bridge.log").read_text()
     for line in ("qa: order ok: recruit ok", "qa: order ok: retrain ok", "qa: order ok: build ok",
                  "qa: order ok: set_tax ok"):
@@ -264,17 +264,16 @@ def test_the_turn_case_setup_runs_on_the_fake_game(lua, game):
 def test_the_turn_case_passes_on_the_next_turns_log_and_report_and_names_what_is_missing():
     case = next(c for c in Suite.model_validate(tomllib.loads(_suite_text())).cases if c.name == "next_turn_delivers")
     case = case.model_copy(update={"targets": {"garrison_town": "London", "u": "Peasants", "w": "Peasants",
-                                               "idle": "York", "b": "town_watch", "empty": "Nottingham"}})
+                                               "b": "town_watch", "empty": "Nottingham"}})
     log = ("qa: order ok: recruit ok\nqa: order ok: retrain ok\nqa: order ok: build ok\n"
            "england: Peasants trained in London\nengland: Peasants retrained in London\n"
            "england order 0 recruit: done\nengland recruits Peasants in Nottingham for 110; ready turn 5\n")
     state = {"settlements": [
-        {"id": "London", "tax_level": "low", "order_parts": {"low tax": 10}, "buildings": ["market"]},
-        {"id": "York", "buildings": ["wooden_pallisade", "town_watch"]}]}
+        {"id": "London", "tax_level": "low", "order_parts": {"low tax": 10}, "buildings": ["market", "town_watch"]}]}
     assert check(case, log, state, [], turns_used=1).outcome == "pass"
     # a failed delivery, or a building still to come, isn't a pass
     bad = log.replace("Peasants trained in London", "Peasants trained in London FAILED: the settlement was lost")
     assert check(case, bad, state, [], turns_used=3).outcome == "fail"
-    state["settlements"][1]["buildings"] = ["wooden_pallisade", "town_watch_2"]
+    state["settlements"][0]["buildings"] = ["market"]
     verdict = check(case, log, state, [], turns_used=1)
     assert verdict.outcome == "pending" and re.search("buildings", verdict.evidence)

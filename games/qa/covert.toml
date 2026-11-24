@@ -129,7 +129,9 @@ expect = [
 # 4. sabotage a rebel or enemy town from the next tile, at the next turn start
 [[cases]]
 name = "sabotage"
-max_turns = 2
+# 3, not 2: a sabotage resolves after End Turn (10-30: its line 0-9 s after it). With 2 the runner
+# reloaded 2 s after the last End Turn and the line never came (11-05 07:11, 09:22)
+max_turns = 3
 setup = [
     { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
     { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
@@ -137,6 +139,10 @@ setup = [
     { lua = 'return M.qa.spawn_agent("england", "assassin", $at_x, $at_y, "QA Saboteur")', bind = "saboteur" },
     'return M.qa.skill("$saboteur", "GoodAssassin", 5)',
     'return M.qa.skill("$saboteur", "GoodConspirator", 3)',
+    # something to sabotage: live 11-05 (the test laptop diagnostic) Bruges on the bench save has one
+    # building, no EDB entry (its core), and three sabotage orders there ("sabotage: done") never
+    # rolled a mission; EOP's sabotageSettlement only queues the action, and the game drops it silently
+    { lua = 'local s for _, f in ipairs({"slave","france","hre","scotland","denmark","spain","milan","venice","sicily","portugal","poland","hungary"}) do pcall(function() local fac = gameDataAll.get().campaignStruct:getFaction(f) for i = 0, fac.settlementsNum - 1 do local x = fac:getSettlement(i) if x.name == "$hostile" then s = x end end end) end if not s then error("$hostile not found") end local before = s.buildingsNum for _, b in ipairs({"market", "farms", "barracks", "practice_field", "town_watch", "wooden_pallisade"}) do if s.buildingsNum > before then break end pcall(function() s:createBuilding(b) end) end if s.buildingsNum <= before then error("no building took in $hostile") end return "$hostile buildings " .. before .. "->" .. s.buildingsNum', bind = "built" },
 ]
 expect = [
     { order_ok = true },
@@ -175,3 +181,25 @@ expect = [
 
 [cases.orders]
 1 = [{ type = "spy", agent = "$spy", target = "$hostile" }]
+
+# 6. a spy moved into his own town while foreign spies are inside it. Live 11-05 16:38 (scratch,
+# turn 95): England's Walter Wolman, one tile from Dijon, was ordered into it (move_agent, "done")
+# with a French and a Milanese spy inside; the bridge logged nothing more and the game's crash
+# dialog was up by 16:44. It did not reproduce (bench 16:54: pass), and at 16:55 the same turn-95
+# orders replayed on the same save ended the turn normally: the move is not a reliable trigger. Kept
+# as a guard. Last: a crash ends the run.
+[[cases]]
+name = "spy_into_own_town_with_foreign_spies"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.spawn_agent("france", "spy", $garrison_town_x, $garrison_town_y, "QA French Spy")', bind = "foreign" },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 1)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("england", "spy", $at_x, $at_y, "QA Spy")', bind = "spy" },
+]
+expect = [
+    { log = 'england order \d+ move_agent: ' },
+    { alive = 20, after = 'england order \d+ move_agent: ' },
+]
+
+[cases.orders]
+1 = [{ type = "move_agent", agent = "$spy", x = "$garrison_town_x", y = "$garrison_town_y" }]

@@ -2376,7 +2376,10 @@ def test_turn_wait_outlasts_the_bridges_end_turn_hold():
     decide_wait = int(re.search(r"local READ_WAIT, DECIDE_WAIT = \d+, (\d+)", lua).group(1))
     extra = int(re.search(r"K\.DECISION_HOLD_MAX = DECIDE_WAIT \+ (\d+)", lua).group(1))
     assert runner.BRIDGE_DECISION_HOLD_MAX == decide_wait + extra
-    assert runner.TURN_TIMEOUT > runner.BRIDGE_DECISION_HOLD_MAX
+    # the bench's own caps (the author 11-05: a stall costs 2 min, not 10): the turn wait outlasts the
+    # bench hold, which outlasts the bench's decision wait
+    assert (runner.QA_DECIDE_WAIT, runner.QA_DECISION_HOLD, runner.TURN_TIMEOUT) == (60, 90, 180.0)
+    assert runner.TURN_TIMEOUT > runner.QA_DECISION_HOLD > runner.QA_DECIDE_WAIT
     assert inspect.signature(runner._default_advance_turn).parameters["timeout"].default == runner.TURN_TIMEOUT
     assert inspect.signature(runner.run_suite).parameters["turn_timeout"].default == runner.TURN_TIMEOUT
 
@@ -2947,6 +2950,28 @@ def test_game_trouble_reports_dead_hung_or_nothing(tmp_path: Path):
     assert game_trouble(lambda: True, log, hang_seconds=1.0).startswith("game hung at ")
 
 
+def test_game_trouble_reports_game_over_screen(tmp_path: Path):
+    from parley.qa.runner import game_trouble
+
+    log = tmp_path / "parley_bridge.log"
+    # the line after the newest load gives a return starting "game over screen at"
+    log.write_text(
+        "2026-11-06 10:00:00 bridge loaded campaign at turn 38\n"
+        "2026-11-06 10:05:00 campaign over: end_campaign_scroll on screen\n"
+    )
+    res = game_trouble(lambda: True, log)
+    assert res is not None and res.startswith("game over screen at")
+    assert "2026-11-06 10:05:00 campaign over: end_campaign_scroll on screen" in res
+
+    # the same line BEFORE a newer "bridge loaded campaign at turn 39" line gives None
+    log.write_text(
+        "2026-11-06 10:00:00 bridge loaded campaign at turn 38\n"
+        "2026-11-06 10:05:00 campaign over: end_campaign_scroll on screen\n"
+        "2026-11-06 10:10:00 bridge loaded campaign at turn 39\n"
+    )
+    assert game_trouble(lambda: True, log) is None
+
+
 def test_process_manager_writes_a_crash_report_and_never_raises(tmp_path, monkeypatch):
     # 11-05 07:18 a QA crash left no report; the restore's relaunch now writes one first
     from parley.qa import runner as r
@@ -3095,112 +3120,6 @@ def test_process_manager_default_dialog_check_is_off_for_injected_doubles(tmp_pa
         _ProcessManager.crash_dialog_up = orig  # type: ignore[method-assign]
     assert called == []
     assert "relaunch_game" not in harness.events
-
-
-# --- after a relaunch, put the real campaign back when Continue Campaign took the QA game's save ---
-
-def _after_relaunch_setup(tmp_path: Path, *, autosave_newer: bool = False):
-    from parley.qa.runner import LAST_RESTORE_FILE
-
-    _, turn_root, save_dir = _write_real_game(tmp_path)
-    qa_autosave = save_dir / "Autosave.sav"  # the QA game's, from before the restore
-    qa_autosave.write_bytes(b"qa-turn-45")
-    os.utime(qa_autosave, (1000.0, 1000.0))
-    old = save_dir / "parley_keep_scratch.restored-20261030-180000.sav"
-    old.write_bytes(b"real-turn-30")
-    os.utime(old, (500.0, 500.0))
-    keep = save_dir / "parley_keep_scratch.restored-20261030-201000.sav"
-    keep.write_bytes(b"real-turn-41")
-    os.utime(keep, (900.0, 900.0))
-    (turn_root / LAST_RESTORE_FILE).write_text(json.dumps({"newest_save_mtime": 1000.0}), encoding="utf-8")
-    if autosave_newer:
-        os.utime(qa_autosave, (1100.0, 1100.0))  # the real game has autosaved since
-    harness = FakeHarness(turn_root)
-    harness.append_log("bridge loaded campaign at turn 41")  # before the crash: not this launch
-    return turn_root, harness
-
-
-def _after_relaunch(turn_root: Path, harness: FakeHarness, offset: int, **kw) -> str:
-    from parley.qa.runner import resume_real_after_relaunch
-
-    return resume_real_after_relaunch(
-        turn_root,
-        log_offset=offset,
-        control_factory=harness.control_factory,
-        timeout=kw.pop("timeout", 2.0),
-        poll_interval=0.01,
-        **kw,
-    )
-
-
-def test_after_relaunch_loads_the_restored_keep_once_the_campaign_is_up(tmp_path: Path):
-    turn_root, harness = _after_relaunch_setup(tmp_path)
-    offset = harness.log_offset()
-    harness.append_log("bridge loaded campaign at turn 0")  # the main menu
-    harness.append_log("bridge loaded campaign at turn 45")  # Continue Campaign: the QA game
-    msg = _after_relaunch(turn_root, harness, offset)
-    assert harness.lua_calls == [
-        'return M.qa.load("mods/parley/saves/parley_keep_scratch.restored-20261030-201000.sav")'
-    ]
-    assert "parley_keep_scratch.restored-20261030-201000.sav" in msg
-    assert "turn 45" in msg
-
-
-def test_after_relaunch_waits_past_the_main_menu_and_the_old_log(tmp_path: Path):
-    from parley.qa.runner import QARunError
-
-    turn_root, harness = _after_relaunch_setup(tmp_path)
-    offset = harness.log_offset()
-    harness.append_log("bridge loaded campaign at turn 0")
-    with pytest.raises(QARunError, match="bridge loaded campaign at turn N"):
-        _after_relaunch(turn_root, harness, offset, timeout=0.1)
-    assert harness.lua_calls == []
-
-
-def test_after_relaunch_leaves_a_real_autosave_alone(tmp_path: Path):
-    turn_root, harness = _after_relaunch_setup(tmp_path, autosave_newer=True)
-    offset = harness.log_offset()
-    harness.append_log("bridge loaded campaign at turn 42")
-    msg = _after_relaunch(turn_root, harness, offset)
-    assert harness.lua_calls == []
-    assert "Autosave.sav" in msg
-
-
-def test_after_relaunch_does_nothing_without_a_restore_or_during_a_qa_run(tmp_path: Path):
-    from parley.qa.runner import LAST_RESTORE_FILE, LOCK_FILE
-
-    turn_root, harness = _after_relaunch_setup(tmp_path)
-    offset = harness.log_offset()
-    harness.append_log("bridge loaded campaign at turn 45")
-    (turn_root / LOCK_FILE).write_text("{}", encoding="utf-8")  # the bench or its restore owns the game
-    assert "qa.lock" in _after_relaunch(turn_root, harness, offset)
-    (turn_root / LOCK_FILE).unlink()
-    (turn_root / LAST_RESTORE_FILE).unlink()
-    _after_relaunch(turn_root, harness, offset)
-    assert harness.lua_calls == []
-
-
-def test_after_relaunch_reports_a_failed_load(tmp_path: Path):
-    from parley.qa.runner import QARunError
-
-    turn_root, harness = _after_relaunch_setup(tmp_path)
-    offset = harness.log_offset()
-    harness.append_log("bridge loaded campaign at turn 45")
-
-    def fail(h: FakeHarness, line: str) -> str:
-        h.append_log("qa: load failed: no such file")
-        return "nil (error)"
-
-    harness.on_lua = fail
-    with pytest.raises(QARunError, match="load"):
-        _after_relaunch(turn_root, harness, offset)
-
-
-def test_cli_after_relaunch_without_a_restore_is_a_no_op(tmp_path: Path, capsys):
-    turn_root = tmp_path / "parley_turns"
-    turn_root.mkdir()
-    assert qa_main(["after-relaunch", "--turn-root", str(turn_root), "--log-offset", "0"]) == 0
-    assert "no QA restore" in capsys.readouterr().out
 
 
 def _hang_suites(tmp_path: Path, covert_cases: str) -> Path:
@@ -3475,14 +3394,14 @@ def test_restore_retry_that_times_out_again_keeps_the_lock(tmp_path: Path):
     assert "start_real:scratch" not in harness.events
 
 
-# --- live 10-30 19:09: the main menu's turn-0 campaign is not the campaign ----------------------------
+# --- live 10-30 19:09: the main menu's map is not the campaign -------------------------------------
 
 
-def test_restore_relaunch_waits_past_the_main_menus_turn_0_campaign(tmp_path: Path):
+def test_restore_relaunch_waits_past_the_main_menu_map(tmp_path: Path):
     """Live 10-30 19:09: after the hang-recovery relaunch the main menu's background map logged
     "bridge loaded campaign at turn 0"; the restore took it for the campaign, sent M.qa.load from the
-    menu and the game crashed on the loading screen. Continue Campaign logs the real turn after it
-    (19:13:59 turn 0, 19:14:35 turn 43)."""
+    menu and the game crashed on the loading screen. The bridge now logs that map as "main menu map
+    loaded" (W47); the restore waits for Continue Campaign's real line (turn 43)."""
     import threading
 
     real_toml, turn_root, save_dir = _write_real_game(tmp_path)
@@ -3493,7 +3412,7 @@ def test_restore_relaunch_waits_past_the_main_menus_turn_0_campaign(tmp_path: Pa
     def relaunch_menu_then_campaign() -> None:
         harness.events.append("relaunch_game")
         harness.game_running = True
-        harness.append_log("bridge loaded campaign at turn 0")  # the main menu's map
+        harness.append_log("main menu map loaded (no human faction): not a campaign; the bridge waits for one")  # the main menu's map
         threading.Timer(0.2, lambda: harness.append_log("bridge loaded campaign at turn 43")).start()
 
     def on_lua(h: FakeHarness, line: str) -> str:
@@ -3530,7 +3449,7 @@ def test_restore_relaunch_that_only_reaches_the_main_menu_never_loads(tmp_path: 
     def relaunch_menu_only() -> None:
         harness.events.append("relaunch_game")
         harness.game_running = True
-        harness.append_log("bridge loaded campaign at turn 0")
+        harness.append_log("main menu map loaded (no human faction): not a campaign; the bridge waits for one")
 
     with pytest.raises(QARunError, match="restore failed at loaded; lock kept") as ei:
         restore(
@@ -3544,15 +3463,15 @@ def test_restore_relaunch_that_only_reaches_the_main_menu_never_loads(tmp_path: 
             poll_interval=0.01,
             relaunch_timeout=0.2,
         )
-    assert "bridge loaded campaign at turn N" in str(ei.value) and "N > 0" in str(ei.value)
+    assert "bridge loaded campaign at turn N" in str(ei.value)
     assert not any("M.qa.load(" in c for c in harness.lua_calls)
     assert lock_path.exists()
 
 
-def test_confirm_load_skips_a_turn_0_menu_map_and_names_the_line_it_waits_for(tmp_path: Path):
+def test_confirm_load_skips_a_menu_map_and_names_the_line_it_waits_for(tmp_path: Path):
     log_path = tmp_path / "parley_bridge.log"
     log_path.write_text(
-        "2026-10-30 18:37:43 bridge loaded campaign at turn 0\n"
+        "2026-10-30 18:37:43 main menu map loaded (no human faction): not a campaign; the bridge waits for one\n"
         "2026-10-30 18:37:45 qa: load ok: mods/parley/saves/parley_keep_scratch.sav\n"
         "2026-10-30 18:38:30 bridge loaded campaign at turn 32\n",
         encoding="utf-8",
@@ -3560,14 +3479,14 @@ def test_confirm_load_skips_a_turn_0_menu_map_and_names_the_line_it_waits_for(tm
     _confirm_load("ok", log_path, 0, expected_turn=32, timeout=0.05, poll_interval=0.01)
 
     log_path.write_text(
-        "2026-10-30 19:09:16 bridge loaded campaign at turn 0\n"
+        "2026-10-30 19:09:16 main menu map loaded (no human faction): not a campaign; the bridge waits for one\n"
         "2026-10-30 19:09:48 qa: load ok: mods/parley/saves/parley_keep_scratch.sav\n",
         encoding="utf-8",
     )
     with pytest.raises(QARunError) as ei:
         _confirm_load("ok", log_path, 0, expected_turn=32, timeout=0.05, poll_interval=0.01)
     msg = str(ei.value)
-    assert "bridge loaded campaign at turn N" in msg and "N > 0" in msg
+    assert "bridge loaded campaign at turn N" in msg and "N > 0" not in msg
     assert "bridge reloaded" not in msg
 
 
@@ -3716,6 +3635,39 @@ def test_qa_config_turns_the_papal_hands_off_switch_on(tmp_path: Path):
     out = write_qa_config(real_toml, SimpleNamespace(name="field", faction="england"), plan, tmp_path / "qa.toml")
     assert load_config(out).autoplay.papal_hands_off is True
     assert load_config(real_toml).autoplay.papal_hands_off is True  # the default for every game now
+    assert load_config(out).autoplay.hold_reads is False
+    # 11-05 11:57: an offer answered under a pending End Turn crashed the game (covert, a marriage offer
+    # the bench didn't hold); every suite holds End Turn for every offer, within the 90 s bench cap
+    assert load_config(out).autoplay.hold_decisions is True
+    tests_offer = SimpleNamespace(name="diplomacy", faction="england",
+                                  cases=[SimpleNamespace(choice=None), SimpleNamespace(choice="accept")])
+    out2 = write_qa_config(real_toml, tests_offer, plan, tmp_path / "qa2.toml")
+    assert load_config(out2).autoplay.hold_decisions is True
+    assert load_config(out2).autoplay.decision_hold == 90
+    reads_suite = SimpleNamespace(name="popups", faction="england", hold_reads=True)
+    out3 = write_qa_config(real_toml, reads_suite, plan, tmp_path / "qa3.toml")
+    assert load_config(out3).autoplay.hold_reads is True
+
+
+def test_qa_games_publish_short_decision_caps_and_real_games_keep_the_bridges(tmp_path: Path):
+    # the author 11-05: on the bench a stall costs 2 min, not 10; a real campaign keeps 570/540 s
+    from types import SimpleNamespace
+
+    from parley.config import load_config
+    from parley.orchestrator import Orchestrator
+    from parley.qa import runner
+
+    real_toml, _, _ = _write_real_game(tmp_path)
+    plan = tmp_path / "plan.json"
+    plan.write_text("{}\n", encoding="utf-8")
+    out = write_qa_config(real_toml, SimpleNamespace(name="field", faction="england"), plan, tmp_path / "qa.toml")
+    qa = load_config(out)
+    assert (qa.autoplay.decision_hold, qa.autoplay.decide_wait) == (runner.QA_DECISION_HOLD, runner.QA_DECIDE_WAIT)
+    Orchestrator(qa, {}).publish_bridge_config()
+    lines = (qa.turn_root / "bridge.txt").read_text().splitlines()
+    assert "autoplay_decision_hold=90" in lines and "decide_wait=60" in lines
+    real = load_config(real_toml)
+    assert real.autoplay is None or (real.autoplay.decision_hold, real.autoplay.decide_wait) == (None, None)
 
 
 def test_field_spawns_go_beside_a_town_never_on_it():
@@ -3762,7 +3714,7 @@ def _instant_game(tmp_path: Path, cases_toml: str, *, smoke_cases: str | None = 
     suites_dir.mkdir()
     (suites_dir / "smoke.toml").write_text(
         'name = "smoke"\nfaction = "england"\n\n' + (smoke_cases if smoke_cases is not None else
-        '[[cases]]\nname = "skill"\nsetup = [\'M.qa.skill("QA Spy", "GoodSpy", 5)\']\n'
+        '[[cases]]\nname = "skill"\nkind = "instant"\nsetup = [\'M.qa.skill("QA Spy", "GoodSpy", 5)\']\n'
         'expect = [{ log = "qa: skill ok:" }]\n'),
         encoding="utf-8",
     )
@@ -3982,12 +3934,48 @@ TWO_CASES = WALK_CASE + (
 )
 
 
+SMOKE_WITH_TURN = (
+    '[[cases]]\nname = "inst_smoke"\nkind = "instant"\n'
+    'setup = [\'M.qa.skill("QA Spy", "GoodSpy", 5)\']\n'
+    'expect = [{ log = "qa: skill ok:" }]\n\n'
+    '[[cases]]\nname = "turn_smoke"\n'
+    'setup = [\'M.qa.skill("QA Spy", "GoodSpy", 5)\']\n'
+    'expect = [{ log = "qa: skill ok:" }]\n'
+)
+
+
 def test_case_filter_runs_only_the_named_cases_after_smoke(tmp_path: Path):
     real_toml, turn_root, suites_dir = _instant_game(tmp_path, TWO_CASES)
     harness = FakeHarness(turn_root)
     harness.on_lua = _Walker()
     results, _ = _run_instant(tmp_path, harness, real_toml, suites_dir, cases=["other"])
     assert [r.name for r in results] == ["skill", "other"]
+
+
+def test_case_filter_on_non_smoke_suite_omits_smoke_turn_cases(tmp_path: Path):
+    real_toml, turn_root, suites_dir = _instant_game(tmp_path, TWO_CASES, smoke_cases=SMOKE_WITH_TURN)
+    harness = FakeHarness(turn_root)
+    harness.on_lua = _Walker()
+    results, _ = _run_instant(tmp_path, harness, real_toml, suites_dir, cases=["other"])
+    assert [r.name for r in results] == ["inst_smoke", "other"]
+    assert not any(r.name == "turn_smoke" for r in results)
+
+
+def test_full_run_without_cases_runs_smoke_turn_cases(tmp_path: Path):
+    real_toml, turn_root, suites_dir = _instant_game(tmp_path, WALK_CASE, smoke_cases=SMOKE_WITH_TURN)
+    harness = FakeHarness(turn_root)
+    harness.on_lua = _Walker()
+    results, _ = _run_instant(tmp_path, harness, real_toml, suites_dir)
+    assert [r.name for r in results] == ["inst_smoke", "turn_smoke", "walk_out"]
+    assert all(r.outcome == "pass" for r in results)
+
+
+def test_case_filter_on_smoke_suite_runs_filtered_turn_cases(tmp_path: Path):
+    real_toml, turn_root, suites_dir = _instant_game(tmp_path, WALK_CASE, smoke_cases=SMOKE_WITH_TURN)
+    harness = FakeHarness(turn_root)
+    results, _ = _run_instant(tmp_path, harness, real_toml, suites_dir, suite="smoke", cases=["turn_smoke"])
+    assert [r.name for r in results] == ["turn_smoke"]
+    assert results[0].outcome == "pass"
 
 
 def test_case_filter_on_smoke_itself(tmp_path: Path):
@@ -4233,3 +4221,242 @@ def test_confirm_load_accepts_any_campaign_turn_for_a_turn_0_lock(tmp_path: Path
     # a real lock turn still checks the loaded turn
     with pytest.raises(QARunError, match="expected turn 32"):
         _confirm_load("ok", log_path, 0, expected_turn=32, timeout=0.05, poll_interval=0.01)
+
+
+def test_restore_waits_for_the_player_turn_before_loading(tmp_path: Path):
+    # live 11-05 11:26 (the test laptop): a battle's results scroll in an AI turn stood 9 min once the real
+    # config's decision wait applied; the restore now lets the AI turns end under the QA config first
+    from parley.qa.runner import _await_player_turn
+
+    class TurnControl:
+        def __init__(self, answers):
+            self.answers, self.asked = list(answers), 0
+
+        def log_offset(self) -> int:
+            return 0
+
+        def run_lua(self, line: str) -> str:
+            self.asked += 1
+            assert "isPlayerControlled" in line
+            return self.answers.pop(0) if self.answers else "1"
+
+    log = tmp_path / "parley_bridge.log"
+    log.write_text("", encoding="utf-8")
+    ctrl = TurnControl(["0", "0", "1"])
+    _await_player_turn(ctrl, log, None, timeout=5.0, poll_interval=0.0)
+    assert ctrl.asked == 3  # asked until the player's turn came
+    ctrl = TurnControl(["0"] * 1000)
+    _await_player_turn(ctrl, log, None, timeout=0.05, poll_interval=0.01)  # bounded: loads anyway
+    ctrl = TurnControl(["nil (error)"])
+    _await_player_turn(ctrl, log, None, timeout=5.0, poll_interval=0.0)  # can't say: no wait
+    assert ctrl.asked == 1
+    # a call the busy game didn't answer in time is waiting, not "can't say" (review 11-05, agy)
+    from parley.qa.control import ControlTimeout
+
+    class BusyThenPlayer(TurnControl):
+        def run_lua(self, line: str) -> str:
+            self.asked += 1
+            if self.asked == 1:
+                raise ControlTimeout("timed out after 30s waiting for bridge response")
+            return "1"
+
+    ctrl = BusyThenPlayer([])
+    _await_player_turn(ctrl, log, None, timeout=5.0, poll_interval=0.0)
+    assert ctrl.asked == 2
+
+
+def test_a_load_clears_the_old_campaigns_popup_requests(tmp_path: Path):
+    # live 11-05 (the test laptop): requests raised at 09:40 were still answered at 12:14 (the hold's resume
+    # kept them fresh), clicking offers under a pending End Turn; two crashes followed
+    from parley.qa.runner import _clear_popup_requests
+    for name in ("popup-5-9017110.req", "popup-5-9017110.hold", "popup-6-8899712.req",
+                 "popup-6-8899712.answer", "popup-100-1477538.done"):
+        (tmp_path / name).write_text("{}", encoding="utf-8")
+    keep = [tmp_path / "parley_bridge.log", tmp_path / "bridge.txt", tmp_path / "popup-7-1-m.png"]
+    for p in keep:
+        p.write_text("x", encoding="utf-8")
+    assert _clear_popup_requests(tmp_path) == 5
+    assert all(p.exists() for p in keep)
+    assert not [p for p in tmp_path.glob("popup-*") if p.suffix in (".req", ".answer", ".hold", ".done")]
+
+
+RELAUNCH_RESTORE_CASE = WALK_CASE.replace('name = "walk_out"', 'name = "walk_out"\nrestore = "relaunch"')
+
+
+def test_run_with_restore_relaunch_case_restores_by_relaunch(tmp_path: Path):
+    real_toml, turn_root, suites_dir = _instant_game(tmp_path, RELAUNCH_RESTORE_CASE)
+    harness = FakeHarness(turn_root)
+    harness.on_lua = _Walker()
+    results, _ = _run_instant(tmp_path, harness, real_toml, suites_dir)
+    assert [r.outcome for r in results] == ["pass", "pass"]
+    assert "relaunch_game" in harness.events
+    assert not any(e.startswith("lua:") and "M.qa.load(" in e for e in harness.events)
+    assert not (turn_root / "qa.lock").exists()
+
+
+def test_run_without_restore_relaunch_case_restores_in_process(tmp_path: Path):
+    real_toml, turn_root, suites_dir = _instant_game(tmp_path, WALK_CASE)
+    harness = FakeHarness(turn_root)
+    harness.on_lua = _Walker()
+    results, _ = _run_instant(tmp_path, harness, real_toml, suites_dir)
+    assert [r.outcome for r in results] == ["pass", "pass"]
+    assert "relaunch_game" not in harness.events
+    assert any(e.startswith("lua:") and "M.qa.load(" in e for e in harness.events)
+    assert not (turn_root / "qa.lock").exists()
+
+
+def test_unknown_restore_value_is_rejected_when_suite_loads(tmp_path: Path):
+    from pydantic import ValidationError
+    from parley.qa.cases import load_suite
+
+    bad_toml = tmp_path / "bad.toml"
+    bad_toml.write_text(
+        'name = "bad"\nfaction = "england"\n\n'
+        '[[cases]]\nname = "c"\nkind = "instant"\nrestore = "bogus"\n'
+        'expect = [{ log = "qa: skill ok:" }]\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError):
+        load_suite(bad_toml)
+
+
+class _SentinelParkReached(Exception):
+    pass
+
+
+from parley.bridge_build import repo_build
+
+REPO = repo_build()
+
+
+def _fast_clock(monkeypatch):
+    """ensure_current's wait without the wall clock: each sleep moves time 2 s on."""
+    import parley.bridge_build as bb
+    now = [0.0]
+    monkeypatch.setattr(bb.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(bb.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
+
+
+def test_bridge_build_equal_stamps_proceeds_without_reload(tmp_path: Path, monkeypatch):
+    real_toml, turn_root, save_dir = _write_real_game(tmp_path)
+    (save_dir / "Autosave.sav").write_bytes(b"save-turn-10")
+    _write_state(turn_root, "scratch", 10)
+    (turn_root / "parley_build.txt").write_text(REPO + "\n")
+    (turn_root / "bridge_loaded_build.txt").write_text(REPO + "\n")
+
+    reloads = []
+    monkeypatch.setattr("parley.qa.runner.subprocess.run", lambda argv, **k: reloads.append(argv))
+
+    parked = []
+    import parley.qa.runner as runner_mod
+    monkeypatch.setattr(runner_mod, "_park_real", lambda *a, **k: parked.append(a) or (_ for _ in ()).throw(_SentinelParkReached()))
+
+    harness = FakeHarness(turn_root)
+    with pytest.raises(_SentinelParkReached):
+        run_suite(
+            "smoke",
+            real_toml,
+            control_factory=harness.control_factory,
+            advance_turn=harness.advance_turn,
+            is_game_running=harness.is_game_running,
+            relaunch_game=harness.relaunch_game,
+            stop_loop=harness.stop_loop,
+            stop_crash_watch=harness.stop_crash_watch,
+            start_qa_loop=harness.start_qa_loop,
+            start_real=harness.start_real,
+            start_crash_watch=harness.start_crash_watch,
+        )
+
+    assert not any("reload-bridge" in str(r) for r in reloads)
+    assert len(parked) == 1
+
+
+@pytest.mark.parametrize("installed, loaded", [(None, "old000000001"), ("old000000001", "old000000001")])
+def test_bridge_build_differ_then_equal_after_reload_proceeds(tmp_path: Path, monkeypatch, capsys, installed, loaded):
+    # ("old", "old"): live 11-23, code reached tc by git, installed and loaded agreed on the old
+    # build, and the navy suite ran on it
+    real_toml, turn_root, save_dir = _write_real_game(tmp_path)
+    (save_dir / "Autosave.sav").write_bytes(b"save-turn-10")
+    _write_state(turn_root, "scratch", 10)
+    (turn_root / "parley_build.txt").write_text((installed or REPO) + "\n")
+    (turn_root / "bridge_loaded_build.txt").write_text(loaded + "\n")
+
+    reloads = []
+    import subprocess
+    def fake_reload(argv, **k):
+        if "reload-bridge" in argv:
+            reloads.append(argv)
+            (turn_root / "parley_build.txt").write_text(REPO + "\n")
+            (turn_root / "bridge_loaded_build.txt").write_text(REPO + "\n")
+        return subprocess.CompletedProcess(argv, 0)
+
+    import parley.qa.runner as runner_mod
+    monkeypatch.setattr(runner_mod.subprocess, "run", fake_reload)
+    _fast_clock(monkeypatch)
+
+    parked = []
+    monkeypatch.setattr(runner_mod, "_park_real", lambda *a, **k: parked.append(a) or (_ for _ in ()).throw(_SentinelParkReached()))
+
+    harness = FakeHarness(turn_root)
+    with pytest.raises(_SentinelParkReached):
+        run_suite(
+            "smoke",
+            real_toml,
+            control_factory=harness.control_factory,
+            advance_turn=harness.advance_turn,
+            is_game_running=harness.is_game_running,
+            relaunch_game=harness.relaunch_game,
+            stop_loop=harness.stop_loop,
+            stop_crash_watch=harness.stop_crash_watch,
+            start_qa_loop=harness.start_qa_loop,
+            start_real=harness.start_real,
+            start_crash_watch=harness.start_crash_watch,
+        )
+
+    assert len(reloads) == 1
+    assert len(parked) == 1
+    assert f"qa: bridge build {REPO} loaded; bench runs on it" in capsys.readouterr().out
+
+
+def test_bridge_build_differ_forever_refuses_no_park(tmp_path: Path, monkeypatch, capsys):
+    real_toml, turn_root, save_dir = _write_real_game(tmp_path)
+    (save_dir / "Autosave.sav").write_bytes(b"save-turn-10")
+    _write_state(turn_root, "scratch", 10)
+    (turn_root / "parley_build.txt").write_text(REPO + "\n")
+    (turn_root / "bridge_loaded_build.txt").write_text("build0000001\n")
+
+    reloads = []
+    import subprocess
+    def fake_reload(argv, **k):
+        if "reload-bridge" in argv:
+            reloads.append(argv)
+        return subprocess.CompletedProcess(argv, 0)
+
+    import parley.qa.runner as runner_mod
+    monkeypatch.setattr(runner_mod.subprocess, "run", fake_reload)
+    _fast_clock(monkeypatch)
+
+    parked = []
+    monkeypatch.setattr(runner_mod, "_park_real", lambda *a, **k: parked.append(a) or (_ for _ in ()).throw(_SentinelParkReached()))
+
+    harness = FakeHarness(turn_root)
+    with pytest.raises(QARunError, match=r"the game runs bridge build build0000001, installed is " + REPO):
+        run_suite(
+            "smoke",
+            real_toml,
+            control_factory=harness.control_factory,
+            advance_turn=harness.advance_turn,
+            is_game_running=harness.is_game_running,
+            relaunch_game=harness.relaunch_game,
+            stop_loop=harness.stop_loop,
+            stop_crash_watch=harness.stop_crash_watch,
+            start_qa_loop=harness.start_qa_loop,
+            start_real=harness.start_real,
+            start_crash_watch=harness.start_crash_watch,
+        )
+
+    assert len(parked) == 0
+    assert not (turn_root / "qa.lock").exists()
+    out = capsys.readouterr()
+    assert f"qa error: the game runs bridge build build0000001, installed is {REPO}, this checkout's is {REPO}; the reload didn't take" in (out.out + out.err)
+

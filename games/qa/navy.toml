@@ -136,7 +136,7 @@ setup = [
 ]
 act = ['return M.qa.order("england", { type = "land", army = "$army", x = $at_x, y = $at_y })']
 expect = [
-    { lua = 'return M.qa.last("land")', equals = "land ok" },
+    { lua = 'return M.qa.last("land")', match = '^land ok' },
     { lua = 'return M.qa.army("england", "$army")', match = '^$at_x,$at_y fleet=no .* aboard=-$', within = 15 },
 ]
 
@@ -155,7 +155,8 @@ setup = [
 ]
 act = ['return M.qa.order("england", { type = "land", army = "$army", x = $water_x, y = $water_y })']
 expect = [
-    { lua = 'return M.qa.last("land")', equals = "land refused: ($water_x,$water_y) is not land; land on a tile next to the fleet" },
+    # the reason names the land tiles next to the fleet (11-14), so only its start is fixed
+    { lua = 'return M.qa.last("land")', match = '^land refused: \($water_x,$water_y\) is not land; (land next to it: |no land is next to it)' },
     { lua = 'return M.qa.army("england", "$army")', match = ' aboard=$fleet$' },
 ]
 
@@ -223,7 +224,7 @@ act = [
     'return M.qa.order("england", { type = "land", army = "$army", x = $far_x, y = $far_y })',
 ]
 expect = [
-    { lua = 'return M.qa.last("land")', equals = "land ok" },
+    { lua = 'return M.qa.last("land")', match = '^land ok' },
     { lua = 'return M.qa.army("england", "$army")', match = '^$far_x,$far_y fleet=no .* aboard=-$', within = 15 },
 ]
 
@@ -243,20 +244,21 @@ expect = [
     { lua = 'return M.qa.dist("$fleet", $dest_x, $dest_y)', below = "$start" },
 ]
 
-# 10. move_army for a fleet onto land: refused, naming the nearest sea; the fleet stays put
+# 10. move_army for a fleet onto land beside the sea: it sails to the nearest sea instead (live
+# 11-23 turns 4576-4591: England sent a fleet to Caen's port tile seven times, refused each time).
+# Land farther than K.FLEET_SHORE_REACH from any sea is still refused (tests/test_lua_bridge.py).
 [[cases]]
-name = "fleet_onto_land_refused"
+name = "fleet_onto_shore_sails_to_sea"
 kind = "instant"
 isolation = "shared"
 setup = [
     { lua = 'return M.qa.coast("$garrison_town", 1, 6)', bind = "sea", require = '^\d+,\d+$' },
     { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
-    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "land" },
+    { lua = 'return M.qa.free_tile($sea_x, $sea_y, 1, 1)', bind = "land" },
 ]
 act = ['return M.qa.order("england", { type = "move_army", army = "$fleet", x = $land_x, y = $land_y })']
 expect = [
-    { lua = 'return M.qa.last("move_army")', match = '^move_army refused: a fleet can.t sail onto land \($land_x,$land_y\)(; the nearest sea is \(\d+,\d+\))?$' },
-    { lua = 'return M.qa.where("$fleet")', equals = "$sea" },
+    { lua = 'return M.qa.last("move_army")', match = '^move_army ok: \($land_x,$land_y\) is land; sailing to the nearest sea, \(\d+,\d+\)$' },
 ]
 
 # 11. blockade of an own port: refused before any game call; nobody blockades it (blockade_port, the
@@ -300,14 +302,18 @@ expect = [
 # --- turn cases ---------------------------------------------------------------------------------
 
 # 14. the next report after a board: the fleet's `carrying` and the army's `aboard`, as the ruler reads
-# them (state.json through the orchestrator)
+# them (state.json through the orchestrator). The fleet is one of England's own admirals at sea, not a
+# spawned one: live 11-05 (the test laptop, 09:52, 10:12, 10:42) the game gave a spawned admiral a new name
+# at every turn change (Fraunce, Nicholas, Morris) and his old label was gone with it, so the order
+# named a fleet that no longer existed. (A ruler's ship put to sea by launch_ship is spawned the
+# same way: an open bug, HANDOFF 11-05.)
 [[cases]]
 name = "report_fleet_carrying"
 max_turns = 2
 setup = [
-    { lua = 'return M.qa.shore($home_x, $home_y, 1, 10)', bind = "at" },
-    { lua = 'return M.qa.sea($at_x, $at_y, 1, 1)', bind = "sea" },
-    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'local fac = gameDataAll.get().campaignStruct:getFaction("england") for i = 0, fac.stacksNum - 1 do local st = fac:getStack(i) local c = st and st.leader if c and c:getTypeName() == "admiral" and not st:findInSettlement() then return c.characterRecord.fullName end end error("england has no admiral at sea")', bind = "fleet" },
+    { lua = 'return M.qa.where("$fleet")', bind = "sea" },
+    { lua = 'return M.qa.shore($sea_x, $sea_y, 1, 1)', bind = "at" },
     { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "army" },
 ]
 expect = [
@@ -357,19 +363,50 @@ expect = [
 # broke is unproven: a fleet spawned in the same turn (a ruler's fleets never are), the held turn, or
 # a rebel port. Blockades from turn-start orders didn't crash (france 10-29 18:11 and 10-30 00:37,
 # england 10-30 01:48), so here the fleet has a turn start before its order.
+# 11-05 12:15:05 and 12:31:39 (the test laptop): the game crashed at the turn start that applied this
+# order to a spawned fleet (no result line came), twice. A spawned fleet is the one thing the rulers'
+# blockades never had, so the fleet is now one of England's own admirals, where he stands (the
+# bench's teleport moves characters on land only; live 12:36 "tile 116,145 isn't land"): the
+# blockade sails him there, as a ruler's does. It crashed again (12:40:28): the rebel port is what all
+# three had in common, so the bridge refuses a rebel port's blockade (handlers.blockade). The case
+# passes on the blockade done or that refusal, and the game must live 30 s after the order either way.
+# 3 turns: in the full pass (13:41) the report came 2 s after the order, too soon to show 30 s alive.
 [[cases]]
 name = "blockade_port"
-max_turns = 2
+max_turns = 3
 setup = [
     { lua = 'return M.qa.port_town("england", $garrison_town_x, $garrison_town_y)', bind = "target" },
-    { lua = 'return M.qa.port("$target")', bind = "port" },
-    { lua = 'return M.qa.sea($port_x, $port_y, 1, 2)', bind = "sea" },
-    { lua = 'return M.qa.spawn_fleet("england", $sea_x, $sea_y)', bind = "fleet" },
+    { lua = 'local fac = gameDataAll.get().campaignStruct:getFaction("england") for i = 0, fac.stacksNum - 1 do local st = fac:getStack(i) local c = st and st.leader if c and c:getTypeName() == "admiral" and not st:findInSettlement() then return c.characterRecord.fullName end end error("england has no admiral at sea")', bind = "fleet" },
 ]
 expect = [
-    { log = 'england order \d+ blockade: done' },
-    { alive = 30, after = 'england order \d+ blockade: done' },
+    { any_of = [
+        { log = 'england order \d+ blockade: done' },
+        { log = 'england order \d+ blockade: \S+ is a rebel port' },
+    ] },
+    # 15 s, not 30: the three crashes came 5 s after the order, and 3 bench turns (~20 s each since
+    # 11-05) showed only 21 s after it (14:02:34)
+    { alive = 15, after = 'england order \d+ blockade: ' },
 ]
 
 [cases.orders]
 1 = [{ type = "blockade", fleet = "$fleet", settlement = "$target" }]
+
+# 18. two of England's fleets merged: the game survives the round after. Live 11-14 15:37 (scratch turn
+# 457) Admiral Robin was merged into Admiral John and the game crashed in that round three times
+# (004CA78E, 121E229A, ...). parley/validate.py refuses a fleet merge (#614), so the order goes straight
+# to the bridge here, in setup (a spawned admiral is also renamed at the turn change).
+[[cases]]
+name = "fleet_merge_survives_a_round"
+max_turns = 6  # bench rounds take ~20 s; 2 gave only 40 s of the 120 (11-14 16:00)
+setup = [
+    { lua = 'local fac = gameDataAll.get().campaignStruct:getFaction("england") for i = 0, fac.stacksNum - 1 do local st = fac:getStack(i) local c = st and st.leader if c and c:getTypeName() == "admiral" and not st:findInSettlement() then return c.characterRecord.fullName end end error("england has no admiral at sea")', bind = "fleet" },
+    { lua = 'return M.qa.where("$fleet")', bind = "sea" },
+    { lua = 'return M.qa.sea($sea_x, $sea_y, 1, 1)', bind = "next" },
+    { lua = 'return M.qa.spawn_fleet("england", $next_x, $next_y)', bind = "second" },
+    # England's own admiral merged away, as Admiral Robin was live (the spawned one into him survived
+    # 6 rounds, 11-14 16:05)
+    { lua = 'return M.qa.order("england", { type = "merge_armies", army = "$fleet", into = "$second" })', bind = "merged" },
+]
+expect = [
+    { alive = 120, after = 'autoplay: ending turn' },
+]

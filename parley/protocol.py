@@ -43,6 +43,7 @@ class MercOption(BaseModel):
     available: int  # how many the pool holds now (it refills a little each turn)
     max: int = 0  # the most the pool holds
     exp: int = 0  # experience they join with
+    pool: str | None = None  # the region's pool; every army standing in that region hires from it
 
 
 class AgentLimit(BaseModel):
@@ -55,6 +56,22 @@ class Unit(BaseModel):
     soldiers: int
     max_soldiers: int = 0
     exp: int = 0
+    armour: int = 0
+    weapon: int = 0
+    held: bool = False  # merge_units leaves it alone: a general's bodyguard, or retraining
+
+    @property
+    def label(self) -> str:
+        """Type with any armour/weapon upgrade, the way merge_units tells units apart."""
+        ups = [f"armour {self.armour}"] * bool(self.armour) + [f"weapon {self.weapon}"] * bool(self.weapon)
+        return f"{self.type} ({', '.join(ups)})" if ups else self.type
+
+    def merge_group(self) -> str | None:
+        """The group merge_units would pour this unit within (the bridge's merge_key: type,
+        armour and weapon level), or None when it isn't a worn unit merge_units touches."""
+        if self.held or "Bodyguard" in self.type or not (self.max_soldiers and 0 < self.soldiers < self.max_soldiers):
+            return None
+        return self.label
 
 
 class Training(BaseModel):
@@ -181,6 +198,7 @@ class Person(BaseModel):
     now_serves: str | None = None  # listed dead here, but alive in this faction's records
     x: int | None = None  # where they stand, if on the map
     y: int | None = None
+    death_turn: int | None = None
 
 
 class ForeignSettlement(BaseModel):
@@ -254,6 +272,8 @@ class MoveNotMade(BaseModel):
     target: str
     order_type: str = "move"
     moves_left: int | None = None
+    target_x: int | None = None  # an attack that came to no battle: where its target stands now
+    target_y: int | None = None
 
 
 class StateReport(BaseModel):
@@ -524,6 +544,9 @@ class Orders(BaseModel):
     # settlements (ids or names) the ruler means to leave without a garrison this turn: the steward
     # (parley/steward.py) won't recruit there
     hold_empty: list[str] = []
+    # a seat with lookups (spec 2026-11-23-ruler-lookups-design): "town:<id>" keys it wants in full
+    # before it orders; the orchestrator answers once and asks again. Other seats' lookups are ignored.
+    lookup: list[str] = []
     # set by seats.base.to_orders, never part of the schema: where each kept order sat in the
     # LLM's own list, and the orders/messages dropped as malformed (in that numbering)
     _source_index: list[int] | None = PrivateAttr(default=None)

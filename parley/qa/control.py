@@ -8,7 +8,9 @@ from pathlib import Path
 LOG_FILE = "parley_bridge.log"
 CONTROL_FILE = "control.txt"
 LUA_RESULT_PREFIX = "control: lua -> "
-POLL_INTERVAL = 0.5
+# 0.1, not 0.5 (the author 11-05 step 5, halve the bench reload): the bridge answers within a few frames,
+# and a reload's readiness check alone makes ~12 calls, each waiting up to a whole poll
+POLL_INTERVAL = 0.1
 
 
 class ControlTimeout(TimeoutError):

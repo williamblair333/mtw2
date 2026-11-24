@@ -25,6 +25,8 @@
 
 name = "popups"
 faction = "england"
+# 2026-11-05 08:59 event_scroll_closed: turn 5 ended before message 91 was read
+hold_reads = true
 
 # the scene tools, in one held turn: a Pope to kill, and a vote for England
 [[cases]]
@@ -41,29 +43,88 @@ expect = [
 
 # a message scroll from a historic event: the turn loop reads it and the bridge closes it. The first
 # message after the event, before the turn ends, must be handled.
+# max_turns 2: a spare turn. (The 11-05 failures blamed on an early report were the Wine log's \r\n,
+# fixed in the runner; the judged-report line showed the first report comes after End Turn.)
 [[cases]]
 name = "event_scroll_closed"
-max_turns = 1
+max_turns = 2
 setup = ['return M.qa.event("first_wheelbarrow")']
 expect = [
     { log = 'qa: event ok: first_wheelbarrow(?:(?!autoplay: ending turn)[\s\S])*?popup message (\d+)\n[\s\S]*?popup handled: game message \1 \(' },
 ]
 
-# the faction overview held the AI turns behind it (live 10-29, a new campaign); only a stuck turn
-# closes it (K.STUCK_ONLY_SCROLLS), from End Turn (20 s) or an AI turn (30 s)
+# a minimized message blocks End Turn unseen; the stuck turn reopens it by its icon's own element
+# (M.open_minimized, fork level 6 activate(); the turn loop clicked the icon until 11-20: the census's
+# 23 "open minimized" inputs). Forced, in a held turn: a scripted historic event opens its 512x593
+# scroll and adds its icon to the stack. activate() on the icon toggles the message (live probe
+# 11-21 15:41-15:43: on the open scroll icon 1 shut it; with nothing open it opened it), so the case
+# shuts it by element (now a minimized message), then reopens it by element. clear_messages does
+# not close an open message scroll (bench 11-21 16:04: after it, icons=3, the 512x593 still open).
+# Waiting for a stuck turn on the bench never got one (11-21 15:29: the icon blocked nothing); the
+# stuck path that calls the reopen is test_lua_bridge's.
 [[cases]]
-name = "faction_overview_closed"
-max_turns = 1
-setup = ['return M.qa.press("faction_button")']
+name = "minimized_message_reopened_by_element"
+kind = "instant"
+# Expects are polled (10 s each), so each waits on the game's frames; each activate() runs once
+# (M.qa_shut, M.qa_reopened: on M, since each control call gets fresh globals; bench 11-21 16:08,
+# a global flag reset every poll and icon 1 toggled the scroll open/shut once a poll), since
+# another would toggle the message back
+# The bench save itself holds minimized messages and opens with no window up (bench 11-21 16:08:
+# icons at y 546 and 499, nothing open). A scripted event only got in the way: its own 480-wide
+# scroll, and activating icon 1 swapped it for the old message's 512-wide one, so no "shut" ever
+# came (16:14). So: nothing open, a minimized message there, reopened by element, a window up.
+setup = [
+    { lua = 'M.qa_reopened = nil return #(M.open_ui() or {})', bind = "base" },
+    { lua = 'local t = 0 for _, e in ipairs(gameSTDUI.getRootUiElements() or {}) do if e.xSize == 47 and e.ySize == 47 and e.xPos == 0 then t = t + 1 end end return t', bind = "icons" },
+]
 expect = [
-    { log = "qa: press ok: faction_button[\\s\\S]*?stuck\\? try \\d+: combined_overview_scroll's tick" },
+    { lua = 'return tonumber("$icons") or 0', at_least = 1 },
+    { lua = 'return tonumber("$base") == 0 and 1 or 0', at_least = 1 },
+    # polled; the reopen runs once (on M: each control call gets fresh globals), since another
+    # activate() would shut what it opened
+    { lua = 'if not M.qa_reopened then M.qa_reopened = M.open_minimized(1) or 0 return "asked: " .. M.qa_reopened end local n = #(M.open_ui() or {}) return n > 0 and "reopened" or ("open " .. n .. " after icon " .. M.qa_reopened)', equals = "reopened" },
 ]
 
-# England votes: notice -> the vote scroll found from the tick -> the vote request -> the turn loop
-# clicks a Vote button (it writes .done only after its click) -> the results window -> closed, and
-# the game alive 30 s after the results (live 10-31 04:50:27-04:51:32 went this way)
+# the stuck turn's own path, not only its reopen: one try of try_dismiss (M.qa.stuck_try), the
+# function a turn stuck behind a minimized message runs, in the real game on the bench save (its
+# two minimized icons, nothing open). Since 11-21 it has no click fallback, so the reopen by element
+# is the only way it gets the message up. A bench turn that a minimized message really blocks never
+# came (11-21 15:29), hence the driven try. Pass: the try reopened icon 1 of 2 by element, asked the
+# turn loop for no click, and the message came up or left the icon stack.
+[[cases]]
+name = "stuck_turn_reopens_minimized_message"
+kind = "instant"
+setup = [
+    { lua = 'return #(M.open_ui() or {})', bind = "base" },
+    { lua = 'local t = 0 for _, e in ipairs(gameSTDUI.getRootUiElements() or {}) do if e.xSize == 47 and e.ySize == 47 and e.xPos == 0 then t = t + 1 end end return t', bind = "icons" },
+    'return M.qa.stuck_try()',
+]
+expect = [
+    { lua = 'return tonumber("$icons") or 0', at_least = 1 },
+    { lua = 'return tonumber("$base") == 0 and 1 or 0', at_least = 1 },
+    { log = 'stuck\? try 1: reopened minimized message 1 of \d+ by its element[\s\S]*?qa: stuck_try ok' },
+    { lua ='local t = 0 for _, e in ipairs(gameSTDUI.getRootUiElements() or {}) do if e.xSize == 47 and e.ySize == 47 and e.xPos == 0 then t = t + 1 end end local n = #(M.open_ui() or {}) return (n > 0 or t < (tonumber("$icons") or 0)) and "up" or ("open " .. n .. ", icons " .. t)', equals = "up" },
+]
+
+# the faction overview held the AI turns behind it (live 10-29, a new campaign); only a stuck turn
+# closes it (K.STUCK_ONLY_SCROLLS), from End Turn (20 s) or an AI turn (30 s). Passes too when the
+# overview held nothing: the turn ended and the next one started (live 11-05 09:53, the test laptop:
+# pressed 09:53:11, End Turn 09:53:15, England's next turn 09:53:33, no stuck try needed).
+# max_turns 2, as event_scroll_closed: a spare turn
+[[cases]]
+name = "faction_overview_closed"
+max_turns = 2
+setup = ['return M.qa.press("faction_button")']
+expect = [
+    { log = "qa: press ok: faction_button[\\s\\S]*?(stuck\\? try \\d+: combined_overview_scroll's tick|autoplay: ending turn \\d+\\n[\\s\\S]*?qa: quiet ok:)" },
+]
+
+# England votes: notice -> the vote scroll found from the tick -> the vote request -> the ruler's
+# candidate pressed on the scroll by its element (a UI::VOTE_BUTTON, #659; no click) -> the results
+# window -> closed, and the game alive 30 s after the results (live 10-31 04:50:27-04:51:32)
 [[cases]]
 name = "papal_election_vote"
+restore = "relaunch"
 max_turns = 2
 setup = [
     { lua = 'return M.qa.give_cardinal("england")', bind = "cardinal" },
@@ -74,25 +135,54 @@ expect = [
     { log = 'papal vote: the vote scroll is up \(seen from the tick\)' },
     { log = 'calling captured\(\) \(asks the turn loop to screenshot it\) \[papal_election_scroll\]' },
     { log = 'popup: a papal election vote answered by the ruler' },
+    { log = 'popup: .*: pressed .* on papal_election_scroll by its element' },
     { log = 'papal window: results; [\s\S]*?papal window: closed; the turn loop may press again' },
     { alive = 30, after = 'papal window: results; ' },
 ]
 
-# England has no vote: the notice, no election for England, its check pressed after 15 s, the
-# results (England's screen) close by themselves, and the game alive 30 s after the check. The
-# 05:29 bench crash (10-31): the game died within 45 s of "asking for its check". Reproduces it;
-# it fixes nothing. Last: a crash ends the run.
+# England votes and the turn goes on with no Escape request. The results window that once stalled
+# a turn (11-22 03:17, France) is closed by its close gadget (UI::SCROLL_CLOSE_GADGET activate()).
+# The bench can't force that stall: here the results come as an ordinary UI_MESSAGE (part 0 a
+# SCROLL_EXPAND_GADGET, live 11-22 07:58) the game clears itself, so the close path is proven by
+# tests/test_lua_bridge.py and watched live; this case proves the election plays through
+[[cases]]
+name = "papal_results_turn_goes_on"
+restore = "relaunch"
+max_turns = 3
+setup = [
+    { lua = 'return M.qa.give_cardinal("england")', bind = "cardinal" },
+    { lua = 'return M.qa.kill_pope()', bind = "pope" },
+]
+expect = [
+    { log = 'popup message 202' },
+    { log = 'papal vote: the vote scroll is up \(seen from the tick\)' },
+    { log = 'popup: a papal election vote answered by the ruler' },
+    { log = 'popup: .*: pressed .* on papal_election_scroll by its element' },
+    { log = 'papal window: results; [\s\S]*?papal window: closed; the turn loop may press again' },
+    { alive = 30, after = 'papal window: closed; the turn loop may press again' },
+]
+
+# England has no vote, and the game takes one of two paths; either passes if the game lives on:
+#  - the notice (202) with no election for England, its check pressed after 15 s (live 10-31 05:39);
+#  - no notice at all: the death (201), then only the result (203). Bench 11-05 13:48: with England's
+#    cardinal killed the game elected Zappa de Cardinale and sent no 202, so a case wanting 202 could
+#    never pass there. What picks the path is not known yet.
+# Then the game alive 30 s on (the 05:29 bench crash, 10-31, came within 45 s of "asking for its
+# check"). Last: a crash ends the run.
 [[cases]]
 name = "papal_election_no_vote"
-max_turns = 2
+restore = "relaunch"
+# 3 turns: in the full pass (11-05 18:43) the result came 28 s before the case's last report, too
+# soon to show 30 s alive (navy's blockade_port, the same)
+max_turns = 3
 setup = [
     'return M.qa.drop_cardinals("england")',
     { lua = 'return M.qa.kill_pope()', bind = "pope" },
 ]
 expect = [
-    { log = 'popup message 202' },
-    { log = 'papal notice: no election after 15s; asking for its check' },
-    { log = 'popup handled: game message 202 \(acknowledged with its check\)' },
-    { log = 'papal notice: no election after 15s[\s\S]*?papal window: closed; the turn loop may press again' },
-    { alive = 30, after = 'popup handled: game message 202 \(acknowledged with its check\)' },
+    { any_of = [
+        { log = 'papal notice: no election after 15s[\s\S]*?popup handled: game message 202 \(acknowledged with its check\)' },
+        { log = 'popup message 201(?:(?!popup message 202)[\s\S])*?popup handled: game message 203' },
+    ] },
+    { alive = 30, after = 'popup handled: game message 20[23] \((?:acknowledged with its check|clear_messages)\)' },
 ]

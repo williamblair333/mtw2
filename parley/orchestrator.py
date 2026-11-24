@@ -24,7 +24,7 @@ from parley.control import PRESETS
 from parley.decisions import record_outcomes, record_turn
 from parley.events import diff_reports
 from parley.popups import Popups, make_reader
-from parley.prompt import build_prompt, order_brief
+from parley.prompt import LOOKUP_ANSWERED, build_prompt, order_brief, town_details
 from parley.protocol import OrderResult, Orders, StateReport
 from parley.saves import backup_saves
 from parley import lessons, pause
@@ -50,6 +50,22 @@ EMPTY_ORDERS_RETRY = ("\n\nYOUR LAST ANSWER: your note described a plan, but you
                       "was empty, so nothing would happen in the game. Answer again, with every "
                       "order your plan needs in \"orders\". An empty list is right only if you truly "
                       "mean to do nothing this turn.\n")
+
+
+REFUSED_RETRY = ("\n\nYOUR LAST ANSWER had orders refused before they reached the game:\n{refused}\n"
+                 "Answer again with this turn's full order list: the orders that passed, as they were, "
+                 "and each refused one fixed or left out. This is your last answer this turn.\n")
+
+
+def _refused_lines(orders: Orders, refused) -> str:
+    """Each refused order as the ruler wrote it, with the reason (index = the ruler's numbering)."""
+    by_index = {orders.source_index[i]: o for i, o in enumerate(orders.orders)}
+    lines = []
+    for r in refused:
+        o = by_index.get(r.index)
+        what = json.dumps(o.model_dump(exclude_none=True)) if o is not None else f"order {r.index}"
+        lines.append(f"- {what}: {r.reason}")
+    return "\n".join(lines)
 
 
 class Fallback:
@@ -207,10 +223,18 @@ class Orchestrator:
             lines += ["autoplay=1", f"autoplay_wait={auto.wait}"]
             if auto.until_turn is not None:
                 lines.append(f"autoplay_until={auto.until_turn}")
-            if not auto.hold_decisions:
+            if auto.hold_decisions == "diplomacy":
+                lines.append("autoplay_hold_decisions=diplomacy")
+            elif not auto.hold_decisions:
                 lines.append("autoplay_hold_decisions=0")
+            if auto.decision_hold is not None:
+                lines.append(f"autoplay_decision_hold={auto.decision_hold}")
+            if auto.decide_wait is not None:
+                lines.append(f"decide_wait={auto.decide_wait}")
             if auto.papal_hands_off:
                 lines.append("papal_hands_off=1")
+            if auto.hold_reads:
+                lines.append("autoplay_hold_reads=1")
         self.config.turn_root.mkdir(parents=True, exist_ok=True)
         atomic_write(self.config.turn_root / "bridge.txt", "\n".join(lines) + "\n")
 
@@ -340,13 +364,42 @@ class Orchestrator:
         self.turns.write_artifact(dir, "index_map.json", json.dumps(index_map))
         self.turns.write_orders(dir, orders)
         if pause.paused(self.config.turn_root) and not orders.note.startswith(("seat error", "orchestrator error")):
-            log.info("a ruler answered again; resuming the game")
-            pause.resume(self.config.turn_root)
+            pause.resume_limit(self.config.turn_root)
+            if not pause.paused(self.config.turn_root):
+                log.info("a ruler answered again; resuming the game")
         self.prepare_turn_dirs(report.turn)
         self._announce_if_all_decided(report.turn)
-        if report.turn > 0 and report.turn % REVIEW_EVERY == 0 and dir.name in self.seats:
-            threading.Thread(target=self.review, args=(dir.name, report.turn), daemon=True).start()
+        self._start_reviews(report.turn)
         return True
+
+    def _start_reviews(self, turn: int) -> None:
+        """Every REVIEW_EVERY turns, once every ruler has answered the turn, review each ruler's
+        lessons one after another in one thread. Started per ruler as it answered, the reviews ran
+        beside the other ruler's decision and each other: on Heretic's two slots they timed out
+        (11-05, HANDOFF) and slowed the rulers' turns. Staggered: the i-th ruler reviews at turns
+        i, i + REVIEW_EVERY, ... past the first REVIEW_EVERY, one ruler a turn, so each review has the
+        quiet after everyone answered to itself (live 11-05 run 10, turn 20: the second of two
+        back-to-back reviews ran into turn 21's decisions and one had its thinking cut at 180 s)."""
+        if turn <= 0:
+            return
+        game = self.config.game_id
+        seated = [f for f in self.config.seats if f in self.seats]
+        factions = [f for i, f in enumerate(seated) if turn - i >= REVIEW_EVERY and (turn - i) % REVIEW_EVERY == 0]
+        if not factions or not all((self.turns.path_for(game, turn, f) / "orders.json").exists() for f in seated):
+            return
+        # _answer runs on the seat pool: both rulers can finish together and both see every answer
+        # in; one check-and-add under a lock starts the turn's reviews once
+        with self.__dict__.setdefault("_reviews_lock", threading.Lock()):
+            started = self.__dict__.setdefault("_reviews_started", set())
+            if turn in started:
+                return
+            started.add(turn)
+
+        def run() -> None:
+            for f in factions:
+                self.review(f, turn)
+
+        threading.Thread(target=run, daemon=True).start()
 
     # --- lessons across games (per persona; the author vetoes with `just lessons-veto`) ------
 
@@ -403,6 +456,24 @@ class Orchestrator:
         self.store.queue(game, turn, "chronicle", "parley",
                          f"Turn {turn}: all rulers have decided. You may end your turn.")
 
+    def _ask(self, seat, prompt: str, dir: Path, report: StateReport, seat_cfg,
+             ids: dict) -> tuple[Orders, str, str]:
+        """One decide, plus one lookup round for a seat with `lookups` that asked for towns first
+        (spec 2026-11-23-ruler-lookups-design). Returns orders, raw answer and the prompt answered."""
+        t0 = time.monotonic()
+        orders, raw = seat.decide(prompt, timeout=self.config.seat_timeout, **ids)
+        if not (seat_cfg.lookups and orders.lookup):
+            return orders, raw, prompt
+        details = town_details(report, orders.lookup, seat_cfg.areas)
+        self.turns.write_artifact(dir, "answer1.txt", raw)
+        self.turns.write_artifact(dir, "lookup.txt", details)
+        log.info("%s turn %d: looked up %d (%s); %d bytes of details", report.faction, report.turn,
+                 len(orders.lookup), ", ".join(orders.lookup[:6]), len(details))
+        prompt2 = prompt + LOOKUP_ANSWERED.format(details=details)
+        left = max(60.0, self.config.seat_timeout - (time.monotonic() - t0))
+        orders, raw = seat.decide(prompt2, timeout=left, **ids)
+        return orders, raw, prompt2
+
     def _decide(self, dir: Path, report: StateReport) -> tuple[Orders, list[int]]:
         cfg = self.config
         if report.faction != dir.name or report.game_id != cfg.game_id:
@@ -421,7 +492,7 @@ class Orchestrator:
                               notes=self._recent_notes(report), plan=self._last_plan(report),
                               lessons=self._lessons(dir.name), events=events,
                               areas=areas, adviser=seat_cfg.adviser,
-                              refusal_history=self._refusal_history(report),
+                              refusal_history=self._refusal_history(report), lookups=seat_cfg.lookups,
                               game_messages=shown or None,
                               playtest_funds=seat_cfg.playtest_funds,
                               playtest_funds_amount=seat_cfg.playtest_funds_amount,
@@ -456,7 +527,7 @@ class Orchestrator:
                     quiet_seat = make_seat(seat_cfg.quiet_brain, cfg.budget_for(report.faction))
                     self._quiet_seats[report.faction] = quiet_seat
                 try:
-                    orders, raw = quiet_seat.decide(prompt, timeout=cfg.seat_timeout, **ids)
+                    orders, raw, _ = self._ask(quiet_seat, prompt, dir, report, seat_cfg, ids)
                     if not orders.orders:
                         log.warning(
                             "%s turn %d: quiet brain (%s) returned no orders; falling back to ruler",
@@ -478,12 +549,12 @@ class Orchestrator:
             if is_gated:
                 self._quiet_streaks[report.faction] = 0
             try:
-                orders, raw = self.seats[dir.name].decide(prompt, timeout=cfg.seat_timeout, **ids)
+                orders, raw, asked = self._ask(self.seats[dir.name], prompt, dir, report, seat_cfg, ids)
                 if not orders.orders and len(orders.note or "") > EMPTY_ORDERS_NOTE:
                     # live: Opus wrote ten orders into its note and returned an empty list, a turn lost
                     log.warning("%s turn %d: no orders but a %d-character plan; asking again",
                                 report.faction, report.turn, len(orders.note))
-                    orders, raw = self.seats[dir.name].decide(prompt + EMPTY_ORDERS_RETRY, timeout=cfg.seat_timeout, **ids)
+                    orders, raw = self.seats[dir.name].decide(asked + EMPTY_ORDERS_RETRY, timeout=cfg.seat_timeout, **ids)
             except SeatLimit:
                 raise
             except SeatError as e:
@@ -512,6 +583,38 @@ class Orchestrator:
         # back into the LLM's own numbering: to_orders may have dropped malformed orders already
         source = orders.source_index
         rejected = [r.model_copy(update={"index": source[r.index]}) for r in rejected] + orders.malformed
+        left = cfg.seat_timeout - (time.monotonic() - start)
+        if rejected and not answered_by_quiet and left >= 60:
+            # one same-turn correction: a refused order otherwise costs the ruler a whole turn
+            # (live 11-23, turns 4330-4633: ~20 refused here, each lost until the next report)
+            first = rejected
+            self.turns.write_artifact(dir, "answer_refused.txt", raw)
+            self.turns.write_artifact(dir, "rejected_first.json",
+                                      json.dumps([r.model_dump() for r in first], indent=2))
+            log.info("%s turn %d: %d refused; asking once more this turn", report.faction,
+                     report.turn, len(first))
+            try:
+                again, raw2 = self.seats[dir.name].decide(
+                    asked + REFUSED_RETRY.format(refused=_refused_lines(orders, first)),
+                    timeout=max(60, int(left)), **ids)
+            except SeatLimit:
+                raise
+            except SeatError as e:
+                log.warning("%s turn %d: correction ask failed (%s); the first answer stands",
+                            report.faction, report.turn, e)
+            else:
+                if not again.orders and kept.orders:
+                    # an empty correction would drop the orders that passed: the first answer stands
+                    log.warning("%s turn %d: the correction had no orders; the first answer stands",
+                                report.faction, report.turn)
+                    again, raw2 = orders, raw
+                orders, raw = again, raw2
+                self.turns.write_artifact(dir, "answer.txt", raw)
+                kept, rejected = validate_orders(report, orders, areas,
+                                                 playtest_funds=seat_cfg.playtest_funds,
+                                                 playtest_funds_amount=seat_cfg.playtest_funds_amount)
+                source = orders.source_index
+                rejected = [r.model_copy(update={"index": source[r.index]}) for r in rejected] + orders.malformed
         self.turns.write_artifact(
             dir, "rejected.json", json.dumps([r.model_dump() for r in rejected], indent=2))
         kept = kept.model_copy(update={"messages": self._send(report, orders, dir)})
@@ -731,6 +834,31 @@ class Orchestrator:
                 self.store.queue(self.config.game_id, turn, "audit", "parley", line, kind="notice")
         except Exception:  # never hold up a turn for the audit
             log.exception("turn audit failed")
+        try:
+            self._post_new_trends(turn)
+        except Exception:
+            log.exception("trend alerts failed")
+
+    def _post_new_trends(self, turn: int) -> None:
+        """Each trend alert (parley/trends.py: a falling applied share, slowing rulers, a lost town,
+        a late or failed seat) goes to the humans' audit channel once; the ones posted are kept in
+        <game>/trends_posted.txt, so a restarted loop doesn't post them again (STANDARDS trend-alerts)."""
+        from parley.trends import trends
+
+        game_id = self.config.game_id
+        posted_path = self.config.turn_root / game_id / "trends_posted.txt"
+        try:
+            posted = set(posted_path.read_text(encoding="utf-8").splitlines())
+        except OSError:
+            posted = set()
+        new = [f"{faction}: {alert}"
+               for faction, ft in sorted(trends(self.config.turn_root, game_id).items())
+               for alert in ft.alerts if f"{faction}: {alert}" not in posted]
+        for line in new:
+            self.store.queue(game_id, turn, "audit", "parley", f"[trend] {line}", kind="notice")
+        if new:
+            with posted_path.open("a", encoding="utf-8") as f:
+                f.write("".join(line + "\n" for line in new))
 
     def _popup_loop(self) -> None:
         while True:
@@ -740,6 +868,36 @@ class Orchestrator:
                 log.exception("popup poll failed; continuing")
             time.sleep(0.5)
 
+    def ensure_bridge_current(self) -> None:
+        """The game runs this checkout's bridge (parley.bridge_build): checked at start and then
+        once a minute, so code that arrives by git (never installed) or a relaunch onto an old
+        install can't leave old Lua playing. A mismatch installs and reloads in its own thread."""
+        from parley.bridge_build import BridgeStale, ensure_current, stamps
+        now = time.monotonic()
+        if now < getattr(self, "_bridge_check_at", 0.0) or getattr(self, "_bridge_fixing", False):
+            return
+        self._bridge_check_at = now + 60.0
+        try:
+            repo, installed, loaded = stamps(self.config.turn_root)
+        except OSError as e:
+            log.error("bridge build check failed: %s", e)
+            return
+        if installed == repo and loaded == repo:
+            return
+        log.warning("bridge build: this checkout %s, installed %s, game runs %s; installing and "
+                    "reloading", repo, installed, loaded)
+
+        def fix() -> None:
+            try:
+                log.info("bridge build %s loaded", ensure_current(self.config.turn_root))
+            except BridgeStale as e:
+                log.error("%s", e)
+            finally:
+                self._bridge_fixing = False
+
+        self._bridge_fixing = True
+        threading.Thread(target=fix, daemon=True, name="bridge-build").start()
+
     def run_forever(self, poll: float = 0.5) -> None:
         self.publish_bridge_config()
         self.prepare_turn_dirs()
@@ -748,6 +906,7 @@ class Orchestrator:
             threading.Thread(target=self._popup_loop, daemon=True).start()
         while True:
             try:
+                self.ensure_bridge_current()
                 self.run_once(wait=False)
             except KeyboardInterrupt:
                 raise

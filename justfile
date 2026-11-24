@@ -1,3 +1,7 @@
+# uv (and just) live in ~/.local/bin, which a non-login shell (ssh, another session's tool) lacks:
+# 11-14, `just qa-summary` failed "uv: not found" there
+export PATH := env_var('HOME') + "/.local/bin:" + env_var('PATH')
+
 # List recipes
 default:
     @just --list
@@ -20,7 +24,7 @@ eop-coverage:
 
 # Answer LLM-faction turns as the game writes them
 run game="games/example.toml":
-    uv run python -m parley run {{game}}
+    bash scripts/run_loop.sh {{game}}
 
 # Run the Discord table bot (needs DISCORD_BOT_TOKEN in the untracked env file)
 discord game="games/first-game.toml":
@@ -29,6 +33,10 @@ discord game="games/first-game.toml":
 # Restart only the turn loop for <name> (picks up new Python code; the bot keeps running)
 restart-loop name:
     bash scripts/game.sh restart-loop {{name}}
+
+# Set one seat option in games/local/<name>.toml (timestamped backup, checked it loads, else unchanged), e.g. just seat-set scratch france lookups true; then restart-loop
+seat-set name faction key value:
+    uv run python -m parley.seat_set games/local/{{name}}.toml {{faction}} {{key}} {{quote(value)}}
 
 # Run one Lua line in the running game and print what it returns (helpers: fac, char, at)
 [positional-arguments]
@@ -40,6 +48,7 @@ reload-bridge:
     bash scripts/game.sh reload-bridge
 
 # After a crash: stop what's left of the game, relaunch it through Steam on the newest save, no clicks (--save <name>.sav, --clicks)
+[positional-arguments]
 relaunch-game *args:
     bash scripts/relaunch_game.sh "$@"
 
@@ -54,6 +63,18 @@ crashes n="10":
 # Stop crash-watch (the unit, and any watch started the old way)
 crash-watch-stop:
     bash scripts/crash_watch_unit.sh stop
+
+# Swap the running campaign onto another EOP build: backup, stop crash-watch, pause, install the zip (sha256-checked), bridge, config diff, relaunch, resume
+install-eop-zip zip sha name="scratch":
+    bash scripts/eop_zip_swap.sh {{zip}} {{sha}} {{name}}
+
+# Resume campaign <name> at every desktop login: loop, bot and crash-watch (which relaunches the game); paused stays paused (log: logs/boot-resume.log)
+resume-at-boot name:
+    bash scripts/boot_resume_install.sh on {{name}}
+
+# Stop resuming a campaign at login
+resume-at-boot-off:
+    bash scripts/boot_resume_install.sh off
 
 # Keep the monitors on while the game runs (screens off slow it to a crawl); `just play` starts it (log: logs/screen-awake.log)
 screen-awake:
@@ -115,9 +136,9 @@ new-game *args:
 play name:
     bash scripts/game.sh play {{name}}
 
-# Stop the turn loop and the Discord bot
+# Stop the turn loop and the Discord bot, and pause the campaign (just play resumes it)
 stop:
-    bash scripts/game.sh stop
+    bash scripts/game.sh stop --pause
 
 # What's running, and for which game
 status:
@@ -155,6 +176,10 @@ seat-bench dir timeout +specs:
 ruler-eval *args:
     uv run python -m parley.ruler_eval {{args}}
 
+# Score seats on the committed scenario set (games/ruler_eval/README.md): just ruler-eval-fixed heretic:think
+ruler-eval-fixed +specs:
+    uv run python -m parley.ruler_eval --set games/ruler_eval {{specs}}
+
 # Run a QA bench suite (or 'all') on the fixed bench save, real campaign parked and restored (kind=instant: no-click cases only)
 [positional-arguments]
 qa suite *args:
@@ -171,9 +196,33 @@ qa-restore *args:
 qa-bench-save step *args:
     bash scripts/qa.sh bench-save "$@"
 
+# What still needs a screen click: every click/Escape the turn loop made or tried, tallied from logs/*-turns.log*
+click-census *files:
+    python3 scripts/click_census.py {{files}}
+
+# Fails until every click kind the census has seen has a bench case passed with every click refused (games/click-coverage.toml)
+click-coverage *args:
+    python3 scripts/click_coverage.py {{args}}
+
+# The game's UI classes from medieval2.exe's RTTI (read-only): classes [--match X] | vtable [--le] HEX.. | addr HEX..
+ui-classes *args:
+    python3 scripts/ui_classes.py {{args}}
+
 # Summarize newest QA bench reports across suites
 qa-summary *args:
     uv run python -m parley.qa.summary {{args}}
+
+# Trends for <game_id>: rejections rising, rulers slowing, faction shrinking
+trends game_id root="~/.steam/steam/steamapps/common/Medieval II Total War/parley_turns" *args:
+    uv run python -m parley.trends "{{root}}" {{game_id}} {{args}}
+
+# One page on a running campaign: turn, health, crashes, rulers, open STANDARDS gaps
+dashboard game_id root="~/.steam/steam/steamapps/common/Medieval II Total War/parley_turns" *args:
+    uv run python -m parley.dashboard "{{root}}" {{game_id}} {{args}}
+
+# Keep the bridge log and logs/*.log under PARLEY_LOG_CAP_MB (20); crash-watch and the campaign watch run it every 10 min
+rotate-logs:
+    bash scripts/rotate_logs.sh
 
 # Hold a standing order: the Stop hook keeps the session working until HH:MM (`off` drops it, `show` prints it)
 work-until arg="show":

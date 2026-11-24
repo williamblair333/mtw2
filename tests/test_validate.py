@@ -48,6 +48,70 @@ def test_move_agent_on_a_general_names_the_move_army_order(venice_report):
                              '{"type": "move_army", "army": "Godfrey", "x": 120, "y": 89}')
 
 
+def test_merge_units_needs_two_worn_units_of_one_type(venice_report):
+    # live 11-13: France ordered merge_units 21 times in half an hour on armies the bridge refused
+    # ("no two worn units of one type"); it pours the weakest into the fullest one not full
+    from parley.control import AREAS
+    from parley.protocol import MergeUnits, Unit
+    a = venice_report.armies[0]
+
+    def army(*troops):
+        units = [Unit(type=t, soldiers=n, max_soldiers=m) for t, n, m in troops]
+        return venice_report.model_copy(update={"armies": [a.model_copy(update={"id": "Anseau", "troops": units})]})
+
+    order = _orders(MergeUnits(army="Anseau"))
+    full_and_worn = army(("Pike Militia", 75, 75), ("Pike Militia", 40, 75), ("Town Militia", 30, 75))
+    _, rej = validate_orders(full_and_worn, order, areas=AREAS)
+    assert rej and rej[0].reason == ("nothing to merge in Anseau: no two under-strength units of one type "
+                                     "and armour/weapon level (under strength: Pike Militia, Town Militia)")
+    two_worn = army(("Pike Militia", 50, 75), ("Pike Militia", 40, 75))
+    kept, rej = validate_orders(two_worn, order, areas=AREAS)
+    assert rej == [] and len(kept.orders) == 1
+    # live 11-13/14: Captains Foucher and Gerbert, Pike Militia 64/75 and 67/75, refused 20 times by
+    # the bridge, which pairs units only within one armour and weapon level
+    upgraded = army(("Pike Militia", 64, 75), ("Pike Militia", 67, 75))
+    upgraded.armies[0].troops[0].armour = 1
+    _, rej = validate_orders(upgraded, order, areas=AREAS)
+    assert rej and "(under strength: Pike Militia, Pike Militia (armour 1))" in rej[0].reason
+    held = army(("Pike Militia", 64, 75), ("Pike Militia", 67, 75))
+    held.armies[0].troops[1].held = True  # retraining, or a general's bodyguard: the bridge skips it
+    _, rej = validate_orders(held, order, areas=AREAS)
+    assert rej and "(under strength: Pike Militia)" in rej[0].reason
+    unknown_max = army(("Pike Militia", 50, 0), ("Town Militia", 40, 0))  # an old report: no check
+    _, rej = validate_orders(unknown_max, order, areas=AREAS)
+    assert rej == []
+
+
+def test_two_fleets_are_not_merged(venice_report):
+    # live 11-14 15:37 (scratch turn 457): England merged fleet Admiral Robin into Admiral John; the game
+    # crashed in that round (004CA78E) and again after the reload (121E229A). Merging fleets removes
+    # one admiral, and a seated faction's admiral leaving the game crashes the next character pass
+    # (HANDOFF 11-11, #564's open bug)
+    from parley.control import AREAS
+    from parley.protocol import MergeArmies
+    a = venice_report.armies[0]
+    fleets = [a.model_copy(update={"id": "Admiral Robin", "is_fleet": True, "units": 1, "aboard": None}),
+              a.model_copy(update={"id": "Admiral John", "is_fleet": True, "units": 1, "aboard": None})]
+    r = venice_report.model_copy(update={"armies": fleets})
+    _, rej = validate_orders(r, _orders(MergeArmies(army="Admiral Robin", into="Admiral John")), areas=AREAS)
+    assert rej and rej[0].reason.startswith("two fleets can't be merged: it removes Admiral Robin")
+
+
+def test_merge_units_once_per_army_a_turn(venice_report):
+    # live 11-14 (scratch turn 397): England ordered merge_units on garrison:York four times in one
+    # turn; the first merged every group and the bridge refused the other three, "nothing to merge"
+    from parley.control import AREAS
+    from parley.protocol import MergeUnits, Unit
+    a = venice_report.armies[0]
+    units = [Unit(type="Billmen", soldiers=57, max_soldiers=60), Unit(type="Billmen", soldiers=57, max_soldiers=60)]
+    r = venice_report.model_copy(update={"armies": [a.model_copy(update={"id": "garrison:York", "troops": units})]})
+    kept, rej = validate_orders(r, _orders(*[MergeUnits(army="garrison:York")] * 3), areas=AREAS)
+    assert len(kept.orders) == 1
+    assert [x.index for x in rej] == [1, 2]
+    assert rej[0].reason == ("merge_units is already ordered for garrison:York this turn: one merges "
+                             "every group of worn units in it")
+
+
 def test_move_agent_on_an_admiral_names_his_fleets_move_army_order(venice_report):
     # live (2026-10-29, turn 8): England moved Admiral Nigel by move_agent; done, and he stayed put
     from parley.control import AREAS
@@ -170,6 +234,18 @@ def test_one_action_per_agent_per_turn(venice_report):
                                            Sabotage(agent="Iacopo", settlement="Milan")))
     assert [o.type for o in kept.orders] == ["assassinate"]
     assert "already has an order this turn" in rej[-1].reason
+
+
+def test_one_mission_per_target_per_turn(venice_report):
+    # live 11-13 turn 1072: a bribe won the captain over, then the same turn's assassination of
+    # him crashed the game
+    from parley.protocol import Assassinate, Bribe, Spy
+    r = _with_sight(venice_report)
+    kept, rej = validate_orders(r, _orders(Bribe(agent="Pietro", target="Ulrich"),
+                                           Assassinate(agent="Iacopo", target="Ulrich"),
+                                           Spy(agent="Marco", target="Heinrich")))
+    assert [o.type for o in kept.orders] == ["bribe", "spy"]
+    assert "already the target of Pietro's mission" in rej[0].reason
 
 
 def test_foreign_army_targeted_by_its_id_not_leader_name(venice_report):

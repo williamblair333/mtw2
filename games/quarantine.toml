@@ -1,0 +1,10 @@
+# Quarantined QA cases (STANDARDS flaky-quarantine; parley/qa/quarantine.py). A case listed here still
+# runs and shows in the report, but its failure doesn't fail the run. Each entry says why and since
+# when; take it out the day its cause is fixed. Lives outside games/qa/ on purpose: the runner and
+# tests load every games/qa/*.toml as a suite.
+#
+#   <case name> = "<cause>; since <date>; tracking <PR or HANDOFF line>"
+#
+# Empty on 11-05: the day's flaky cases were fixed instead (#440-#442).
+
+[cases]

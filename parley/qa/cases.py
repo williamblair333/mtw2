@@ -112,8 +112,9 @@ class Case(BaseModel):
     needs: list[str] = []
     chance: bool = False
     # turn cases: the scripted ruler's answer to every choice the game asks during the case's turns
-    # (an AI's offer: "accept" or "decline"); unset, the seat says nothing and the bridge's default goes
-    choice: str | None = None
+    # (an AI's offer: "accept" or "decline"), or a list answering them in the order asked (the last
+    # entry for any beyond it); unset, the seat says nothing and the bridge's default goes
+    choice: str | list[str] | None = None
     seat: str = "script"
     directive: str = ""
     # unset: the suite's isolation (Suite.isolation)
@@ -121,6 +122,13 @@ class Case(BaseModel):
     # an instant case that can't pass in phase 1 (the no-click `kind=instant` run), and why: that run
     # reports it skipped with this reason; a full run (phase 2) still runs it
     phase2: str | None = None
+    # a case whose subject is a screen click or key (a marriage offer's scroll, which no Lua call
+    # answers), and why: a `kind=noclick` run reports it skipped with this reason instead of
+    # hanging on the refused click (11-14: forced_wife_declined_by_escape stopped the run)
+    needs_click: str | None = None
+    # "relaunch": the end-of-run restore relaunches the game into the kept save instead of loading
+    # through control.txt, for cases that leave UI state behind (papal election)
+    restore: Literal["relaunch"] | None = None
 
     @model_validator(mode="after")
     def _kind_fits(self) -> Case:
@@ -162,6 +170,8 @@ class Suite(BaseModel):
     # the QA seat gets the steward (parley/steward.py), which backfills an emptied garrison: the towns
     # suite's #225 case. Off by default: a steward recruit in another suite's turn would be noise
     steward: bool = False
+    # a suite whose cases check that a game message is read before End Turn
+    hold_reads: bool = False
     # each case's isolation unless it sets its own (see Isolation)
     isolation: Isolation = "fresh"
 

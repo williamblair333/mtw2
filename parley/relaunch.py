@@ -106,8 +106,7 @@ def choose_save(save_dir: Path, turn_root: Path, explicit: str | None = None) ->
     - `explicit` (the QA restore passes the keep save): that file, which must exist.
     - After a QA restore (<turn_root>/qa.last_restore) with no real save newer than it recorded: the
       newest parley_keep_*.restored-*.sav (the real campaign; the newest save on disk is the QA game's
-      autosave, live 10-30 20:12). This is what `python -m parley.qa after-relaunch` corrected after
-      the old Continue Campaign click.
+      autosave, live 10-30 20:12).
     - Otherwise the newest save the game wrote itself (what Continue Campaign loaded)."""
     from parley.qa.runner import LAST_RESTORE_FILE, newest_real_save
 
@@ -165,6 +164,25 @@ def hold_for_qa(turn_root: Path) -> str:
     return "held"
 
 
+# what Parley needs in the launcher's uiCfg.json: the mod's own cfg, EOP on, no launcher window
+PARLEY_UI_CFG = {"modCfgFile": "parley.cfg", "useVanillaCfg": False, "useM2TWEOP": True, "hideLauncher": True}
+
+
+def parley_ui_cfg(mod_dir: Path) -> Path:
+    """Write Parley's keys into eopData/config/uiCfg.json, created if missing, other keys kept.
+    Run after every EOP install: our fork's zip ships no config (fork #10), and an older zip's
+    default (modCfgFile "", useVanillaCfg true) started the game without parley.cfg (11-15, W53)."""
+    path = Path(mod_dir) / UI_CFG_FILES[0]
+    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: not a JSON object")
+    if any(data.get(k) != v for k, v in PARLEY_UI_CFG.items()) or not path.exists():
+        data.update(PARLEY_UI_CFG)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
+    return path
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m parley.relaunch", description="no-click relaunch edits")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -178,6 +196,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("strip-bypass", help="remove the start-up save from the cfg")
     p.add_argument("cfg", type=Path)
     p = sub.add_parser("hide-launcher", help='set "hideLauncher": true in the mod\'s uiCfg.json files')
+    p.add_argument("mod_dir", type=Path)
+    p = sub.add_parser("ui-cfg", help="write Parley's keys into the mod's eopData/config/uiCfg.json")
     p.add_argument("mod_dir", type=Path)
     p = sub.add_parser("hold-if-qa", help="with a qa.lock, hold the turn (paused.txt) before the launch")
     p.add_argument("--turn-root", type=Path, required=True)
@@ -201,6 +221,8 @@ def main(argv: list[str] | None = None) -> int:
                 new = strip_bypass(text)
                 if new != text:
                     args.cfg.write_text(new, encoding="utf-8")
+        elif args.cmd == "ui-cfg":
+            print(f"Parley's launcher settings in {parley_ui_cfg(args.mod_dir)}")
         elif args.cmd == "hide-launcher":
             for path in hide_launcher(args.mod_dir):
                 print(f"hideLauncher on in {path}")

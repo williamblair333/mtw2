@@ -113,17 +113,26 @@ _CHOICE_ASKED = "The game asks you to decide"
 class ScriptSeat:
     """A plan entry {"type": "say", "to": ..., "text": ...} is a message, not an order. A plan's
     "choice" (e.g. "accept") is the answer to every choice the game asks the ruler (an AI's offer);
-    without one the seat says nothing, and the bridge presses its default."""
+    a list answers the first choice asked with its first entry, the next with the next, and any
+    after the end with the last. Without one the seat says nothing, and the bridge presses its default."""
 
     def __init__(self, path: str):
         self.plan = json.loads(Path(path).read_text())
         self.name = f"script:{path}"
+        self._asked = 0  # choices answered so far (one seat object lives for the whole QA loop)
 
     def chat(self, prompt: str, *, timeout: float) -> str:
         choice = self.plan.get("choice")
-        if isinstance(choice, str) and choice and _CHOICE_ASKED in prompt:
-            return f"{choice.upper()} (scripted QA ruler)"
-        return ""  # scripted seats don't talk
+        if _CHOICE_ASKED not in prompt:
+            return ""  # scripted seats don't talk
+        if isinstance(choice, list) and choice:
+            answer = choice[min(self._asked, len(choice) - 1)]
+            self._asked += 1
+        elif isinstance(choice, str) and choice:
+            answer = choice
+        else:
+            return ""
+        return f"{str(answer).upper()} (scripted QA ruler)"
 
     def decide(self, prompt: str, *, game_id: str, turn: int, faction: str,
                timeout: float) -> tuple[Orders, str]:

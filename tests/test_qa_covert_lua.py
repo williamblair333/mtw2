@@ -100,8 +100,13 @@ def test_the_covert_suite_is_instant_but_the_missions_and_marks_its_roll():
     assert [c.name for c in suite.cases if c.kind == "instant"] == INSTANT
     turn = [c for c in suite.cases if c.kind == "turn"]
     # grouped last; the missions are turn cases (live 10-31: no mission line in a held turn)
-    assert [c.name for c in turn] == ["assassinate", "sabotage", "spy_report_closed"]
-    assert suite.cases[-3:] == turn
+    # the crash reproduction (live 11-05 16:38) last: a crash ends the run
+    assert [c.name for c in turn] == ["assassinate", "sabotage", "spy_report_closed",
+                                      "spy_into_own_town_with_foreign_spies"]
+    assert suite.cases[-4:] == turn
+    crash = turn[-1]
+    assert any(e.alive for e in crash.expect) and crash.orders[1][0]["type"] == "move_agent"
+    turn = turn[:-1]
     # #255: the scroll is a popup (no popup is handled in a held turn); the spy's success is a roll
     spy = turn[-1]
     assert spy.chance and spy.max_turns == 3 and list(spy.orders) == [1]

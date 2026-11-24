@@ -26,24 +26,28 @@ def primer() -> str:
         return ""
 
 
+# an AI-run realm's armies move and their captains change names between the ruler's turns (live
+# 11-05, run 10: France lost 2-4 orders a turn to renamed captains and blamed border skirmishes)
+AI_RENAMES = ("That AI moves your armies and renames their captains between your turns: use army ids "
+              "exactly as this report lists them, never last turn's.")
 ROLE = (
     "You are the ruler. Your generals handle routine moves: recruiting, building and "
     "ordinary army movement. Give only diplomatic orders and specific override orders "
-    "that matter this turn."
+    "that matter this turn. " + AI_RENAMES.replace("That AI", "The game's AI")
 )
 
 HUMAN_SLOT_ROLE = ("No game AI acts for this realm, and no governor recruits or builds for you: "
                    "what you don't order doesn't happen. Nobody else will raise your armies.")
 AI_ASSIST_ROLE = ("The game's own AI also acts for this realm between your orders (recruiting, "
-                  "building and moving armies); your orders come first.")
+                  "building and moving armies); your orders come first. " + AI_RENAMES)
 
 ORDER_HELP = {
     "diplomacy": '- Diplomacy orders: "send_gold", "cede_settlement", "set_stance".',
     "armies": (
-        '- Army orders (name an army by its id): "march_on" (toward a settlement), "move_army" (toward a tile x,y), '
+        '- Army orders (name an army by its id): "march_on" (toward a settlement; 20 units with its garrison), "move_army" (toward a tile x,y), '
         '"attack" (a foreign army in sight, outside a settlement), "besiege" (add "assault": true to storm now; '
-        'otherwise you wait while it starves; walls need siege equipment, a village has none. While you besiege, '
-        'siege equipment is built each turn automatically: assault when it is ready, or starve the town), "withdraw", '
+        'otherwise you wait while it starves; walls need siege equipment, a village has none. Equipment is '
+        'built each turn you besiege: assault when ready, or starve the town), "withdraw", '
         '"disband" (an army by its id, a unit type from its troops list, a count, 1 if left out: releases the '
         'weakest first to save upkeep; a bodyguard is never released).\n'
         '- "merge_armies": one of your armies, a garrison too, walks to join another (20 units at most). The joining '
@@ -175,7 +179,7 @@ def _diplomacy_line(m, me: str, names: dict[str, str]) -> str:
     return f"[turn {m.turn}] [{where}] {_sender(m.sender, names)}: {one_line(m.text)}"
 
 
-def _army(a: Army) -> str:
+def _army(a: Army, hire_seen: dict[str, str] | None = None) -> str:
     if a.in_settlement:
         where = f"in {a.in_settlement}"
     elif a.leader:
@@ -200,10 +204,29 @@ def _army(a: Army) -> str:
                  else "no siege equipment queued yet")
         can = "" if a.can_assault is None else f"; can assault now: {'yes' if a.can_assault else 'no'}"
         where += f", besieging {a.besieging} (turn {a.siege_turns or 0}: {built}{left}{can})"
-    line = f"- {a.id}: {a.units} units{men} (strength rating {a.strength}, not men), {where}{leader}"
+    if a.id == f"garrison:{a.in_settlement}" and not a.besieging:
+        where = ""  # the id already names the town (live 11-23: 59 garrisons ended "in <town>")
+    line = f"- {a.id}: {a.units} units{men} (strength rating {a.strength}, not men){', ' + where if where else ''}{leader}"
     if a.can_hire:
-        line += "\n  mercenaries for hire here (florins, available/max, experience): " + "; ".join(
+        offers = "; ".join(
             f"{m.unit} {m.cost}, {m.available}/{m.max or m.available}, exp {m.exp}" for m in a.can_hire)
+        # live 11-23: France's 21 armies in one region printed the same offers 21 times (~6 KB); the
+        # first army with a list prints it, the rest name that army
+        pools = sorted({m.pool for m in a.can_hire if m.pool})
+        if hire_seen is not None and offers in hire_seen:
+            line += f"\n  mercenaries for hire here: same as {hire_seen[offers]}"
+            if pools:  # the first army's line says the pool is shared; the repeat names it
+                line += f" (the {', '.join(pools)} pool)"
+            return line
+        else:
+            line += "\n  mercenaries for hire here (florins, available/max, experience): " + offers
+            if hire_seen is not None:
+                hire_seen[offers] = a.id
+        if pools:  # live 11-21: two armies hired the one Galloglaich their region's pool had
+            line += f" (the {', '.join(pools)} pool, shared by every army of yours in this region)"
+    elif a.leader and not a.is_fleet:
+        # live 11-20: with nothing said, rulers ordered hires for generals whose pool offered none
+        line += " (no mercenaries here)"
     return line
 
 
@@ -241,15 +264,107 @@ def _match_advice(s, clock_by_settlement: dict[str, str] | None) -> str | None:
     return (clock_by_settlement or {}).get(s.name or s.id)
 
 
+def _unit_prices_table(settlements) -> tuple[list[str], dict[str, tuple[int, int, int | None]]]:
+    from collections import Counter
+    unit_prices: dict[str, list[tuple[int, int, int | None]]] = {}
+    for s in settlements:
+        for u in s.can_recruit:
+            unit_prices.setdefault(u.unit, []).append((u.cost, u.turns, u.upkeep))
+        for a in s.can_recruit_agents:
+            unit_prices.setdefault(a.agent, []).append((a.cost, a.turns, None))
+    if not unit_prices:
+        return [], {}
+
+    table_prices: dict[str, tuple[int, int, int | None]] = {}
+    lines = ["UNIT PRICES (florins/turns, upkeep a turn). free-slot: no upkeep while its town has free-upkeep slots left"]
+    for name in sorted(unit_prices.keys()):
+        best_price = Counter(unit_prices[name]).most_common(1)[0][0]
+        table_prices[name] = best_price
+        cost, turns, upkeep = best_price
+        upk_str = f", upkeep {upkeep}" if upkeep is not None else ""
+        free_str = ", free-slot" if is_free(name) else ""
+        lines.append(f"- {name} {cost}/{turns}{upk_str}{free_str}")
+    return lines, table_prices
+
+
+SAME_AS_LEGEND = ('(a list that reads "same as X, plus [...], without [...]" is town X\'s list, printed in '
+                  'full above, with those changes)')
+# a reference must be this much shorter than the full list, or the list prints in full and
+# becomes a base itself (a town of another culture then gives its neighbours a closer base)
+SAME_AS_RATIO = 0.5
+
+
+def _default_region(town_id: str) -> str:
+    """The region most towns sit in: their own id plus "_Province" (58 of France's 59, live 11-23)."""
+    return town_id.replace(" ", "_") + "_Province"
+
+
+def town_legend(settlements, areas: tuple[str, ...]) -> str:
+    """What a town line leaves out, said once: '' when it leaves nothing out."""
+    said = []
+    name = any(s.name == s.id for s in settlements)
+    region = any(s.region == _default_region(s.id) for s in settlements)
+    if name or region:
+        said.append("a town's " + " and ".join(
+            w for w, on in (("game name", name), ("region (<id>_Province)", region)) if on)
+            + " print only when they differ from its id")
+    if "build" in areas:
+        said.append("no queue line: nothing being built; no can build line: nothing to build now")
+    return f"({'; '.join(said)})" if said else ""
+
+
+def _same_as(own: str, items: list[str], bases: list[tuple[str, list[str]]] | None, sep: str) -> str:
+    """`items` in full, or "same as X, plus [..], without [..]" against a town whose list was
+    printed in full, whichever is shorter (live 11-22: France's 64 towns repeated the same 20-odd
+    recruits and buildings, 48 KB a turn). A list printed in full joins `bases`, so a reference
+    never points at another reference."""
+    full = sep.join(items)
+    if bases is None or not items or len(set(items)) != len(items):
+        return full
+    cur, best = set(items), full
+    for name, ref in bases:
+        rs = set(ref)
+        plus = [i for i in items if i not in rs]
+        minus = [i for i in ref if i not in cur]
+        text = (f"same as {name}" + (f", plus [{sep.join(plus)}]" if plus else "")
+                + (f", without [{sep.join(minus)}]" if minus else ""))
+        if len(text) <= SAME_AS_RATIO * len(full) and len(text) < len(best):
+            best = text
+    if best is full:
+        bases.append((own, items))
+    return best
+
+
 def _settlement(s, areas: tuple[str, ...], garrison: list | None = None,
-                clock_by_settlement: dict[str, str] | None = None) -> str:
-    where = f" at ({s.x},{s.y})" if s.x is not None else ""
+                clock_by_settlement: dict[str, str] | None = None,
+                table_prices: dict[str, tuple[int, int, int | None]] | None = None,
+                bases: dict[str, list] | None = None, brief: bool = False) -> str:
+    """A town's entry. `brief` (a seat with lookups) leaves out its buildings, a calm town's
+    public-order breakdown, recruits, retrain and agents: `town:<id>` returns them (town_details)."""
+    # live 11-23: France's 59 town lines repeated "Arhus (Arhus), region Arhus_Province" and
+    # "queue: empty" on nearly every town; the name and region print only when they differ, and
+    # TOWN_LEGEND says what a missing one means. The id ends at the colon (seats/script.py::_ids).
+    where = [f"at ({s.x},{s.y})"] if s.x is not None else []
     if s.port_x is not None:
-        where += f", port at ({s.port_x},{s.port_y})"
-    line = (f"- {s.id} ({s.name}), region {s.region}{where}: {_garrison(s)}, "
-            f"population {s.population}, buildings: {', '.join(s.buildings) or 'none'}")
+        where.append(f"port at ({s.port_x},{s.port_y})")
+    head = f"- {s.id}" + (f" ({s.name})" if s.name != s.id else "")
+    if s.region != _default_region(s.id):
+        head += f", region {s.region}"
+    head += ": " + ", ".join(where + [_garrison(s)]) + f", population {s.population}"
+    if not brief:
+        head += (", buildings: "
+                 f"{_same_as(s.id, list(s.buildings), None if bases is None else bases.setdefault('buildings', []), ', ') or 'none'}")
     if "recruit" in areas and not s.recruit_blocked and (slots := free_slots(s.buildings)):
-        line += f"; free-upkeep slots {free_slots_left(s, garrison)} of {slots} left"
+        head += f"; free-upkeep slots {free_slots_left(s, garrison)} of {slots} left"
+    # tax, order and revolt belong to the town's own line, not to whichever sub-line came last
+    if {"build", "recruit", "taxes"} & set(areas) and s.tax_level:
+        head += f"; tax {s.tax_level}, public order {s.public_order}%"
+        # below 100% unrest grows; much lower and it riots and rebels (brief: only then)
+        if s.order_parts and not (brief and s.public_order >= 100):
+            head += " (" + _order_parts(s.order_parts) + ")"
+    if rl := _revolt(s):
+        head += "; " + rl
+    line = head
     if s.damaged_buildings:
         line += "\n  damaged buildings: " + "; ".join(f"{d.name} ({d.hp}% health)" for d in s.damaged_buildings)
     if s.siege:
@@ -266,27 +381,31 @@ def _settlement(s, areas: tuple[str, ...], garrison: list | None = None,
     if s.training:
         line += "\n  in training: " + "; ".join(f"{t.unit} (joins the garrison on turn {t.ready_turn})"
                                               for t in s.training)
-    if {"build", "recruit", "taxes"} & set(areas) and s.tax_level:
-        line += f"; tax {s.tax_level}, public order {s.public_order}%"
-        if s.order_parts:  # below 100% unrest grows; much lower and it riots and rebels
-            line += " (" + _order_parts(s.order_parts) + ")"
-    if rl := _revolt(s):
-        line += "; " + rl
-    if "build" in areas:
-        line += f"\n  queue: {', '.join(s.queue) or 'empty'}"
-        line += "\n  can build (florins/turns): " + ("; ".join(
-            f"{b.building} {b.cost}/{b.turns}" for b in s.can_build) or "nothing")
+    if "build" in areas:  # an empty queue and nothing to build print no line (TOWN_LEGEND)
+        if s.queue:
+            line += f"\n  queue: {', '.join(s.queue)}"
+        if s.can_build:
+            line += "\n  can build (florins/turns): " + "; ".join(
+                f"{b.building} {b.cost}/{b.turns}" for b in s.can_build)
     if "recruit" in areas and s.recruit_queue:
         line += f"\n  recruiting: {', '.join(s.recruit_queue)}"
+    if brief:
+        return line
     if "recruit" in areas and s.recruit_blocked:
         line += "\n  can recruit: unknown while units are inside (march them out to recruit here)"
     elif "recruit" in areas:
-        left = free_slots_left(s, garrison)
-        line += "\n  can recruit (florins/turns, upkeep a turn): " + ("; ".join(
-            f"{u.unit} {u.cost}/{u.turns}"
-            + (f", free upkeep ({left} left)" if left and is_free(u.unit)
-               else f", upkeep {u.upkeep}" if u.upkeep is not None else "")
-            for u in s.can_recruit) or "nothing")
+        # free upkeep is the unit type's (free-slot in UNIT PRICES) and the town's slots left (header)
+        entries = []
+        for u in s.can_recruit:
+            tbl = (table_prices or {}).get(u.unit)
+            if tbl is not None and (u.cost, u.turns, u.upkeep) == tbl:
+                entries.append(u.unit)
+            else:
+                upk_str = f", upkeep {u.upkeep}" if u.upkeep is not None else ""
+                free_str = ", free-slot" if is_free(u.unit) else ""
+                entries.append(f"{u.unit} {u.cost}/{u.turns}{upk_str}{free_str}")
+        line += "\n  can recruit: " + (_same_as(s.id, entries, None if bases is None else
+                                                  bases.setdefault("recruit", []), "; ") or "nothing")
         # what "retrain" would refill here: worn garrison units whose type the pool still offers
         # (live: a ruler ordered it five turns running at Nottingham, refused each time)
         worn = [t for t in (garrison or []) if t.max_soldiers and t.soldiers < t.max_soldiers]
@@ -296,8 +415,14 @@ def _settlement(s, areas: tuple[str, ...], garrison: list | None = None,
             line += ("\n  retrain would refill: " + ", ".join(can) if can else
                      "\n  retrain would refill nothing now: the pool offers none of its worn units' types")
     if "recruit" in areas and s.can_recruit_agents:
-        line += "\n  can train agents (florins/turns): " + "; ".join(
-            f"{a.agent} {a.cost}/{a.turns}" for a in s.can_recruit_agents)
+        agent_entries = []
+        for a in s.can_recruit_agents:
+            tbl = (table_prices or {}).get(a.agent)
+            if tbl is not None and (a.cost, a.turns) == (tbl[0], tbl[1]):
+                agent_entries.append(a.agent)
+            else:
+                agent_entries.append(f"{a.agent} {a.cost}/{a.turns}")
+        line += "\n  can train agents: " + "; ".join(agent_entries)
     return line
 
 
@@ -305,13 +430,20 @@ def _troops(troops) -> str:
     """The troops line, identical units counted (3x Knights 40/40 exp 0) rather than repeated."""
     counts: dict[str, int] = {}
     for u in troops:
-        key = f"{u.type} {u.soldiers}/{u.max_soldiers or u.soldiers} exp {u.exp}"
+        key = f"{u.label} {u.soldiers}/{u.max_soldiers or u.soldiers} exp {u.exp}"
         counts[key] = counts.get(key, 0) + 1
     return "; ".join(f"{n}x {k}" if n > 1 else k for k, n in counts.items())
 
 
-def _own_army(a: Army, areas: tuple[str, ...], settlements=()) -> str:
-    line = _army(a)
+def _own_army(a: Army, areas: tuple[str, ...], settlements=(),
+              hire_seen: dict[str, str] | None = None, brief: bool = False) -> str:
+    """`brief`: a garrison under lookups: no troop list (town_details prints it)."""
+    line, sub_sep, subs = _army(a, hire_seen).partition("\n")  # what follows joins the army's own line
+    # a field army with no units left (not even a general's bodyguard) is gone by the next report:
+    # live 11-05 (scratch turn 77-78) France's Captain Garnot showed 0 units, vanished, and the ruler
+    # guessed at an ambush
+    if a.units == 0 and not a.id.startswith("garrison:"):
+        line += " — it has no units left, so the game removes it; expect it gone next turn"
     if a.is_fleet:  # which of your ports it lies beside, for boarding and landing
         beside = [s.id for s in settlements if s.port_x is not None
                   and max(abs(s.port_x - a.x), abs(s.port_y - a.y)) <= 1]
@@ -319,15 +451,168 @@ def _own_army(a: Army, areas: tuple[str, ...], settlements=()) -> str:
             line += f", beside the port of {', '.join(beside)}"
     if "armies" in areas and a.moves_max:
         line += f", moves {a.moves_left}/{a.moves_max}"
-    if "armies" in areas and a.troops:
+    line += sub_sep + subs  # live 11-23: "moves" used to land after the mercenary pool's text
+    if "armies" in areas and a.troops and not brief:
         line += "\n  troops: " + _troops(a.troops)
+        if merge := _merge_line(a.troops):
+            line += "\n  " + merge
+    elif "armies" in areas and a.troops and (merge := _merge_line(a.troops)).startswith("merge_units would combine:"):
+        # live 11-23 turn 4525: the short garrison lost this line with its troops, and France
+        # ordered merge_units blind on three garrisons, all refused (LOOKUP_LEGEND: no line, nothing)
+        line += "\n  " + merge
     return line
 
 
+def _merge_line(troops) -> str:
+    """What merge_units would combine: two or more worn units of one type and armour/weapon
+    level, bodyguards and retraining units aside (Unit.merge_group, the bridge's merge_key).
+    (live 11-11 turn 179: England ordered it on 5 garrisons, each with one worn unit beside full
+    ones, all refused "nothing to merge"; its note: "a refusal costs nothing"). Empty when no unit
+    is worn, so full armies cost the prompt nothing."""
+    worn: dict[str, list[str]] = {}
+    for u in troops:
+        if (g := u.merge_group()) is not None:
+            worn.setdefault(g, []).append(f"{u.soldiers}/{u.max_soldiers}")
+    can = [f"{t} ({', '.join(c)})" for t, c in worn.items() if len(c) >= 2]
+    if can:
+        return "merge_units would combine: " + "; ".join(can)
+    return "merge_units would combine nothing (refused)" if worn else ""
+
+
+def _agent_lines(agents) -> list[str]:
+    """One line an agent; agents of one kind on one spot share a line (live 11-23: France's 181
+    agents, priests in fives on one tile, 7.5 KB). A lone agent keeps `- <id>: <kind>, <where>`."""
+    groups: dict[tuple[str, str], list[str]] = {}
+    for a in agents:
+        where = f"in {a.in_settlement}" if a.in_settlement else f"at ({a.x},{a.y})"
+        groups.setdefault((a.kind, where), []).append(a.id)
+    lines = []
+    for (kind, where), ids in groups.items():
+        if len(ids) > 1 and not any(", " in i for i in ids):  # a comma in a name would split it
+            lines.append(f"- {len(ids)} {kind}s {where}: " + ", ".join(ids))
+        else:
+            lines += [f"- {i}: {kind}, {where}" for i in ids]
+    return lines
+
+
+def _family_brief(p) -> bool:
+    """Who a short (lookups) family list keeps: the leader, the heir, generals and princesses."""
+    return bool(p.role) or p.kind in ("general", "princess") or bool(p.now_serves)
+
+
+def _family_section(report: StateReport, brief: bool = False) -> str | None:
+    """`brief` (a seat with lookups): other living relatives are counted, and `family` lists them."""
+    family = [p for p in report.family if p.family or p.role or p.kind == "princess"]
+    if not family:
+        return None
+    if brief:
+        others = [p for p in family if p.alive and not _family_brief(p)]
+        if others:  # the dead kept here are those the kept living still point at
+            gone = {id(p) for p in others}
+            text = _family_section(report.model_copy(update={"family": [
+                p for p in report.family if id(p) not in gone]}))
+            return (text or "YOUR FAMILY") + (
+                f"\n- and {len(others)} more living relatives (spouses, children; lookup \"family\" lists them)")
+    living = [p for p in family if p.alive]
+    living_parents = {p.parent for p in living if p.parent}
+    living_spouses = {p.spouse for p in living if p.spouse} | {p.name for p in living}
+
+    lines, dead = [], []
+    unlisted_dead = 0
+    for p in family:
+        if p.alive:
+            lines.append(_person(p, report))
+        else:
+            is_parent = p.name in living_parents
+            is_spouse = p.name in living_spouses or (p.spouse and p.spouse in {m.name for m in living})
+            d_turn = getattr(p, "death_turn", getattr(p, "turn_died", getattr(p, "died_turn", None)))
+            is_recent = (d_turn is not None and 0 <= (report.turn - d_turn) <= 30)
+
+            if not (is_parent or is_spouse or is_recent):
+                unlisted_dead += 1
+            elif p.now_serves:
+                lines.append(_person(p, report))
+            else:  # live 11-23: France's 77 dead took a line each (2.6 KB); they share one now
+                dead.append(p.name + (f" (at {p.age})" if p.age is not None else ""))
+
+    if dead:
+        lines.append("- dead: " + "; ".join(dead))
+    if unlisted_dead > 0:
+        lines.append(f"- and {unlisted_dead} more dead relatives (not listed)")
+
+    return ("YOUR FAMILY (from the game's records; only recent dead are listed; spouses are of your "
+            "faction unless one is named)\n" + "\n".join(lines))
+
+
+LOOKUP_LEGEND = ("(short entries: each town's buildings, full public-order breakdown (printed here only "
+                 "below 100%), recruits with prices, retrain and agents, and its garrison's troops, come "
+                 "back when you answer with \"lookup\": [\"town:<id>\", ...] and no orders; "
+                 "\"town:all\" returns every town and \"family\" every living relative. Look up a town "
+                 "before you recruit there. A garrison with no merge_units line has nothing to merge)")
+
+
+def town_details(report: StateReport, keys: list[str], areas: tuple[str, ...]) -> str:
+    """Pass 2 of a lookup turn: each asked-for town's full entry, exactly as the full prompt prints
+    it, with its garrison's full army entry and the prices of what it can recruit."""
+    def norm(text: str) -> str:
+        return "_".join(text.lower().replace("_", " ").split())
+
+    by_key: dict[str, object] = {}
+    for s in report.settlements:
+        by_key.setdefault(norm(s.name), s)
+    for s in report.settlements:
+        by_key[norm(s.id)] = s  # an id beats another town's game name
+    want, unknown, family = [], [], False
+    for k in keys:
+        key = k.strip()
+        if key.lower() == "family":
+            family = True
+            continue
+        name = key[5:].strip() if key.lower().startswith("town:") else key
+        if name.lower() == "all":
+            want = list(report.settlements)
+            continue
+        s = by_key.get(norm(name))
+        if s is None:
+            unknown.append(key)
+        elif s not in want:
+            want.append(s)
+    try:
+        clock = {a.settlement: a.line for a in siege_clock(report)}
+    except Exception as exc:
+        log.warning("siege_clock failed: %s", exc)
+        clock = {}
+    lines: list[str] = []
+    table_prices: dict = {}
+    if want and "recruit" in areas:
+        table, table_prices = _unit_prices_table(want)
+        lines += table
+    bases: dict[str, list] = {}
+    towns = []
+    hire_seen: dict[str, str] = {}
+    for s in want:
+        g = next((a for a in report.armies if a.id == f"garrison:{s.id}"), None)
+        towns.append(_settlement(s, areas, g.troops if g else None, clock_by_settlement=clock,
+                                 table_prices=table_prices, bases=bases))
+        if g is not None:
+            towns.append(_own_army(g, areas, report.settlements, hire_seen))
+    if any("same as " in t for t in towns):
+        towns.insert(0, SAME_AS_LEGEND)
+    if want and (legend := town_legend(want, areas)):
+        towns.insert(0, legend)
+    lines += towns
+    lines += [f"- {k}: not a town of yours (lookups take town:<id>, town:all or family)" for k in unknown]
+    text = "DETAILS YOU ASKED FOR\n" + ("\n".join(lines) or ("" if family else "- nothing"))
+    if family:
+        text = text.rstrip("\n") + "\n\n" + (_family_section(report) or "YOUR FAMILY\n- none")
+    return text
+
+
 def state_summary(report: StateReport, areas: tuple[str, ...] = PRESETS["ruler"],
-                  ruled: set[str] | None = None) -> list[str]:
+                  ruled: set[str] | None = None, lookups: bool = False) -> list[str]:
     """The ruler's realm as text sections: treasury, settlements, armies, factions, enemies.
-    Build and recruit options, taxes and troops show only for areas the ruler commands."""
+    Build and recruit options, taxes and troops show only for areas the ruler commands.
+    `lookups`: short town entries and no garrison troops; town_details has the rest."""
     parts = [
         f"TURN {report.turn}, YEAR {report.year}. You rule {report.faction}.\n"
         f"Treasury: {report.treasury} florins at the end of your last turn (orders are paid from this "
@@ -335,6 +620,9 @@ def state_summary(report: StateReport, areas: tuple[str, ...] = PRESETS["ruler"]
         + (f"Income: {report.income} per turn after upkeep and wages." if report.income else
            "Income: not reported (compare treasury between turns).")
     ]
+    if report.map_width and report.map_height:  # live 11-22: England ordered moves to (100,200) on a 295x189 map
+        parts[0] += (f"\nMap: {report.map_width} x {report.map_height} tiles (x 0-{report.map_width - 1}, "
+                     f"y 0-{report.map_height - 1}).")
     if report.income_parts:  # what makes up that income, largest first (costs negative)
         parts[0] += "\nIncome items: " + ", ".join(
             f"{k} {v:+d}" for k, v in sorted(report.income_parts.items(), key=lambda kv: -abs(kv[1]))) + "."
@@ -347,13 +635,32 @@ def state_summary(report: StateReport, areas: tuple[str, ...] = PRESETS["ruler"]
         clock_by_settlement = {a.settlement: a.line for a in siege_clock(report)}
     except Exception as exc:
         log.warning("siege_clock failed: %s", exc)
-    parts.append("YOUR SETTLEMENTS\n" + "\n".join(
-        _settlement(s, areas, next((a.troops for a in report.armies if a.id == f"garrison:{s.id}"), None),
-                    clock_by_settlement=clock_by_settlement)
-        for s in report.settlements
-    ) if report.settlements else "YOUR SETTLEMENTS\n- none")
+    if report.settlements:
+        table_lines = []
+        table_prices = {}
+        if "recruit" in areas and not lookups:
+            table_lines, table_prices = _unit_prices_table(report.settlements)
+        bases: dict[str, list] = {}
+        settlement_lines = [
+            _settlement(s, areas, next((a.troops for a in report.armies if a.id == f"garrison:{s.id}"), None),
+                        clock_by_settlement=clock_by_settlement, table_prices=table_prices, bases=bases,
+                        brief=lookups)
+            for s in report.settlements
+        ]
+        if any("same as " in x for x in settlement_lines):
+            settlement_lines.insert(0, SAME_AS_LEGEND)
+        if legend := town_legend(report.settlements, areas):
+            settlement_lines.insert(0, legend)
+        if lookups:
+            settlement_lines.insert(0, LOOKUP_LEGEND)
+        all_lines = (table_lines + settlement_lines) if table_lines else settlement_lines
+        parts.append("YOUR SETTLEMENTS\n" + "\n".join(all_lines))
+    else:
+        parts.append("YOUR SETTLEMENTS\n- none")
+    hire_seen: dict[str, str] = {}  # offers text -> the first army that printed it
     parts.append("YOUR ARMIES (a strength rating is not a head count: a general's bodyguard of a few dozen "
-                 "men rates in the thousands. Count men; walls need siege equipment before you storm)\n" + ("\n".join(_own_army(a, areas, report.settlements)
+                 "men rates in the thousands. Count men; walls need siege equipment before you storm)\n" + ("\n".join(_own_army(a, areas, report.settlements, hire_seen,
+                                                        brief=lookups and a.id.startswith("garrison:"))
                                               for a in report.armies) or "- none"))
     if report.agent_results:
         parts.append("YOUR AGENTS' MISSIONS SINCE YOUR LAST TURN (from the game itself)\n"
@@ -362,17 +669,13 @@ def state_summary(report: StateReport, areas: tuple[str, ...] = PRESETS["ruler"]
         parts.append("GAME POPUPS SINCE YOUR LAST TURN (answered for you; the game shows no text "
                      "here, only what kind they were)\n" + "\n".join(f"- {p}" for p in report.popups))
     if report.agents:
-        parts.append("YOUR AGENTS\n" + "\n".join(
-            f"- {a.id}: {a.kind}, " + (f"in {a.in_settlement}" if a.in_settlement else f"at ({a.x},{a.y})")
-            for a in report.agents))
+        parts.append("YOUR AGENTS\n" + "\n".join(_agent_lines(report.agents)))
     if report.agent_limits:  # the game's limits: buildings that train a kind raise its limit
         parts.append("AGENT LIMITS (yours, counting those in training / most you may have)\n" + "; ".join(
             f"{k} {v.have}/{'no limit' if v.limit is None else v.limit}"
             for k, v in sorted(report.agent_limits.items())))
-    family =[p for p in report.family if p.family or p.role or p.kind == "princess"]
-    if family:
-        parts.append("YOUR FAMILY (from the game's records; the dead stay listed)\n"
-                     + "\n".join(_person(p, report) for p in family))
+    if family_text := _family_section(report, brief=lookups):
+        parts.append(family_text)
     if report.character_events:
         parts.append("WHAT BEFELL YOUR PEOPLE SINCE YOUR LAST TURN (from the game itself)\n"
                      + "\n".join(f"- {e}" for e in report.character_events))
@@ -460,7 +763,8 @@ def _person(p, report=None) -> str:
     what = [w for w in (p.role, p.kind) if w]
     line = f"- {p.name}{age}" + (f", {', '.join(what)}" if what else "")
     if p.spouse:
-        line += f", married to {p.spouse}" + (f" ({p.spouse_faction})" if p.spouse_faction else "")
+        own = report is not None and p.spouse_faction == report.faction  # the header says "unless named"
+        line += f", married to {p.spouse}" + (f" ({p.spouse_faction})" if p.spouse_faction and not own else "")
     elif p.kind == "princess":
         line += ", unmarried: her hand can be offered to a foreign general in sight (\"marry\")"
     if p.parent:
@@ -686,7 +990,9 @@ def build_prompt(report: StateReport, persona: str, scenario: str = "",
                  lessons: list[str] | None = None,
                  playtest_funds: bool = False,
                  playtest_funds_amount: int = 50000, victory: str | None = None,
-                 refusal_history: list[set[str]] | None = None) -> str:
+                 refusal_history: list[set[str]] | None = None, lookups: bool = False) -> str:
+    """`lookups` (spec 2026-11-23-ruler-lookups-design): short town entries; the ruler may answer
+    with "lookup" first and gets town_details back in a second pass."""
     parts = [persona.strip()]
     if scenario:
         parts.append(f"SCENARIO\n{scenario.strip()}")
@@ -707,7 +1013,7 @@ def build_prompt(report: StateReport, persona: str, scenario: str = "",
     if block := threats_block(report):
         parts.append(block)
     ruled = {k for k in names if not k.startswith("adviser:")} if names else None  # seats and humans
-    parts += state_summary(report, areas, ruled)
+    parts += state_summary(report, areas, ruled, lookups=lookups)
     if report.treasury < 0 and not playtest_funds:
         parts.append(_debt_block(report))
     if warn := tax_warning(report):
@@ -719,6 +1025,9 @@ def build_prompt(report: StateReport, persona: str, scenario: str = "",
             for r in shown))
     if report.moves_not_made:
         def _move_line(m) -> str:
+            if m.order_type == "attack":
+                at = f" to ({m.target_x},{m.target_y})" if m.target_x is not None else ""
+                return f"{m.id}'s attack on {m.target} came to no battle: {m.target} stepped away{at}, no men lost."
             verb = "march" if m.order_type in ("march_on", "besiege", "march") else ("withdrawal" if m.order_type == "withdraw" else "move")
             moves = f" with {m.moves_left} moves left." if m.moves_left is not None else "."
             return f"{m.id}'s {verb} to {m.target} did not happen: still at ({m.from_x},{m.from_y}){moves}"
@@ -741,5 +1050,12 @@ def build_prompt(report: StateReport, persona: str, scenario: str = "",
     if diplomacy:
         names = names or {}
         parts.append(diplomacy_section([_diplomacy_line(m, report.faction, names) for m in diplomacy]))
-    parts.append(RULES + "\n" + "\n".join(ORDER_HELP[a] for a in areas if a in ORDER_HELP))
+    parts.append(RULES + "\n" + "\n".join(ORDER_HELP[a] for a in areas if a in ORDER_HELP)
+                 + ("\n" + LOOKUP_RULE if lookups else ""))
     return "\n\n".join(parts) + "\n"
+
+
+LOOKUP_RULE = ("- lookup: to see towns' full entries (or \"family\") first, answer only {\"lookup\": [\"town:<id>\", ...]} "
+               "with no orders; they come back and you then give this turn's orders. One lookup a turn.")
+LOOKUP_ANSWERED = ("\n{details}\n\nThose are the details you asked for. Give this turn's orders now "
+                   "(no more lookups this turn).\n")

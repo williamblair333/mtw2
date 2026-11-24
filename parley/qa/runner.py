@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from parley.bridge import atomic_write
 from parley.config import GameConfig, load_config
 from parley.orchestrator import Orchestrator
+from parley.pause import STOP_REASON as PAUSE_STOP_REASON
 from parley.pause import path as pause_path
 from parley.qa.cases import INSTANT_WITHIN, Case, Expect, SetupStep, Suite, load_suite
 from parley.qa.checker import alive_after, check
@@ -46,19 +47,16 @@ _LOAD_OK_RE = re.compile(r"qa:\s+load\s+ok:\s*([^\r\n]+)")
 # the bridge logs "bridge loaded campaign at turn N" on every map load (loadGame writes no reload
 # marker, so "bridge reloaded" alone would never come)
 _RELOAD_TURN_RE = re.compile(r"bridge (?:reloaded|loaded campaign) at turn (\d+)")
-# The main menu runs a turn-0 campaign behind it, and its map load logs "turn 0" too: only a later
-# turn is the campaign (live 10-30 19:09:16, after a relaunch, the restore took the menu's line for the
-# campaign; its load, sent from the menu, crashed the game on the loading screen. Continue Campaign
-# logged the real turn after it: 19:13:59 turn 0, 19:14:35 turn 43).
-CAMPAIGN_LINE = "bridge loaded campaign at turn N (N > 0)"
+# The main menu draws a campaign map behind it; the bridge logs that load as "main menu map loaded",
+# never as a campaign (W47; live 10-30 19:09 a restore took the menu's turn-0 line for the campaign
+# and its load, sent from the menu, crashed the game). So the first load line is the campaign's.
+CAMPAIGN_LINE = "bridge loaded campaign at turn N"
 
 
 def _campaign_turn(text: str) -> int | None:
-    """The turn of the first campaign map load in `text`, skipping the main menu's turn 0."""
-    for m in _RELOAD_TURN_RE.finditer(text):
-        if int(m.group(1)) > 0:
-            return int(m.group(1))
-    return None
+    """The turn of the first campaign map load in `text`."""
+    m = _RELOAD_TURN_RE.search(text)
+    return int(m.group(1)) if m else None
 
 
 # how far back the park looks in the bridge log for the newest campaign load (a turn's logs fit)
@@ -110,7 +108,12 @@ HANG_SECONDS = 240.0
 # (lua/parley_bridge.lua: DECIDE_WAIT 540 + 30; #288). The QA turn wait must outlast that hold, or a
 # held turn fails its case as "turn stuck" (live 10-30 23:06). A test keeps this in step with the Lua.
 BRIDGE_DECISION_HOLD_MAX = 570.0
-TURN_TIMEOUT = BRIDGE_DECISION_HOLD_MAX + 30.0
+# The QA games set shorter caps (write_qa_config): the bridge holds End Turn at most QA_DECISION_HOLD
+# and gives the turn loop QA_DECIDE_WAIT for a decision's answer, so a held turn ends within ~2 min
+# and the turn wait can be 180 s instead of 600 (the author 11-05: "a stall should cost 2 minutes, not 10")
+QA_DECISION_HOLD = 90
+QA_DECIDE_WAIT = 60
+TURN_TIMEOUT = 180.0
 # relaunch_game.sh returns once the bridge logged the campaign's map load (its --clicks fallback
 # returns after the Continue Campaign click, and the map loads after that)
 RELAUNCH_TIMEOUT = 300.0
@@ -189,6 +192,40 @@ def _last_turn_line(log_path: Path) -> str:
     return (turn_lines or lines or [""])[-1][:200]
 
 
+def _game_over_line(log_path: Path, tail_bytes: int = _CAMPAIGN_TAIL_BYTES) -> str | None:
+    try:
+        with Path(log_path).open("rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - tail_bytes))
+            data = f.read()
+    except OSError:
+        return None
+    lines = [ln.strip() for ln in data.decode("utf-8", errors="replace").splitlines() if ln.strip()]
+    load_idx = None
+    for i in range(len(lines) - 1, -1, -1):
+        if "bridge loaded campaign at turn" in lines[i]:
+            load_idx = i
+            break
+    if load_idx is None:
+        return None
+    for ln in reversed(lines[load_idx + 1:]):
+        if "campaign over: end_campaign_scroll on screen" in ln:
+            return ln[:150]
+    return None
+
+
+GAME_OVER_PREFIX = "game over screen at "
+
+
+def _down_was_expected(case: Case, evidence: str) -> bool:
+    """A case that forces the defeat: game_trouble reports the screen before the case's expects are
+    checked (bench 11-06, forced_campaign_lost), so it passes if a log expect names that very line. Only
+    the defeat screen: a crash or hang is never what a case wanted."""
+    if not evidence.startswith(GAME_OVER_PREFIX):
+        return False
+    return any(e.log is not None and re.search(e.log, evidence) for e in case.expect)
+
+
 def game_trouble(
     is_game_running: Callable[[], bool],
     log_path: Path,
@@ -199,7 +236,8 @@ def game_trouble(
     eop_error_box: Callable[[], str | None] | None = None,
     answers: Callable[[], bool] | None = None,
 ) -> str | None:
-    """'game crashed at <time>: <last log line>' when medieval2.exe is gone, EOP's modal ERROR box
+    """'game over screen at <time>: <line>' when the defeat screen is up,
+    'game crashed at <time>: <last log line>' when medieval2.exe is gone, EOP's modal ERROR box
     is up (`eop_error_box`, scripts/eop_error_box.sh: its title, or None) or Wine's crash dialog is
     up (`crash_dialog`, scripts/crash_dialog.sh), 'game hung at <time> ...' when it is alive but
     the bridge log hasn't grown for `hang_seconds` (HANG_SECONDS by default) and it doesn't
@@ -207,6 +245,9 @@ def game_trouble(
     is never read as a hang."""
     limit = HANG_SECONDS if hang_seconds is None else float(hang_seconds)
     log_path = Path(log_path)
+    over = _game_over_line(log_path)
+    if over:
+        return f"{GAME_OVER_PREFIX}{_clock(now())}: {over}"
     if not is_game_running():
         return f"game crashed at {_clock(now())} (medieval2.exe not running): {_last_log_line(log_path) or 'no bridge log'}"
     # live 10-31: "Cannot create M2TWEOP save file. 2" froze the game; the bridge answered nothing
@@ -595,8 +636,18 @@ def write_qa_config(
         "save_dir": str(real_cfg.save_dir),
         "mod_save_dir": str(real_cfg.mod_save_dir),
         "seat_timeout": real_cfg.seat_timeout,
-        # the papal crash experiment (field suite turns 59/62): our handler stays out of papal scrolls
-        "autoplay": {"wait": 60, "papal_hands_off": True},
+        # the papal crash experiment (field suite turns 59/62): our handler stays out of papal scrolls.
+        # End Turn holds for every offer on screen, in every suite, within the bench's short cap
+        # (decision_hold, 90 s): an offer answered while End Turn is pending can crash the game (live
+        # 10-30 20:48-22:28; 11-05 11:57:47, covert assassinate: a marriage offer the bench didn't
+        # hold was declined 17 s after End Turn and the game died 4 s later). Until 11-05 noon the
+        # bench held only in suites with a `choice` case (field 11-05: a 9.5 min stall under the old
+        # 570 s cap), then for diplomatic offers only; both left that crash open
+        "autoplay": {"wait": 60, "papal_hands_off": True,
+                     "hold_reads": bool(getattr(suite, "hold_reads", False)),
+                     "hold_decisions": True,
+                     # short caps on the bench (the author 11-05: a stall costs 2 min, not 10)
+                     "decision_hold": QA_DECISION_HOLD, "decide_wait": QA_DECIDE_WAIT},
         "seats": {
             suite.faction: {
                 "brain": f"script:{Path(plan_path).resolve()}",
@@ -639,13 +690,19 @@ def format_report(
     results: list[CaseResult],
     total_seconds: float | None = None,
     reloads: list[float] | None = None,
+    kind: str | None = None,
 ) -> str:
     """Render a markdown report table for a QA run: each case's wall time, and the run's total
     (park, smoke and cases; the restore after it is not in it) when given. `reloads`: the seconds
-    each bench reload for a case's isolation took (not in the cases' times)."""
+    each bench reload for a case's isolation took (not in the cases' times). `kind`: the run kind
+    (all, instant, noclick), so `just click-coverage` can tell a no-click pass from any other."""
     lines = [
         f"# QA Report: {suite_name}",
         "",
+    ]
+    if kind:
+        lines += [f"Run kind: {kind}", ""]
+    lines += [
         "| case | outcome | turns | evidence | time | reload |",
         "| --- | --- | --- | --- | --- | --- |",
     ]
@@ -896,6 +953,25 @@ def _restored_keep_if_unmoved(save_dir: Path, game_id: str, turn_root: Path | No
     return restored
 
 
+def _check_bridge_build(turn_root: Path) -> None:
+    """The bench runs on this checkout's bridge (parley.bridge_build): installed and loaded must both
+    match the repo's lua/parley_bridge.lua, not only each other (live 11-23: both were the old build)."""
+    from parley.bridge_build import BridgeStale, ensure_current, stamps
+    repo, installed, loaded = stamps(turn_root)
+    if installed is None:
+        print("qa: warning: parley_build.txt missing (old install)")
+        return
+    try:
+        build = ensure_current(turn_root, reload=lambda: subprocess.run(
+            ["bash", str(REPO_ROOT / "scripts" / "game.sh"), "reload-bridge"],
+            cwd=str(REPO_ROOT), check=False))
+    except BridgeStale as e:
+        print(f"qa error: {e}")
+        raise QARunError(str(e)) from None
+    if (installed, loaded) != (repo, repo):
+        print(f"qa: bridge build {build} loaded; bench runs on it")
+
+
 def _preflight_keep_save(save_dir: Path, game_id: str, turn_root: Path | None = None) -> int | None:
     newest = newest_real_save(save_dir)
     try:
@@ -975,7 +1051,11 @@ def archive_qa_game(turn_root: Path, game_id: str, now_fn: Callable[[], _dt.date
     loop stopped for the assassin's setup, the bridge applied the 18:15 run's turn-44 orders, "unknown
     agent 'Toby of Eynsham'", and ended turn 45 while setup was still spawning)."""
     src = Path(turn_root) / game_id
-    if not src.is_dir():
+    # the game's database goes too: it counts each turn's messages, and every bench reload goes back
+    # to the same turn numbers (full pass 11-05 17:51: orders_next_report's one `say` was refused,
+    # "limit 3 per turn to lobby", on lobby messages earlier runs had queued at turn 6)
+    dbs = [p for p in (Path(turn_root) / f"{game_id}.db{side}" for side in ("", "-wal", "-shm")) if p.exists()]
+    if not src.is_dir() and not dbs:
         return None
     archive = Path(turn_root) / QA_ARCHIVE_DIR
     archive.mkdir(parents=True, exist_ok=True)
@@ -985,7 +1065,12 @@ def archive_qa_game(turn_root: Path, game_id: str, now_fn: Callable[[], _dt.date
     while dest.exists():
         dest = archive / f"{game_id}-{stamp}-{n}"
         n += 1
-    os.replace(src, dest)
+    if src.is_dir():
+        os.replace(src, dest)
+    else:
+        dest.mkdir()
+    for db in dbs:
+        os.replace(db, dest / db.name)
     kept = sorted(p for p in archive.glob(f"{game_id}-*") if p.is_dir())
     for old in kept[:-QA_ARCHIVE_KEEP]:
         shutil.rmtree(old, ignore_errors=True)
@@ -996,7 +1081,9 @@ def _read_log_since(log_path: Path, offset: int) -> str:
     try:
         with log_path.open("rb") as f:
             f.seek(offset)
-            return f.read().decode("utf-8", errors="replace")
+            # Wine writes \n under "ab" (W48); \r stripping kept for logs written by older builds
+            # (live 11-05 the test laptop three turn cases whose expects end a line with \n or $ failed on \r\n)
+            return f.read().decode("utf-8", errors="replace").replace("\r\n", "\n")
     except FileNotFoundError:
         return ""
 
@@ -1272,8 +1359,8 @@ class _ProcessManager:
         self._stop_by_argv("crash-watch", _is_crash_watch_argv)
 
     def start_qa_loop(self, qa_toml: Path) -> None:
-        # the QA loop's popup thread clicks (parley/popups.py): never started in a no-click run
-        _refuse_in_no_click_run(f"the QA turn loop for {Path(qa_toml).name} (its popup thread clicks)")
+        # the QA loop's popup thread makes no screen input since 11-21 (parley/xinput.py): any click
+        # it would ask for is refused and logged. An instant run still never starts it (_run_suite)
         self.stop_qa_proc()
         logs_dir = REPO_ROOT / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
@@ -1415,21 +1502,12 @@ class _ProcessManager:
         )
 
 
-def _refuse_in_no_click_run(what: str) -> None:
-    """QARunError (the runner's restore and report handle it) in a no-click run."""
-    try:
-        refuse_x_input(what)
-    except XInputRefused as e:
-        raise QARunError(str(e)) from e
-
-
-def _no_click_guarded(fn: Callable, what: str) -> Callable:
-    """`fn`, refused in a no-click run before it is called: the guard holds for an injected
-    starter or relauncher as much as for the real one."""
+def _instant_refused(fn: Callable, what: str) -> Callable:
+    """`fn`, refused with a QARunError (the runner's restore and report handle it) before it is
+    called: an instant run plays no turns, injected starter or real one."""
 
     def guarded(*args, **kwargs):
-        _refuse_in_no_click_run(what)
-        return fn(*args, **kwargs)
+        raise QARunError(f"refused in an instant run: {what}")
 
     return guarded
 
@@ -1691,6 +1769,11 @@ def _abort_restore(
     restarted by hand). Restart what ran before the park (`running`; None: loop+bot and crash-watch)
     anyway, retire the lock and the keep under -aborted names, and raise. If a restart fails, the
     lock stays for `just qa-restore`."""
+    try:
+        stop_pause = json.loads(lock_path.read_text(encoding="utf-8")).get("stop_pause")
+    except (OSError, ValueError, AttributeError):
+        stop_pause = None
+    _put_back_stop_pause(real_cfg.turn_root, stop_pause)
     _release_turn(real_cfg.turn_root)  # the real loop plays on from here, as it did before the hold
     try:
         _start_real_as_before(running, real_config_path, start_real, start_bot)
@@ -1737,6 +1820,7 @@ def restore(
     dialog_confirm_seconds: float = DIALOG_CONFIRM_SECONDS,
     eop_error_box: Callable[[], str | None] | None = None,
     start_bot: Callable[[Path], None] | None = None,
+    restore: str | None = None,
 ) -> bool:
     """Restore the real campaign from its kept save, bring back what ran before the park, and clear
     qa.lock. The lock's `running_before` (loop, bot, crash-watch) says what that was: a loop that
@@ -1760,6 +1844,9 @@ def restore(
             lock_data = {}
     except (OSError, ValueError):
         lock_data = {}
+
+    if restore is None:
+        restore = lock_data.get("restore")
 
     rel_save = _rel_keep_save_path(real_cfg)
     expected_turn = lock_data.get("turn")
@@ -1793,6 +1880,7 @@ def restore(
     )
 
     if _phase_done(lock_data, "loaded"):
+        _put_back_stop_pause(real_cfg.turn_root, lock_data.get("stop_pause"))
         _release_turn(real_cfg.turn_root)  # the kept save is on the map already
     else:
         # Held from here until the bridge says it loaded the kept save at the real turn (live 10-31:
@@ -1811,58 +1899,77 @@ def restore(
             stop_orphaned_fn()
             stop_loop_fn()
 
-            def trouble_fn() -> str | None:
-                return game_trouble(
-                    is_running_fn, log_path, hang_seconds=hang_seconds, crash_dialog=dialog_fn,
-                    eop_error_box=box_fn, answers=_answers_check(is_game_running, pm),
-                )
-
-            def relaunch(why: str) -> None:
-                print(f"qa-restore: {why}; relaunching the game", file=sys.stderr)
-                # the crash's evidence goes with the relaunch, as crash-watch keeps it (STANDARDS
-                # crash-repro-report; 11-05 07:18 a QA crash left no report). The real game only.
-                if relaunch_game is None:
-                    report = pm.crash_report(f"QA run: {why}")
-                    if report:
-                        print(f"qa-restore: crash report {report}", file=sys.stderr)
+            if restore == "relaunch":
+                Orchestrator(real_cfg, {}).publish_bridge_config()
                 _relaunch_and_wait(relaunch_fn, log_path, timeout=relaunch_timeout, poll_interval=poll_interval)
+                _clear_popup_requests(real_cfg.turn_root)
+                _put_back_stop_pause(real_cfg.turn_root, lock_data.get("stop_pause"))
+                _release_turn(real_cfg.turn_root)
+                _mark_phase(lock_path, lock_data, "loaded")
+            else:
+                def trouble_fn() -> str | None:
+                    return game_trouble(
+                        is_running_fn, log_path, hang_seconds=hang_seconds, crash_dialog=dialog_fn,
+                        eop_error_box=box_fn, answers=_answers_check(is_game_running, pm),
+                    )
 
-            trouble = trouble_fn()
-            if trouble is not None:
-                relaunch(trouble)
-            ctrl = ctrl_factory(real_cfg.turn_root)
-            load_line = _load_line(keep_path, rel_save)
-            offset = ctrl.log_offset()
-            # the real seats' bridge config before the load, not after: the bridge acts on the
-            # loaded turn at once (live 10-30 18:38:30: under the QA config still in place it
-            # applied qa-field's stale orders to the real England and ended its turn 32 unasked)
-            if bridge_path.exists():
-                qa_bridge_text = bridge_path.read_text(encoding="utf-8")
-            Orchestrator(real_cfg, {}).publish_bridge_config()
-            try:
-                lua_res = ctrl.run_lua(load_line)
-            except ControlTimeout:
-                # live 10-30 18:37: the load timed out on a game frozen for three minutes, under
-                # the hang threshold; wait for the detector's verdict instead of failing outright
-                trouble = _await_trouble(
-                    trouble_fn, log_path, offset, hang_seconds=hang_seconds, poll_interval=poll_interval
-                )
-                if trouble is None:
-                    raise
-                relaunch(trouble)
+                def relaunch(why: str) -> None:
+                    print(f"qa-restore: {why}; relaunching the game", file=sys.stderr)
+                    # the crash's evidence goes with the relaunch, as crash-watch keeps it (STANDARDS
+                    # crash-repro-report; 11-05 07:18 a QA crash left no report). The real game only. A defeat
+                    # isn't a crash: its report woke the campaign watch as a CRASH (11-06)
+                    if relaunch_game is None and not why.startswith(GAME_OVER_PREFIX):
+                        report = pm.crash_report(f"QA run: {why}")
+                        if report:
+                            print(f"qa-restore: crash report {report}", file=sys.stderr)
+                    _relaunch_and_wait(relaunch_fn, log_path, timeout=relaunch_timeout, poll_interval=poll_interval)
+
+                trouble = trouble_fn()
+                if trouble is not None:
+                    relaunch(trouble)
+                ctrl = ctrl_factory(real_cfg.turn_root)
+                load_line = _load_line(keep_path, rel_save)
+                # the AI turns the run left playing end under the QA config's short caps, not the real
+                # one's: live 11-05 11:26 a battle's results scroll in an AI turn stood 9 min (540 s, the
+                # real decision wait) once the real config was published, the load (deferred to the
+                # player's turn) timed out and the lock was left
+                _await_player_turn(ctrl, log_path, trouble_fn, timeout=RESTORE_TURN_WAIT,
+                                   poll_interval=poll_interval)
                 offset = ctrl.log_offset()
-                lua_res = ctrl.run_lua(_load_line(keep_path, rel_save))
-            _confirm_load(
-                lua_res,
-                log_path,
-                offset,
-                expected_turn=int(expected_turn) if expected_turn is not None else None,
-                timeout=reload_timeout,
-                poll_interval=poll_interval,
-            )
-            # "bridge loaded campaign at turn <real turn>" seen: the real campaign's turns may end again
-            _release_turn(real_cfg.turn_root)
-            _mark_phase(lock_path, lock_data, "loaded")
+                # the real seats' bridge config before the load, not after: the bridge acts on the
+                # loaded turn at once (live 10-30 18:38:30: under the QA config still in place it
+                # applied qa-field's stale orders to the real England and ended its turn 32 unasked)
+                if bridge_path.exists():
+                    qa_bridge_text = bridge_path.read_text(encoding="utf-8")
+                Orchestrator(real_cfg, {}).publish_bridge_config()
+                try:
+                    lua_res = ctrl.run_lua(load_line)
+                except ControlTimeout:
+                    # live 10-30 18:37: the load timed out on a game frozen for three minutes, under
+                    # the hang threshold; wait for the detector's verdict instead of failing outright
+                    trouble = _await_trouble(
+                        trouble_fn, log_path, offset, hang_seconds=hang_seconds, poll_interval=poll_interval
+                    )
+                    if trouble is None:
+                        raise
+                    relaunch(trouble)
+                    offset = ctrl.log_offset()
+                    lua_res = ctrl.run_lua(_load_line(keep_path, rel_save))
+                _confirm_load(
+                    lua_res,
+                    log_path,
+                    offset,
+                    expected_turn=int(expected_turn) if expected_turn is not None else None,
+                    timeout=reload_timeout,
+                    poll_interval=poll_interval,
+                )
+                # the bench's popup requests must not be answered on the real campaign (_clear_popup_requests)
+                _clear_popup_requests(real_cfg.turn_root)
+                # "bridge loaded campaign at turn <real turn>" seen: the real campaign's turns may end again
+                # (unless `just stop` had them paused before the park)
+                _put_back_stop_pause(real_cfg.turn_root, lock_data.get("stop_pause"))
+                _release_turn(real_cfg.turn_root)
+                _mark_phase(lock_path, lock_data, "loaded")
         except (subprocess.CalledProcessError, ControlTimeout, QARunError) as e:
             if lua_res is not None and _load_never_reached_game(lua_res, log_path, offset):
                 changed = _run_changed_game(lock_data, log_path)
@@ -1938,97 +2045,6 @@ def restore(
 
     lock_path.unlink(missing_ok=True)
     return True
-
-
-def resume_real_after_relaunch(
-    turn_root: Path | str,
-    *,
-    mod_save_dir: Path | str | None = None,
-    log_offset: int = 0,
-    control_factory: Callable[[Path], Control] | None = None,
-    timeout: float = RELAUNCH_TIMEOUT,
-    poll_interval: float = 0.5,
-) -> str:
-    """After relaunch_game.sh's Continue Campaign: put the real campaign back when Continue loaded
-    the QA game's autosave (live 10-30 20:12: the real loop came back on turn 45 instead of 41).
-
-    That is the case when <turn_root>/qa.last_restore exists and no save in `mod_save_dir`
-    (default <game>/mods/parley/saves) other than the keep saves is newer than its
-    newest_save_mtime: the real game hasn't autosaved since the restore. Then, once the bridge logs
-    `bridge loaded campaign at turn N` (N > 0) after `log_offset`, the newest
-    parley_keep_*.restored-*.sav is loaded through control.txt. A qa.lock means a bench run or
-    its restore owns the game, so nothing is done. Returns what it did; raises QARunError when the
-    load could not be made."""
-    turn_root = Path(turn_root)
-    game_dir = turn_root.parent
-    save_dir = Path(mod_save_dir) if mod_save_dir is not None else game_dir / "mods" / "parley" / "saves"
-    if (turn_root / LOCK_FILE).exists():
-        return f"{LOCK_FILE} present: a QA run or restore owns the game; left to it"
-    last_restore_path = turn_root / LAST_RESTORE_FILE
-    if not last_restore_path.exists():
-        return "no QA restore on record; continuing the newest save"
-    try:
-        data = json.loads(last_restore_path.read_text(encoding="utf-8"))
-        rec = float(data["newest_save_mtime"])
-    except (OSError, ValueError, TypeError, KeyError) as e:
-        raise QARunError(f"invalid {last_restore_path}: {e}") from e
-    newest = newest_real_save(save_dir)
-    if newest is not None and newest.stat().st_mtime > rec:
-        return f"{newest.name} is newer than the last QA restore; continuing it"
-    restored = sorted(
-        save_dir.glob("parley_keep_*.restored-*.sav"),
-        key=lambda p: (p.stat().st_mtime, p.name),
-    )
-    if not restored:
-        raise QARunError(
-            f"no save newer than the last QA restore and no parley_keep_*.restored-*.sav in {save_dir}: "
-            "the game may be on the QA campaign"
-        )
-    keep = restored[-1]
-    log_path = turn_root / LOG_FILE
-    deadline = time.monotonic() + timeout
-    start = log_offset
-    while True:
-        if _log_size(log_path) < start:  # the log started over: read all of it
-            start = 0
-        turn = _campaign_turn(_read_log_since(log_path, start))
-        if turn is not None:
-            break
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise QARunError(
-                f"no '{CAMPAIGN_LINE}' in {log_path} within {timeout}s; {keep.name} not loaded"
-            )
-        time.sleep(min(poll_interval, remaining))
-    try:
-        rel = keep.resolve().relative_to(game_dir.resolve()).as_posix()
-    except ValueError as e:
-        raise QARunError(f"{keep} is not under the game dir {game_dir}") from e
-    ctrl = (control_factory or (lambda root: Control(root)))(turn_root)
-    offset = ctrl.log_offset()
-    line = _load_line(keep, rel)
-    try:
-        lua_res = ctrl.run_lua(line)
-    except ControlTimeout as e:
-        raise QARunError(f"loading {keep.name}: {e}") from e
-    if lua_res.endswith(" (error)"):
-        raise QARunError(f"M.qa.load({rel}) failed: {lua_res}")
-    deadline = time.monotonic() + timeout
-    while True:
-        text = _read_log_since(log_path, offset)
-        m_fail = _LOAD_FAILED_RE.search(text)
-        if m_fail:
-            raise QARunError(f"M.qa.load({rel}) failed: {m_fail.group(0)}")
-        if _LOAD_OK_RE.search(text):
-            break
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise QARunError(f"M.qa.load({rel}) sent, but no 'qa: load ok' in {log_path}")
-        time.sleep(min(poll_interval, remaining))
-    return (
-        f"the campaign came up at turn {turn} with no real autosave since the last QA restore; "
-        f"loaded {keep.name}"
-    )
 
 
 def _default_advance_turn(
@@ -2155,6 +2171,25 @@ def _hold_turn(turn_root: Path) -> bool:
     return True
 
 
+def _set_aside_stop_pause(turn_root: Path) -> str | None:
+    """Take `just stop`'s pause off for the run, whose bench turns must play; the text, for the lock."""
+    p = pause_path(turn_root)
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if not text.startswith(PAUSE_STOP_REASON):
+        return None  # a usage limit's: it holds the bench too, as it always has
+    p.unlink(missing_ok=True)
+    return text
+
+
+def _put_back_stop_pause(turn_root: Path, text: str | None) -> None:
+    """Back to how the park found it: with no turn loop, autoplay would end the real turns unordered."""
+    if text:
+        atomic_write(pause_path(turn_root), text)
+
+
 def _release_turn(turn_root: Path) -> None:
     """Lift the instant cases' hold (never another pause). Safe to call when there is none."""
     p = pause_path(turn_root)
@@ -2242,6 +2277,42 @@ def _probe(
             if a is None or b is None or not passes(a, b):
                 ok = False
     return ok, v, False
+
+
+RESTORE_TURN_WAIT = 240.0  # how long a restore waits for the bench's AI turns to end first
+
+
+def _await_player_turn(
+    ctrl: Control,
+    log_path: Path,
+    trouble_fn: Callable[[], str | None] | None,
+    *,
+    timeout: float,
+    poll_interval: float,
+) -> None:
+    """Before a restore loads the kept save: wait, up to `timeout`, while an AI faction's turn plays
+    on the bench. Returns at once on the player's turn or when the game can't say (the load then
+    goes ahead as before; the bridge defers it to the player's turn anyway)."""
+    deadline = time.monotonic() + timeout
+    started = time.monotonic()
+    while True:
+        res, why = _call_lua(
+            ctrl, "return tostring(gameDataAll.get().campaignStruct.currentFaction.isPlayerControlled)",
+            log_path, trouble_fn,
+        )
+        # a game busy with an AI turn may not answer in time: that is waiting, not "can't say"
+        # (review 11-05, agy: one unanswered call ended the wait and the real config went out early)
+        if res is None and "timed out" in why and time.monotonic() < deadline:
+            time.sleep(poll_interval)
+            continue
+        if res is None or res.strip() not in ("0", "false"):
+            if time.monotonic() - started >= 1.0:
+                print(f"qa-restore: waited {time.monotonic() - started:.0f} s for the AI turns to end")
+            return
+        if time.monotonic() >= deadline:
+            print(f"qa-restore: an AI turn still running after {timeout:g} s; loading anyway")
+            return
+        time.sleep(poll_interval)
 
 
 def _await_own_turn(
@@ -2524,6 +2595,9 @@ def _run_case(
     # the scripted ruler's answer to the game's choices (ScriptSeat.chat), beside the turns' orders
     plan_file = {**case_plan, "choice": case.choice} if case.choice else case_plan
     plan_path.write_text(json.dumps(plan_file, indent=2) + "\n", encoding="utf-8")
+    # setup is done and this case's turns must end: an instant case's hold, kept for the run, goes
+    # here (it used to go by luck when the scripted ruler answered; live 11-06). Never another pause.
+    _release_turn(turn_root)
     start_qa_loop_fn(qa_toml_path)
     first_order_turn = min((int(k) for k in case_plan), default=None)
 
@@ -2561,6 +2635,11 @@ def _run_case(
             turn_state = {**turn_state, QA_MESSAGES: _case_messages(
                 turn_root, qa_game_id, faction, case_plan, current_turn, plan_written_at)}
         verdict = check(bound_case, log_since, state=turn_state, results=results, turns_used=turns_used)
+        # when each report was judged, against how much log: live 11-05 two cases failed on log lines
+        # the bridge log held by the run's end (event_scroll_closed 10:13, ai_offer_on_its_turn 10:21)
+        last = log_since.rstrip("\n").rsplit("\n", 1)[-1][:19] if log_since.strip() else "-"
+        print(f"qa: {case.name}: turn {turns_used}/{bound_case.max_turns} report {current_turn} judged "
+              f"{time.strftime('%H:%M:%S')}, log to {last}: {verdict.outcome}", flush=True)
         if verdict.outcome != "pending":
             return (
                 CaseResult(
@@ -2583,10 +2662,25 @@ def _run_case(
     )
 
 
-def _resolve_suites(suite_name: str, suites_dir: Path, cases: list[str] | None = None) -> list[Suite]:
+def _case_ends_campaign(case: Case) -> bool:
+    """A case that expects the campaign-over screen (the run ends with it: _down_was_expected)."""
+    return any(e.log is not None and "campaign over" in e.log for e in case.expect)
+
+
+def _ends_campaign(suite: Suite) -> bool:
+    return any(_case_ends_campaign(c) for c in suite.cases)
+
+
+def _resolve_suites(
+    suite_name: str,
+    suites_dir: Path,
+    cases: list[str] | None = None,
+    *,
+    instant_smoke: bool = True,
+) -> list[Suite]:
     """smoke, then the named suite (or every suite for "all"). `cases` keeps only those cases of
-    the named suite(s); smoke stays whole unless it is the suite named. An unknown case name is an
-    error listing the cases there are."""
+    the named suite(s); when `cases` is given on a non-smoke suite, smoke keeps only its instant
+    cases as its gate. An unknown case name is an error listing the cases there are."""
     smoke_path = Path(suites_dir) / "smoke.toml"
     smoke = load_suite(smoke_path)
     if suite_name == "smoke":
@@ -2597,6 +2691,10 @@ def _resolve_suites(suite_name: str, suites_dir: Path, cases: list[str] | None =
             for p in sorted(Path(suites_dir).glob("*.toml"))
             if p.stem != "smoke"
         ]
+        # a case that ends the campaign on purpose (forced_campaign_lost) ends the run with it: 11-14,
+        # forced ran sixth and the six suites after it never ran. Its suite goes last, it last in it
+        others = sorted(others, key=_ends_campaign)
+        others = [s.model_copy(update={"cases": sorted(s.cases, key=_case_ends_campaign)}) for s in others]
         suites = [smoke, *others]
     else:
         target_path = Path(suites_dir) / f"{suite_name}.toml"
@@ -2616,13 +2714,31 @@ def _resolve_suites(suite_name: str, suites_dir: Path, cases: list[str] | None =
     keep = set(cases)
     picked = [s.model_copy(update={"cases": [c for c in s.cases if c.name in keep]}) for s in filtered]
     picked = [s for s in picked if s.cases]
-    return picked if suite_name == "smoke" else [smoke, *picked]
+    if suite_name == "smoke":
+        return picked
+    if instant_smoke:
+        smoke = smoke.model_copy(update={"cases": [c for c in smoke.cases if c.kind == "instant"]})
+    return [smoke, *picked]
 
 
 # `--kind instant` (phase 1 of the author's no-click rule, 10-31): only the cases that need no played turn
-RUN_KINDS = ("all", "instant")
+RUN_KINDS = ("all", "instant", "noclick")
 SKIPPED_TURN_CASE = "skipped: needs a played turn (click phase)"
 SKIPPED_PHASE2 = "skipped: phase 2: "
+
+
+SKIPPED_NEEDS_CLICK = "skipped: needs a click: "
+
+
+def _without_clicks(suites: list[Suite]) -> tuple[list[Suite], dict[str, list[tuple[str, str]]]]:
+    """For a noclick run: each suite without the cases whose subject is a click (`needs_click`),
+    and those cases as (name, evidence) to report skipped."""
+    kept: list[Suite] = []
+    skipped: dict[str, list[tuple[str, str]]] = {}
+    for s in suites:
+        skipped[s.name] = [(c.name, SKIPPED_NEEDS_CLICK + c.needs_click) for c in s.cases if c.needs_click]
+        kept.append(s.model_copy(update={"cases": [c for c in s.cases if not c.needs_click]}))
+    return kept, skipped
 
 
 def _instant_only(suites: list[Suite]) -> tuple[list[Suite], dict[str, list[tuple[str, str]]]]:
@@ -2719,7 +2835,9 @@ def _park_real(
                     "didn't answer it (its ruler may be slow or down): answer it, then retry")
             time.sleep(decision_poll)
     park_held = False
+    stop_pause = None
     try:
+        stop_pause = _set_aside_stop_pause(turn_root)
         park_held = _hold_turn(turn_root)
         stop_loop_fn()
         stop_cw_fn()
@@ -2771,9 +2889,12 @@ def _park_real(
         }
         if running is not None:
             lock_payload[RUNNING_BEFORE] = running
+        if stop_pause:
+            lock_payload["stop_pause"] = stop_pause
         lock_path.write_text(json.dumps(lock_payload, indent=2) + "\n", encoding="utf-8")
     except BaseException as exc:
         lock_path.unlink(missing_ok=True)
+        _put_back_stop_pause(turn_root, stop_pause)
         if park_held:
             _release_turn(turn_root)  # the real campaign plays on as before the park
         restart_errors: list[Exception] = []
@@ -2907,8 +3028,26 @@ def _load_bench_save(
                       timeout=reload_timeout, poll_interval=poll_interval)
     except QARunError as e:
         raise QARunError(f"bench save {bench.rel}: {e}") from e
+    _clear_popup_requests(turn_root)
     _quiet_world(ctrl, log_path, bench.rel)
     return time.monotonic() - start
+
+
+def _clear_popup_requests(turn_root: Path) -> int:
+    """After a load: the popup requests of the campaign that was on the map go (the bridge's own list
+    of them is gone with it). Live 11-05 (the test laptop): popup-5-9017110.req and popup-6-8899712..14.req,
+    raised at 09:40, were still there at 12:14, kept fresh by the hold's resume (pause.resume touches
+    every .req); the turn loop kept answering them, clicking whatever offer was on screen, under a
+    pending End Turn: the crashes at 11:57:51 and 12:15:05 followed. Returns how many went."""
+    gone = 0
+    for path in Path(turn_root).glob("popup-*"):
+        if path.suffix in (".req", ".answer", ".hold", ".done"):
+            try:
+                path.unlink()
+                gone += 1
+            except FileNotFoundError:
+                pass
+    return gone
 
 
 _QUIET_RE = re.compile(r"^pope=")
@@ -3049,6 +3188,13 @@ def run_suite(
     if kind == "instant":
         with no_click_run():
             return _run_suite(**args)
+    if kind == "noclick":
+        # every case, turn cases too, with X input refused for the whole run: the QA loop starts
+        # with PARLEY_NO_X_INPUT=1, so the bridge's own (Lua) popup handling still runs and any
+        # click the popup thread would make is refused and logged ("X input refused ...") in
+        # logs/qa-<suite>-turns.log. A case that passes needs no click; one that fails names it.
+        with no_click_run():
+            return _run_suite(**args)
     return _run_suite(**args)
 
 
@@ -3101,11 +3247,13 @@ def _run_suite(
     Before each case and while a case waits for its turns, a crashed or hung game (game_trouble)
     fails the case with that as evidence and ends the run; the restore relaunches the game."""
     run_start = time.monotonic()
-    suites = _resolve_suites(suite_name, Path(suites_dir), cases)
+    suites = _resolve_suites(suite_name, Path(suites_dir), cases, instant_smoke=kind != "instant")
     instant_run = kind == "instant"
     skipped_turn: dict[str, list[str]] = {}
     if instant_run:
         suites, skipped_turn = _instant_only(suites)
+    elif kind == "noclick":
+        suites, skipped_turn = _without_clicks(suites)
     real_config_path = Path(real_config_path)
     real_cfg = load_config(real_config_path)
     _rel_keep_save_path(real_cfg)
@@ -3153,9 +3301,10 @@ def _run_suite(
     pm = _ProcessManager()
     stop_loop_fn = stop_loop or pm.stop_loop
     stop_cw_fn = stop_crash_watch or pm.stop_crash_watch
-    # both refused in a no-click run, injected or not (the QA loop's popup thread clicks)
-    start_qa_fn = _no_click_guarded(start_qa_loop or pm.start_qa_loop,
-                                    "the QA turn loop (its popup thread clicks)")
+    # an instant run plays no turns, so it never starts the QA loop, injected or not
+    start_qa_fn = start_qa_loop or pm.start_qa_loop
+    if kind == "instant":
+        start_qa_fn = _instant_refused(start_qa_fn, "the QA turn loop (an instant run plays no turns)")
     # an injected loop starter without a stopper is a test double: never kill real QA loops for it
     stop_qa_fn = stop_qa_loop or (pm.stop_qa_proc if start_qa_loop is None else (lambda: None))
     is_running_fn = is_game_running or pm.is_game_running
@@ -3198,12 +3347,21 @@ def _run_suite(
     out_games_dir = Path(qa_games_dir) if qa_games_dir is not None else real_config_path.parent
     report_path: Path | None = None
 
+    relaunch_restore = any(c.restore == "relaunch" for s in suites for c in s.cases)
+    park_extra = {}
+    if bench is not None:
+        park_extra["bench_save"] = bench.rel
+    if relaunch_restore:
+        park_extra["restore"] = "relaunch"
+
+    _check_bridge_build(turn_root)
+
     running_fn, start_bot_fn = _real_process_record(pm, running_now, start_bot, stop_loop, start_real)
     lock_payload, real_turn = _park_real(
         real_cfg, real_config_path, lock_path,
         stop_loop_fn=stop_loop_fn, stop_cw_fn=stop_cw_fn, start_real_fn=start_real_fn,
         start_cw_fn=start_cw_fn, now_fn=now_fn,
-        extra={"bench_save": bench.rel} if bench is not None else None,
+        extra=park_extra or None,
         running_now_fn=running_fn, start_bot_fn=start_bot_fn,
         # the real game only: a test double's stopper means there is no screen to look at
         decision_open_fn=(lambda: _decision_on_screen(turn_root)) if stop_loop is None else None,
@@ -3420,8 +3578,8 @@ def _run_suite(
                 except _GameDown as down:
                     # live 10-30 18:34: no case can run on a crashed or hung game; restore relaunches
                     all_results.append(
-                        CaseResult(name=case.name, outcome="fail", turns=down.turns, evidence=down.evidence,
-                                   seconds=time.monotonic() - case_start)
+                        CaseResult(name=case.name, outcome="pass" if _down_was_expected(case, down.evidence) else "fail",
+                                   turns=down.turns, evidence=down.evidence, seconds=time.monotonic() - case_start)
                     )
                     game_down = True
                     break
@@ -3447,7 +3605,7 @@ def _run_suite(
         stamp = now_fn().strftime("%Y-%m-%d-%H%M")
         report_path = report_dir_p / f"{stamp}-{suite_name}.md"
         report_path.write_text(
-            format_report(suite_name, all_results, time.monotonic() - run_start, reloads), encoding="utf-8"
+            format_report(suite_name, all_results, time.monotonic() - run_start, reloads, kind=kind), encoding="utf-8"
         )
         return all_results, report_path
     finally:
@@ -3461,7 +3619,7 @@ def _run_suite(
                 stamp = now_fn().strftime("%Y-%m-%d-%H%M")
                 report_path = report_dir_p / f"{stamp}-{suite_name}.md"
                 report_path.write_text(
-                    format_report(suite_name, all_results, time.monotonic() - run_start, reloads),
+                    format_report(suite_name, all_results, time.monotonic() - run_start, reloads, kind=kind),
                     encoding="utf-8",
                 )
             except OSError:
@@ -3485,6 +3643,7 @@ def _run_suite(
                 eop_error_box=box_fn,
                 dialog_confirm_seconds=dialog_confirm_seconds,
                 start_bot=start_bot_fn,
+                restore="relaunch" if relaunch_restore else None,
             )
         except QARunError as e:
             e.report_path = report_path

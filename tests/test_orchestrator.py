@@ -54,15 +54,20 @@ def test_orchestrator_passes_ladder_and_decision_log_to_popups(tmp_path):
     assert orch.popups.decision_log is orch.decision_log
 
 
-def test_orchestrator_wires_reader_to_popups(tmp_path):
+def test_orchestrator_wires_reader_to_popups(tmp_path, monkeypatch):
+    from pathlib import Path
+    from parley import popups
     from parley.config import AutoplayConfig
-    from parley.popups import read_agy
+    calls = []
+    monkeypatch.setattr(popups.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(popups, "read_agy", lambda path, *, model: calls.append(("agy", path, model)) or "read text")
+    monkeypatch.setattr(popups, "read", lambda path, *, model: calls.append(("claude", path, model)) or "wrong")
     cfg = _config(tmp_path, ("venice",))
     cfg.autoplay = AutoplayConfig()
     cfg.reader = "agy:gemini-3.8-flash-low"
     orch = Orchestrator(cfg, {"venice": FakeSeat()})
-    assert orch.popups.read.func is read_agy
-    assert orch.popups.read.keywords == {"model": "gemini-3.8-flash-low"}
+    assert orch.popups.read(Path("p.png")) == "read text"
+    assert calls == [("agy", Path("p.png"), "gemini-3.8-flash-low")]
 
 
 def test_a_failing_decider_falls_back_to_the_seats_own_brain():
@@ -239,6 +244,37 @@ def test_invalid_orders_filtered_and_recorded(tmp_path, venice_state_dict):
     assert len(Orders.model_validate_json((d / "orders.json").read_text()).orders) == 1
     rejected = json.loads((d / "rejected.json").read_text())
     assert len(rejected) == 1 and "treasury" in rejected[0]["reason"]
+
+
+def test_a_refused_order_gets_one_same_turn_correction(tmp_path, venice_state_dict):
+    # live 11-23 (turns 4330-4633): ~20 orders refused here, each lost until the next report
+    cfg = _config(tmp_path)
+    d = _pending(cfg, "venice", venice_state_dict)
+    prompts = []
+
+    class Seat(FakeSeat):
+        def decide(self, prompt, **kw):
+            prompts.append(prompt)
+            return super().decide(prompt, **kw)
+
+    seat = Seat([_orders(SendGold(to="milan", amount=99999), SetStance(to="milan", stance="alliance")),
+                 _orders(SendGold(to="milan", amount=10), SetStance(to="milan", stance="alliance"))])
+    Orchestrator(cfg, {"venice": seat}).run_once()
+    final = Orders.model_validate_json((d / "orders.json").read_text())
+    assert [o.type for o in final.orders] == ["send_gold", "set_stance"]
+    assert json.loads((d / "rejected.json").read_text()) == []
+    first = json.loads((d / "rejected_first.json").read_text())
+    assert len(first) == 1 and "treasury" in first[0]["reason"]
+    assert len(prompts) == 2 and "YOUR LAST ANSWER had orders refused" in prompts[1]
+    assert '"amount": 99999' in prompts[1] and "treasury too low" in prompts[1]
+
+
+def test_an_empty_correction_keeps_the_orders_that_passed(tmp_path, venice_state_dict):
+    cfg = _config(tmp_path)
+    d = _pending(cfg, "venice", venice_state_dict)
+    seat = FakeSeat([_orders(SendGold(to="milan", amount=99999), SetStance(to="milan", stance="alliance"))])
+    Orchestrator(cfg, {"venice": seat}).run_once()
+    assert [o.type for o in Orders.model_validate_json((d / "orders.json").read_text()).orders] == ["set_stance"]
 
 
 def test_artifacts_written(tmp_path, venice_state_dict):
@@ -456,6 +492,19 @@ def test_bridge_config_can_switch_off_the_end_turn_hold_for_offers(tmp_path):
     cfg = _config(tmp_path, ("venice",)).model_copy(update={"autoplay": AutoplayConfig(hold_decisions=False)})
     Orchestrator(cfg, {}).publish_bridge_config()
     assert "autoplay_hold_decisions=0" in (cfg.turn_root / "bridge.txt").read_text().splitlines()
+    cfg = cfg.model_copy(update={"autoplay": AutoplayConfig(hold_decisions="diplomacy")})
+    Orchestrator(cfg, {}).publish_bridge_config()
+    assert "autoplay_hold_decisions=diplomacy" in (cfg.turn_root / "bridge.txt").read_text().splitlines()
+
+
+def test_bridge_config_carries_hold_reads(tmp_path):
+    from parley.config import AutoplayConfig
+    cfg = _config(tmp_path, ("venice",)).model_copy(update={"autoplay": AutoplayConfig()})
+    Orchestrator(cfg, {}).publish_bridge_config()
+    assert "autoplay_hold_reads=1" not in (cfg.turn_root / "bridge.txt").read_text().splitlines()
+    cfg = _config(tmp_path, ("venice",)).model_copy(update={"autoplay": AutoplayConfig(hold_reads=True)})
+    Orchestrator(cfg, {}).publish_bridge_config()
+    assert "autoplay_hold_reads=1" in (cfg.turn_root / "bridge.txt").read_text().splitlines()
 
 
 def test_bridge_config_carries_playtest_funds(tmp_path):
@@ -701,6 +750,79 @@ def test_a_review_keeps_lessons_that_later_prompts_recall(tmp_path, venice_state
     assert "LESSONS FROM YOUR PAST GAMES" in prompt and "- Field an army before sieges start." in prompt
     lessons.veto(orch.lessons_root, added[0].id)
     assert orch._lessons("venice") == []
+
+
+def test_reviews_wait_for_every_ruler_and_run_one_at_a_time(tmp_path, monkeypatch):
+    # 11-05 (HANDOFF): reviews started as each ruler answered ran beside the other ruler's decision
+    # and timed out on Heretic's two slots
+    import threading
+    from parley.orchestrator import REVIEW_EVERY
+    from parley.config import SeatConfig
+    cfg = _config(tmp_path)
+    cfg.seats["milan"] = SeatConfig(persona="p", brain="fake")
+    orch = Orchestrator(cfg, {"venice": FakeSeat([_orders()]), "milan": FakeSeat([_orders()])})
+    calls, threads = [], []
+
+    class Now:  # runs the thread's target at start(), so the order of reviews is observable
+        def __init__(self, target, daemon=True, args=()):
+            self.target = target
+            threads.append(self)
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr(threading, "Thread", Now)
+    monkeypatch.setattr(orch, "review", lambda f, t: calls.append((f, t)))
+
+    def answered(f, turn=REVIEW_EVERY):
+        d = orch.turns.path_for("test", turn, f)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "orders.json").write_text("{}")
+
+    answered("venice")
+    orch._start_reviews(REVIEW_EVERY)
+    assert calls == []  # milan still deciding
+    answered("milan")
+    orch._start_reviews(REVIEW_EVERY)
+    orch._start_reviews(REVIEW_EVERY)  # a second answer of the turn starts nothing new
+    # staggered: the first seat reviews at turn 20, the second at 21, each in its own quiet
+    assert calls == [("venice", REVIEW_EVERY)] and len(threads) == 1
+    answered("venice", REVIEW_EVERY + 1)
+    answered("milan", REVIEW_EVERY + 1)
+    orch._start_reviews(REVIEW_EVERY + 1)
+    assert calls == [("venice", REVIEW_EVERY), ("milan", REVIEW_EVERY + 1)]
+    orch._start_reviews(REVIEW_EVERY + 2)
+    assert len(calls) == 2
+
+
+def test_reviews_start_once_when_rulers_answer_at_the_same_moment(tmp_path, monkeypatch):
+    # _answer runs on the seat pool: two answers together must not start the turn's reviews twice
+    import threading
+    import time as _time
+    from parley.orchestrator import REVIEW_EVERY
+    from parley.config import SeatConfig
+    cfg = _config(tmp_path)
+    cfg.seats["milan"] = SeatConfig(persona="p", brain="fake")
+    orch = Orchestrator(cfg, {"venice": FakeSeat([_orders()]), "milan": FakeSeat([_orders()])})
+    for f in ("venice", "milan"):
+        d = orch.turns.path_for("test", REVIEW_EVERY, f)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "orders.json").write_text("{}")
+    calls = []
+    monkeypatch.setattr(orch, "review", lambda f, t: calls.append(f))
+    gate = threading.Barrier(8)
+
+    def answer():
+        gate.wait()
+        orch._start_reviews(REVIEW_EVERY)
+
+    callers = [threading.Thread(target=answer) for _ in range(8)]
+    for t in callers:
+        t.start()
+    for t in callers:
+        t.join()
+    _time.sleep(0.2)  # the one review thread
+    assert calls == ["venice"]  # the first seat's turn (staggered); started once
 
 
 def test_seat_bench_replays_a_turn(tmp_path, venice_state_dict, monkeypatch):

@@ -24,10 +24,12 @@ done
 | Line   | Meaning                                                                |
 | ------ | ---------------------------------------------------------------------- |
 | STALL  | the bridge log has been quiet for 6 min (game hung or crashed)          |
-| STUCK  | a turn has been stuck for 10+ tries (e.g. the "Victory Conditions Failed" screen) |
-| DOWN   | the turn loop or the Discord bot has stopped                           |
-| LOST   | England holds no towns, or has had no report for 15 min                |
+| STUCK  | a turn has been stuck for 10+ tries behind something the bridge can't close |
+| DOWN   | the turn loop, the Discord bot (unless `WATCH_BOT=0`) or crash-watch (unless `WATCH_CRASH=0`) has stopped |
+| LOST   | England holds no towns, the game shows its campaign-over screen on a stuck turn, or no report for 15 min |
+| CRASH  | a new crash report in runs/crashes, even one crash-watch already recovered |
 | SEATS  | a ruler seat has failed for 3+ consecutive turns (any faction)         |
+| TREND  | a new trend alert (falling applied share, slowing rulers, a lost town, a late or failed seat) |
 | AUDIT  | a new bridge bug from the turn audit (only with `WAKE_ON_AUDIT=1`)     |
 
 Woken, Claude fixes or restarts the campaign, then starts the watch again. **A watch fires once**:
@@ -79,9 +81,10 @@ seat errors. SEATS was added for that.
 
 ### QA runs
 
-`just qa <suite>` parks the real turn loop, Discord bot, and crash-watch while the bench runs, so a
-background campaign watch would fire `DOWN`. Stop the campaign watch before running `just qa`, and
-restart it after `just qa` (or `just qa-restore`) finishes.
+`just qa <suite>` parks the real turn loop, Discord bot, and crash-watch while the bench runs. Since
+2026-11-05 the campaign watch keeps quiet about DOWN while `qa.lock` is under an hour old (#435), so
+it can stay running through a bench run; a lock older than that was left behind, and DOWN says to
+run `just qa-restore`.
 
 ## 2. Processes that fix things themselves (no Claude)
 

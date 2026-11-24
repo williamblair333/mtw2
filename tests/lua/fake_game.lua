@@ -28,6 +28,11 @@ local function settlement(name, owner, x, y, regionID, buildings)
         army = { totalStrength = 500, numOfUnits = #units, units = units,
                  getUnit = function(self, i) return self.units[i + 1] end },
         buildings = buildings, buildingsNum = #buildings,
+        -- EOP settlementStruct:createBuilding(level): the level added at once
+        createBuilding = function(self, level)
+            self.buildings[#self.buildings + 1] = level
+            self.buildingsNum = #self.buildings
+        end,
         getBuilding = function(self, i)
             local b = self.buildings[i + 1]
             if type(b) == "table" then
@@ -55,9 +60,16 @@ local function settlement(name, owner, x, y, regionID, buildings)
                 return { buildCost = o[2], buildTurnsRemaining = o[3],
                          constructionType = o[4] or 1,
                          getQueueBuildingName = function() return o[1] end,
+                         -- o[5] false: the game refuses; o[6] "ignored": it says yes and queues
+                         -- nothing (not seen live; the bridge guards against it)
                          addBuildingToQueue = function()
                              G.calls[#G.calls + 1] = (o[4] == 2 and "repair " or "build ") .. s.name .. " " .. o[1]
-                             return o[5] == nil and true or o[5]
+                             local ok = o[5] == nil and true or o[5]
+                             local q = s.buildingsQueue
+                             if ok and o[6] ~= "ignored" and q then
+                                 q.numBuildingsInQueue = (q.numBuildingsInQueue or 0) + 1
+                             end
+                             return ok
                          end }
             end }
         end,
@@ -266,7 +278,7 @@ end
 
 -- an on-map character (EOP `character`): generals lead a stack, agents stand alone
 local function character(fac, name, typeName, x, y, army)
-    local nc = { fullName = name, faction = fac, isAlive = function() return true end,
+    local nc = { fullName = name, faction = fac, isAlive = true,  -- EOP: a property, not a function
                  addTrait = function(self, trait, level)
                      G.calls[#G.calls + 1] = "addTrait " .. self.fullName .. " " .. tostring(trait) .. " " .. tostring(level)
                  end,
@@ -410,7 +422,7 @@ function G.add_named(fac, fields)
     local nc = { fullName = fields.name, age = fields.age, isMale = fields.male and 1 or 0,
                  isFamily = fields.family and 1 or 0, status = fields.status or 0, faction = fac }
     local alive = fields.alive ~= false
-    nc.isAlive = function() return alive and 1 or 0 end
+    nc.isAlive = alive  -- EOP: a property (characterRecord.cpp:710), not a function
     nc.isOffMap = function() return false end
     if alive then
         nc.spouse, nc.parent = fields.spouse, fields.parent
@@ -489,6 +501,23 @@ function G.open_scroll(name, buttons)
                    getSubElement = function(self, i) return subs[i + 1] end }
 end
 
+-- a message scroll with a check and an X, unnamed like the game's (live 11-15, a suitor offer):
+-- the two 42x42 buttons sit under an unnamed part; pressing one records it and closes the scroll
+function G.open_offer(key)
+    key = key or "offer"
+    local function button(which, x)
+        return { elementName = "", subElementsNum = 0, xPos = x, yPos = 515, xSize = 42, ySize = 42,
+                 execute = function() G.calls[#G.calls + 1] = "press " .. which; G.ui[key] = nil end }
+    end
+    local pair = { button("accept", 466), button("decline", 516) }
+    local group = { elementName = "", subElementsNum = 2, xPos = 466, yPos = 515, xSize = 92, ySize = 42,
+                    getSubElement = function(self, i) return pair[i + 1] end }
+    local text = { elementName = "", subElementsNum = 0, xPos = 319, yPos = 449, xSize = 386, ySize = 58 }
+    local parts = { text, group }
+    G.ui[key] = { elementName = "", subElementsNum = 2, xPos = 256, yPos = -2, xSize = 512, ySize = 593,
+                  getSubElement = function(self, i) return parts[i + 1] end }
+end
+
 function G.reset()
     G.calls = {}
     G.spawn_ignores_names, G.random_name, G.on_parley = nil, nil, nil
@@ -537,7 +566,7 @@ function G.reset()
         return b.name .. "|" .. a.name
     end
 
-    G.campaign = {
+    G.campaign = { numberOfHumanFactions = 1,
         turnNumber = 3, currentDate = 1081.5,
         getFaction = function(self, n) return G.byName[n] end,
         checkDipStance = function(self, rel, a, b) return G.stances[key(a, b)] == rel end,
@@ -558,7 +587,8 @@ function G.reset()
             for _, p in pairs(G.ports) do
                 if p.x == x and p.y == y then port = p.port end
             end
-            return { isLand = (x >= 115 and y >= 90) and 0 or 1, port = port, regionID = x >= 130 and 11 or 10 }
+            return { isLand = (x >= 115 and y >= 90) and 0 or 1, port = port, regionID = x >= 130 and 11 or 10,
+                     isLandConnection = 0, isSeaCrossing = 0 }
         end,
         getRegion = function(id)
             local p = G.ports[id]
@@ -588,10 +618,37 @@ function G.reset()
     -- the game's UI: open scrolls by name, each with buttons (EOP gameSTDUI / uiElementStruct)
     G.ui = {}
     G.lookups = {}  -- every name the bridge asked the game's UI for, in order
+    -- G.hud: names on the campaign HUD (getUiElement finds them; the on-screen list leaves the HUD out)
+    G.hud = { end_turn = true }
     gameSTDUI = { getUiElement = function(name)
         G.lookups[#G.lookups + 1] = name
         return G.ui[name]
-    end }
+    end,
+    -- the fork's list of windows on screen (#6): strat_ui's children bar the HUD, sorted here
+    getOpenUiElements = function()
+        local names = {}
+        for n in pairs(G.ui) do
+            if not G.hud[n] and not (G.closed and G.closed[n]) then names[#names + 1] = n end
+        end
+        table.sort(names)
+        local out = {}
+        for i, n in ipairs(names) do out[i] = G.ui[n] end
+        return out
+    end,
+    -- the fork's root elements (#12, level 4): minimized-message icons are 47x47 at the left edge,
+    -- stacked up from y=546; activate() (level 6) is the element's own use function
+    getRootUiElements = function() return G.roots end }
+    G.roots = {}
+    G.activated = {}  -- the y of every root the bridge activated, in order
+    G.root_icon = function(y)
+        local e = { xSize = 47, ySize = 47, xPos = 0, yPos = y }
+        e.activate = function(self)
+            G.activated[#G.activated + 1] = self.yPos
+            return true
+        end
+        G.roots[#G.roots + 1] = e
+        return e
+    end
     -- unit definitions (EOP M2TWEOPDU.getEduEntry(index))
     G.edu = { [7] = { index = 7, eduType = "Spear Militia", recruitCost = 350, recruitTime = 1, upkeepCost = 100 },
               [9] = { index = 9, eduType = "Feudal Knights", recruitCost = 900, recruitTime = 2, upkeepCost = 250 } }
@@ -612,6 +669,7 @@ function G.reset()
     G.cultures = { [0] = "southern_european", [1] = "northern_european", [2] = "eastern_european",
                    [3] = "greek", [4] = "middle_eastern" }
     G.options2 = { autoresolveAllBattles = 0 }
+    G.eop_ai = { enabled = true }  -- EOP's own campaign AI (globalEopAiConfig): on after every load, as live
     -- the mercenary pool shared by Venice's and Ragusa's regions (EOP region.mercPool). Stock and price
     -- are the game's; who may hire what is descr_mercenaries.txt (tests write it): Albanians for all,
     -- knights below a whole unit, spearmen orthodox only, pilgrims crusading only, arquebusiers need an
@@ -632,7 +690,9 @@ function G.reset()
                         getMercUnit = function(self, i) return merc_units[i + 1] end }
     G.mercUnits = merc_units
     G.mercPools = { [10] = merc_pool, [11] = merc_pool }
-    M2TWEOP = { getOptions2 = function() return G.options2 end,
+    M2TWEOP = { forkLevel = 3,
+                getOptions2 = function() return G.options2 end,
+                getEopAiConfig = function() return G.eop_ai end,
                 getCultureName = function(id) return G.cultures[id] end,
                 getReligionName = function(id) return ({ [0] = "catholic", [1] = "orthodox" })[id] end,
                 loadGame = function(path) G.calls[#G.calls + 1] = "loadGame " .. tostring(path) end }

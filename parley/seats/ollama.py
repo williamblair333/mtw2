@@ -9,6 +9,13 @@ from parley.protocol import Orders
 from parley.seats.base import SeatError, strict_schema, to_orders
 
 
+def context_for(prompt: str) -> int:
+    """Context window for one call. Ollama's default (4096 on a CPU host) cuts a long prompt
+    from the front without an error; ~3 chars a token plus room for the answer, at least 8192."""
+    need = len(prompt) // 3 + 2048
+    return max(8192, -(-need // 1024) * 1024)
+
+
 class OllamaSeat:
     def __init__(self, model: str = "qwen3.5:9b", host: str | None = None):
         self.model = model
@@ -18,7 +25,8 @@ class OllamaSeat:
     def _chat(self, prompt: str, timeout: float, schema: bool) -> str:
         # Thinking models spend 30s+ before answering; turns must stay quick.
         body = {"model": self.model, "stream": False, "think": False,
-                "messages": [{"role": "user", "content": prompt}]}
+                "messages": [{"role": "user", "content": prompt}],
+                "options": {"num_ctx": context_for(prompt)}}
         if schema:
             body["format"] = strict_schema()
         try:

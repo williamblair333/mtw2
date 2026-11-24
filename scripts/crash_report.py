@@ -29,12 +29,17 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 BRIDGE_LINES = 200
+GAME_LOG_LINES = 300
+PROTON_SCAN = 20000  # lines read from the end of Proton's log (it grows ~1 MB a minute)
+PROTON_BEFORE, PROTON_AFTER = 300, 60  # kept around the last access violation
+PROTON_TAIL = 2000  # kept when there is none
 TURN_LINES = 100
 TURN_LOG_AGE = 600  # s: a turn log written longer ago belongs to no running loop
 WINDOW = 10  # s of bridge and turn-loop activity merged into report.md
@@ -43,6 +48,7 @@ GAME_WINDOW_TITLES = ("^Medieval 2$", "^ERROR$")  # the only windows a report ma
 DEFAULT_KEEP = 20  # a report is a few MB, most of it the game-window screenshots
 NAME_RE = re.compile(r"^\d{4}-\d\d-\d\d-\d{6}(-\d+)?$")
 # bridge: "2026-10-31 06:38:16 ..."; turn loop (logging): "2026-10-31 05:31:14,605 INFO ..."
+PROTON_ERROR_RE = re.compile(r"dispatch_exception code=c[0-9a-f]{7}\b")
 TS_RE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)")
 
 
@@ -60,6 +66,51 @@ def turn_root() -> Path:
 
 def crash_dir() -> Path:
     return _env_path("PARLEY_CRASH_DIR", Path("runs/crashes"))
+
+
+CTX_REGS = {39: "edi", 40: "esi", 41: "ebx", 42: "edx", 43: "ecx", 44: "eax", 45: "ebp", 46: "eip",
+            48: "eflags", 49: "esp"}  # dword index in the x86 CONTEXT
+FAULT_FRAMES = 12  # stack words into a module shown in report.md
+FAULT_CODES = {0xC0000005: "access violation", 0xC0000417: "CRT invalid parameter",
+               0xC0000409: "stack buffer overrun / fail-fast", 0xC00000FD: "stack overflow",
+               0xC000001D: "illegal instruction", 0xC0000094: "integer divide by zero"}
+
+
+def decode_fault(data: bytes) -> tuple[str, list[str]] | None:
+    """The bridge's fault.bin (lua/parley_bridge.lua M.fault_catcher): (address, decoded lines), or None
+    when no access violation was caught. Each stack word that points into a loaded module becomes
+    module+offset: return addresses among them name the callers."""
+    if len(data) < 0x1200:
+        return None
+    count, addr, words, code = struct.unpack_from("<IIII", data, 0)
+    if count == 0:
+        return None
+    code_name = FAULT_CODES.get(code, "")
+    mods = []
+    for ln in data[0x1200:].split(b"\0", 1)[0].decode("latin-1").splitlines():
+        parts = ln.split(" ", 2)
+        if len(parts) == 3:
+            mods.append((int(parts[0], 16), int(parts[1], 16), parts[2]))
+
+    def where(v: int) -> str | None:
+        for base, size, name in mods:
+            if base <= v < base + size:
+                return f"{name}+0x{v - base:x}"
+        return None
+
+    ctx = struct.unpack_from("<51I", data, 0x10)
+    lines = [
+        f"errors caught this process: {count}; the last: code {code:08x}"
+        f"{' (' + code_name + ')' if code_name else ''} at {addr:08x} ({where(addr) or '?'})",
+        " ".join(f"{CTX_REGS[i]}={ctx[i]:08x}" for i in sorted(CTX_REGS)),
+        f"stack words copied: {min(words, 1024)}",
+    ]
+    for i in range(min(words, 1024)):
+        v = struct.unpack_from("<I", data, 0xDC + 4 * i)[0]
+        w = where(v)
+        if w:
+            lines.append(f"  [esp+{4 * i:03x}] {v:08x} {w}")
+    return f"{addr:08x}", lines
 
 
 def tail_lines(path: Path, n: int) -> list[str]:
@@ -214,6 +265,66 @@ def write(why: str, now: dt.datetime | None = None) -> Path:
     part("turn logs", read_turn_logs)
     meta["turn_logs"] = sorted(turn_logs)
 
+    # the game's own log (EOP core lines: each faction's turn start, its AI orders): 11-10 it placed a
+    # crash in the rebels' turn when the bridge's last line pointed elsewhere. The relaunch rewrites it,
+    # so it's kept now or never (the 10:21 crash's copy was lost)
+    def read_game_log() -> str | None:
+        src = tr.parent / "mods" / "parley" / "logs" / "system.log.txt"
+        if not src.exists():  # like heartbeat.txt and friends: kept when there is one
+            return None
+        lines = [ln.rstrip("\r") for ln in tail_lines(src, GAME_LOG_LINES)]
+        (out / "system.log.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return lines[-1] if lines else ""
+
+    meta["last_game_line"] = part("game log", read_game_log)
+
+    # Proton's own log (PROTON_LOG=1 in the launch options; WINEDEBUG +seh): the only place the fault
+    # itself shows. 11-11: eip=00000000 half a second into the rebels' turn, which the game's handler
+    # turns into "unspecified error". Each launch rewrites it, so it's kept now or never.
+    def read_proton_log() -> str | None:
+        src = _env_path("PARLEY_PROTON_LOG", Path.home() / "steam-4700.log")
+        if not src.exists():
+            return None
+        lines = [ln.rstrip("\r") for ln in tail_lines(src, PROTON_SCAN)]
+        # any error-class exception, not only access violations: 11-13 turn 705 died of c0000417 (a CRT
+        # call's invalid parameter) and the report said "none found"
+        av = [i for i, ln in enumerate(lines) if PROTON_ERROR_RE.search(ln)]
+        if av:
+            i = av[-1]
+            kept = lines[max(i - PROTON_BEFORE, 0): i + PROTON_AFTER]
+            regs = next((ln for ln in lines[i + 1: i + 4] if "eip=" in ln), "")
+            fault = lines[i].split("dispatch_exception", 1)[-1].strip()
+            fault += (" | " + regs.split("dispatch_exception", 1)[-1].strip()) if regs else ""
+        else:
+            kept, fault = lines[-PROTON_TAIL:], None
+        (out / "proton.log").write_text("\n".join(kept) + "\n", encoding="utf-8")
+        return fault
+
+    meta["fault"] = part("proton log", read_proton_log)
+
+    # the bridge's own catcher (M.fault_catcher): the stack Proton's log lacks. 11-11 turn 272 and 11-13
+    # turn 640 crashed at eip=00eff4db, a ref-count copy with 1373 callers: only the stack names one.
+    # The relaunch truncates fault.bin, so it's kept now or never
+    def read_fault_dump() -> dict | None:
+        src = tr / "fault.bin"
+        if not src.exists():
+            return None
+        data = src.read_bytes()
+        shutil.copy2(src, out / "fault.bin")
+        got = decode_fault(data)
+        if got is None:
+            return {"address": None, "frames": []}
+        addr, lines = got
+        (out / "fault-stack.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        eip = re.search(r"eip=([0-9a-f]{8})", str(meta.get("fault") or ""))
+        return {
+            "address": addr,
+            "matches_proton": (eip.group(1) == addr) if eip else None,
+            "frames": [ln.strip() for ln in lines[3:3 + FAULT_FRAMES]],
+        }
+
+    meta["stack"] = part("fault.bin", read_fault_dump)
+
     for name in ("heartbeat.txt", "bridge.txt", "papal_trace.txt"):
         src = tr / name
         if src.exists():
@@ -222,6 +333,18 @@ def write(why: str, now: dt.datetime | None = None) -> Path:
     cfg = part("bridge.txt", lambda: read_keys(tr / "bridge.txt")) or {}
     meta["game_id"] = cfg.get("game_id")
     meta["turn"] = hb.get("turn")
+
+    # the orders the rulers sent for this turn (applied at its start, from the turn-(N-1) folder):
+    # a repro case needs them, with their arguments (11-05 16:44: dug out of the turn folder by hand)
+    def read_orders() -> dict:
+        turn_dir = tr / str(meta["game_id"]) / f"turn-{int(str(meta['turn'])) - 1:04d}"
+        found = {}
+        for p in sorted(turn_dir.glob("*/orders.json")):
+            found[p.parent.name] = json.loads(p.read_text(encoding="utf-8")).get("orders", [])
+            shutil.copy2(p, out / f"orders-{p.parent.name}.json")
+        return found
+
+    meta["orders"] = part("orders", read_orders) or {}
 
     def copy_save() -> dict | None:
         sav = newest_save(save_dir)
@@ -253,6 +376,17 @@ def write(why: str, now: dt.datetime | None = None) -> Path:
     return out
 
 
+def _stack_line(stack: dict | None) -> str:
+    if stack is None:
+        return "no fault.bin (catcher off or unavailable)"
+    if not stack.get("address"):
+        return "no error exception caught"
+    match = {True: "matches Proton's eip", False: "NOT Proton's eip: an earlier AV",
+             None: "no eip from Proton to compare"}[stack.get("matches_proton")]
+    frames = "; ".join(f.split(" ", 2)[-1] for f in stack.get("frames", [])[:6]) or "no module frames"
+    return f"{stack['address']} ({match}): {frames}"
+
+
 def render(meta: dict, merged: list[str]) -> str:
     save = meta.get("save")
     lines = [
@@ -260,6 +394,8 @@ def render(meta: dict, merged: list[str]) -> str:
         "",
         f"- game: {meta.get('game_id') or '?'}, turn {meta.get('turn') or '?'} (heartbeat)",
         f"- crash-watch saw: {meta['why']}",
+        f"- fault (Proton's log): {meta.get('fault') or 'none found'}",
+        f"- stack (the bridge's catcher, fault-stack.txt): {_stack_line(meta.get('stack'))}",
         f"- screenshot: {meta.get('screenshot') or 'none'}",
         "- save: "
         + (f"{save['name']} (written {save['written']}; Continue Campaign reloads it)" if save else "none"),
@@ -278,6 +414,12 @@ def render(meta: dict, merged: list[str]) -> str:
         "",
         "_(none yet: games/qa/<suite>.toml case name)_",
         "",
+        "## Orders applied at this turn's start",
+        "",
+        *([f"- {faction}: {json.dumps(o, separators=(',', ':'))}"
+           for faction, orders in (meta.get("orders") or {}).items() for o in orders[:20]]
+          or ["(none found)"]),
+        "",
         f"## Last {WINDOW} s: bridge and turn loop",
         "",
         "```",
@@ -285,7 +427,7 @@ def render(meta: dict, merged: list[str]) -> str:
         "```",
         "",
         "Files: bridge.log (last 200 lines), papal.log, turns/, screen-N.png (the game's windows only), the save, heartbeat.txt,"
-        " bridge.txt, papal_trace.txt, meta.json.",
+        " bridge.txt, papal_trace.txt, system.log.txt, proton.log (around the fault), meta.json.",
     ]
     if meta.get("problems"):
         lines += ["", "## Report problems", "", *(f"- {p}" for p in meta["problems"])]

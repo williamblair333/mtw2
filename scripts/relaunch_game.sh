@@ -14,18 +14,15 @@
 #      brings up EOP's modal "ERROR: Cannot create M2TWEOP save file. 2" box. The line is stripped
 #      on every exit (trap), so a manual launch later shows the menu instead of a stale save.
 #   5. `steam steam://rungameid/4700`, then wait (PARLEY_RELAUNCH_TIMEOUT, 240 s; live it took 20 s)
-#      for "bridge loaded campaign at turn N" with N > 0 after the pre-launch log size (the menu's
-#      turn-0 line comes first). EOP's ERROR box (read-only `xdotool search`) or the timeout: the
-#      game is stopped and this fails.
+#      for "bridge loaded campaign at turn N" after the pre-launch log size (the main menu's own
+#      map logs "main menu map loaded" instead, W47). EOP's ERROR box (read-only `xdotool search`) or the timeout: the
+#      game is stopped and this fails. That wait starts once Steam has started the game (the game's
+#      process, or the bridge log growing); before that Steam gets PARLEY_STEAM_START_TIMEOUT (900 s):
+#      after the test laptop's 03:00 boot (11-10) Steam updated itself and restarted first, and started the
+#      game about 5 min after the launch, by which time a flat 240 s had given up.
 # No X input on this path, so it runs in a no-click run (PARLEY_NO_X_INPUT=1, parley/xinput.py).
 #
-# --clicks: the old path, kept as a fallback. It clicks the EOP launcher's "Run mod" (when the
-# launcher shows) and the menu's "Continue Campaign", then `python -m parley.qa after-relaunch`
-# corrects a Continue that took the QA game's autosave. Refused in a no-click run. Click points are
-# relative to their window (HANDOFF 2026-10-25 night, live 10-30): Run mod at (265,170) in the
-# 538x351 "M2TWEOP" launcher, Continue Campaign at (372,331) in the 1600x900 "Medieval 2" window.
-# Live (10-30 10:55) Steam and its "Special Offers" popup sat on top of the launcher, so each click
-# first clears and raises its window.
+# --clicks: the old clicking path (Run mod, Continue Campaign), deleted 11-21; the flag is refused.
 #
 # Processes are matched by name (pgrep -x), never by command line: `pkill -f medieval2.exe` killed
 # an unrelated shell whose command text held that word, and Steam's launch chain.
@@ -43,12 +40,12 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-if [ "$clicks" = 1 ] && [ -n "${PARLEY_NO_X_INPUT:-}" ] && [ "${PARLEY_NO_X_INPUT}" != 0 ]; then
-    echo "X input refused in a no-click run: relaunch_game.sh --clicks (clicks Run mod and Continue Campaign; PARLEY_NO_X_INPUT=1)" >&2
+# the clicking path was deleted 11-21: Parley makes no screen input (parley/xinput.py)
+if [ "$clicks" = 1 ]; then
+    echo "X input refused in a no-click run: relaunch_game.sh --clicks (the clicking path was deleted 11-21; Parley makes no screen input)" >&2
     exit 3
 fi
 
-steam_park_x=${STEAM_PARK_X:-1950}  # where Steam windows go when they cover a click target
 repo=$(cd "$(dirname "$0")/.." && pwd)
 turn_root="${PARLEY_TURN_ROOT:-$HOME/.steam/steam/steamapps/common/Medieval II Total War/parley_turns}"
 game_dir="${MTW2_GAME_DIR:-$(dirname "$turn_root")}"
@@ -57,6 +54,7 @@ cfg="$mod/parley.cfg"
 log="$turn_root/parley_bridge.log"
 py="${PARLEY_PY:-$repo/.venv/bin/python}"
 wait_s="${PARLEY_RELAUNCH_TIMEOUT:-240}"
+steam_wait_s="${PARLEY_STEAM_START_TIMEOUT:-900}"
 
 relaunch_py() {  # the file edits and the save choice (parley/relaunch.py)
     (cd "$repo" && "$py" -m parley.relaunch "$@")
@@ -146,96 +144,6 @@ start_steam() {
     fi
 }
 
-# ---------------------------------------------------------------- the old clicking path (--clicks)
-
-wait_window() {  # name, seconds
-    for _ in $(seq 1 "$2"); do
-        xdotool search --name "$1" >/dev/null 2>&1 && return 0
-        sleep 1
-    done
-    echo "relaunch: no '$1' window after $2 s" >&2
-    return 1
-}
-
-geometry() {  # window id: sets X Y WIDTH HEIGHT
-    eval "$(xdotool getwindowgeometry --shell "$1" | grep -E '^(X|Y|WIDTH|HEIGHT)=-?[0-9]+$')"
-}
-
-largest_window() {  # name regex: id of the largest visible window with that name (the launcher
-    # has a 2x29 stub "M2TWEOP" window beside the real one)
-    local best="" area=0 w
-    for w in $(xdotool search --onlyvisible --name "$1" 2>/dev/null); do
-        WIDTH=0 HEIGHT=0
-        geometry "$w" || continue
-        if [ $((WIDTH * HEIGHT)) -gt "$area" ]; then area=$((WIDTH * HEIGHT)); best=$w; fi
-    done
-    echo "$best"
-}
-
-clear_view() {  # after geometry: close "Special Offers", move Steam windows off X Y WIDTH HEIGHT
-    local id x y w h title
-    while read -r id _ x y w h _ title; do
-        case "$title" in
-            "Special Offers")
-                echo "relaunch: closing Steam's Special Offers"
-                wmctrl -i -c "$id" || true ;;
-            Steam)
-                if [ "$x" -lt $((X + WIDTH)) ] && [ $((x + w)) -gt "$X" ] \
-                    && [ "$y" -lt $((Y + HEIGHT)) ] && [ $((y + h)) -gt "$Y" ]; then
-                    echo "relaunch: moving the Steam window off the click target"
-                    wmctrl -i -r "$id" -e "0,$steam_park_x,$y,-1,-1" || true
-                fi ;;
-        esac
-    done < <(wmctrl -lG 2>/dev/null || true)
-}
-
-click_in() {  # window id, x, y relative to that window
-    geometry "$1"
-    clear_view
-    xdotool windowraise "$1" || true
-    timeout 5 xdotool windowactivate --sync "$1" || true
-    xdotool mousemove $((X + $2)) $((Y + $3)) click 1
-}
-
-relaunch_with_clicks() {
-    local log_offset launcher game started
-    # a bypass line left behind would load its save under the menu Continue is clicked on
-    if grep -q 'bypass_to_strategy_save' "$cfg" 2>/dev/null; then relaunch_py strip-bypass "$cfg" || true; fi
-    log_offset=$(stat -c %s "$log" 2>/dev/null || echo 0)
-    stop_crashed_game
-    start_steam
-    # the launcher, or with hideLauncher on, the game window straight away
-    wait_window '^M2TWEOP$|^Medieval 2$' 120
-    # Run mod, pressed again until the game's window appears: live (10-30 08:43) one press 3 s after
-    # the launcher showed was lost and the game never started
-    started=0
-    for _ in 1 2 3 4 5 6; do
-        sleep 5
-        launcher=$(largest_window '^M2TWEOP$')
-        if [ -n "$launcher" ]; then
-            click_in "$launcher" 265 170  # Run mod
-        fi
-        if wait_window '^Medieval 2$' 30 2>/dev/null; then started=1; break; fi
-    done
-    [ "$started" = 1 ] || { echo "relaunch: Run mod pressed 6 times, no game window" >&2; exit 1; }
-    wait_window '^Medieval 2$' 180
-    sleep 30  # intro and menu load
-    game=$(largest_window '^Medieval 2$')
-    [ -n "$game" ] || { echo "relaunch: no visible 'Medieval 2' window to click" >&2; exit 1; }
-    click_in "$game" 372 331  # Continue Campaign: the newest save
-    echo "relaunch: continuing the newest save"
-    if [ -f "$turn_root/qa.last_restore" ]; then
-        (cd "$repo" && "$py" -m parley.qa after-relaunch --turn-root "$turn_root" --log-offset "$log_offset") \
-            || { echo "relaunch: the post-QA save check failed; the game may be on the QA campaign" >&2; exit 1; }
-    fi
-}
-
-if [ "$clicks" = 1 ]; then
-    hold_if_qa
-    relaunch_with_clicks
-    exit 0
-fi
-
 # ---------------------------------------------------------------- the no-click path
 
 # A locked desktop stalls the game behind the lock screen before it sets up graphics, and the wait
@@ -290,12 +198,39 @@ log_offset=$(stat -c %s "$log" 2>/dev/null || echo 0)  # only map loads after it
 start_steam
 
 turn=""
-for _ in $(seq 1 "$wait_s"); do
+started=""  # the second Steam started the game; the load wait counts from there
+# the game seen running, then how many polls in a row it has been gone: tc 11-19 13:30 it reached the
+# main menu map, hit "unspecified error and will now exit" while loading, and the wait ran out its
+# whole 240 s for a game that was gone. 15 polls, so a blip in Proton's process list isn't an exit.
+seen_game=""
+gone=0
+for i in $(seq 1 $((steam_wait_s + wait_s))); do
+    if pgrep -x 'medieval2.exe' >/dev/null; then
+        seen_game=1
+        gone=0
+    elif [ -n "$seen_game" ]; then
+        gone=$((gone + 1))
+        if [ "$gone" -ge 15 ]; then
+            echo "relaunch: the game exited while loading $save (no medieval2.exe for $gone s); stopping what is left" >&2
+            stop_game
+            exit 1
+        fi
+    fi
     size=$(stat -c %s "$log" 2>/dev/null || echo 0)
     [ "$size" -lt "$log_offset" ] && log_offset=0  # the log started over: read all of it
+    if [ -z "$started" ]; then
+        if pgrep -x 'medieval2.exe' >/dev/null || [ "$size" -gt "$log_offset" ]; then
+            started=$i
+            [ "$i" -gt 60 ] && echo "relaunch: Steam took about $i s to start the game (an update?)"
+        elif [ "$i" -gt "$steam_wait_s" ]; then
+            break
+        fi
+    elif [ $((i - started)) -ge "$wait_s" ]; then
+        break
+    fi
     turn=$(tail -c +"$((log_offset + 1))" "$log" 2>/dev/null \
         | grep -oE 'bridge (reloaded|loaded campaign) at turn [0-9]+' \
-        | grep -oE '[0-9]+$' | awk '$1 > 0 { print; exit }' || true)
+        | grep -oE '[0-9]+$' | head -1 || true)
     [ -n "$turn" ] && break
     # EOP's modal box ("Cannot create M2TWEOP save file", "non-EOP save") blocks until clicked
     if xdotool search --name '^ERROR$' >/dev/null 2>&1; then
@@ -305,8 +240,13 @@ for _ in $(seq 1 "$wait_s"); do
     fi
     sleep 1
 done
+if [ -z "$turn" ] && [ -z "$started" ]; then
+    echo "relaunch: Steam didn't start the game within ${steam_wait_s} s ($save; its logs: ~/.steam/steam/logs/bootstrap_log.txt, content_log.txt); stopping it" >&2
+    stop_game
+    exit 1
+fi
 if [ -z "$turn" ]; then
-    echo "relaunch: no 'bridge loaded campaign at turn N' (N > 0) in $log within ${wait_s} s ($save); stopping the game" >&2
+    echo "relaunch: no 'bridge loaded campaign at turn N' in $log within ${wait_s} s ($save); stopping the game" >&2
     stop_game
     exit 1
 fi

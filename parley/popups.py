@@ -35,7 +35,7 @@ from parley.deciders.marriage import score_marriage
 from parley.deciders.ransom import parse_ransom_value, score_captor, score_captive
 from parley.protocol import StateReport
 from parley.seats.base import SeatError, SeatLimit, empty_workdir, safe_env
-from parley.xinput import XInputRefused, refuse_x_input, refuse_xdotool
+from parley.xinput import XInputRefused, no_x_input, refuse_x_input, refuse_xdotool
 
 log = logging.getLogger("parley.popups")
 
@@ -62,9 +62,6 @@ ORPHAN_AFTER = 600  # seconds: past the bridge's longest wait (DECIDE_WAIT, 540)
 PAUSED = object()  # _ask's answer when the ruler's seat hit a usage limit
 OFFER_LOOKS = 25  # an offer whose scroll is hidden: looks, 5 s apart, before giving up
 OFFER_WAITS = 3  # another decision put back behind a waiting offer's request, 5 s apart, at most
-# accept and decline on the marriage scroll, as fractions of the game window (measured live on a
-# 1600x900 window: 761,612 and 839,612); the game's UI scales with the window
-BUTTONS = {"accept": (761 / 1600, 612 / 900), "decline": (839 / 1600, 612 / 900)}
 READ_PROMPT = ("Read popup.png. It is a screenshot of Medieval II: Total War. Transcribe the popup "
                "scroll in the middle exactly: its title, every line of text, any stats (count the "
                "filled stars or icons out of 10 for each) and traits. Then say in one line what "
@@ -105,15 +102,18 @@ def _window() -> str:
 def _clear_pointer(wid: str) -> None:
     """Move the pointer off the scroll before a screenshot: a hovered button changes colour and
     isn't found (live: the cursor rested on a guild offer's check, ten looks found no buttons, and
-    the turn stalled five minutes). Moved only when it sits over the scroll band. Refused in a
-    no-click run (parley/xinput.py), before it reads anything: it may move the pointer."""
-    refuse_x_input("pointer move off the scroll before a popup screenshot (parley/popups.py)")
+    the turn stalled five minutes). Moved only when it sits over the scroll band. In a no-click
+    run (parley/xinput.py) only the reads run: a pointer over the band is logged, not moved, and
+    the screenshot goes ahead (a QA noclick run screenshots popups; 11-14)."""
     try:
         geo = dict(line.split("=", 1) for line in _xdo("getwindowgeometry", "--shell", wid).split())
         mouse = dict(line.split("=", 1) for line in _xdo("getmouselocation", "--shell").split())
         x0, y0, w, h = (int(geo[k]) for k in ("X", "Y", "WIDTH", "HEIGHT"))
         fx, fy = (int(mouse["X"]) - x0) / w, (int(mouse["Y"]) - y0) / h
         if .25 <= fx <= .75 and .25 <= fy <= .8:
+            if no_x_input():
+                log.warning("the pointer sits over the scroll; a no-click run leaves it there")
+                return
             _xdo("mousemove", "--window", wid, str(int(w * .9)), str(int(h * .2)))
             time.sleep(.2)
     except XInputRefused:  # never swallowed: a no-click run must hear about it
@@ -159,6 +159,14 @@ def make_reader(spec: str = "claude:haiku"):
     kind, _, model = spec.partition(":")
     if not model:
         raise ValueError(f"reader spec needs a model: {spec!r}")
+    # said once at start, not as an error on every popup (live 11-05 15:05, the test laptop: no agy there,
+    # "reading failed: [Errno 2] No such file or directory: 'agy'" for each message; the rulers got none)
+    if kind in ("claude", "agy") and shutil.which(kind) is None:
+        log.warning("popup reader %r: the %s command isn't installed here; game messages will reach "
+                    "the rulers unread (install it, or set reader to one that is)", spec, kind)
+        # read as nothing: the callers treat an empty reading as a failed one, without an ERROR per
+        # message (live 11-05 19:54, the test laptop: still one per popup after the warning above)
+        return lambda png: ""
     if kind == "claude":
         return functools.partial(read, model=model)
     if kind == "agy":
@@ -247,8 +255,11 @@ def find_tick(png: Path) -> tuple[float, float] | None:
     im = Image.open(png).convert("RGB")
     w, h = im.size
     px = im.load()
-    x0, y0 = int(w * .25), int(h * .3)
-    green = _blob([(x, y) for y in range(y0, int(h * BAND_BOTTOM)) for x in range(x0, int(w * .75))
+    # inside the scroll only (it spans ~0.26-0.74): live 11-10 16:31, turn 126, the map's green
+    # province borders at the scroll's edges outweighed the check, no tick was found, and the
+    # papal notice was reopened and minimized for minutes with End Turn stuck
+    x0, y0 = int(w * .3), int(h * .3)
+    green = _blob([(x, y) for y in range(y0, int(h * BAND_BOTTOM)) for x in range(x0, int(w * .7))
                    if _green(px[x, y])], w)
     if not green:
         return None
@@ -304,55 +315,6 @@ def find_choice(png: Path) -> dict[str, tuple[float, float]] | None:
     if not (w * 70 / 1600 <= rx - gx <= w * 90 / 1600 and abs(ry - gy) <= h * 6 / 900):
         return None
     return {"accept": (gx / w, gy / h), "decline": (rx / w, ry / h)}
-
-
-# Minimized messages: icons stacked up the left edge, above the radar's zoom buttons. A
-# minimized decision blocks End Turn unseen, so a stuck turn looks here and reopens what it
-# finds. Measured live (1600x900): an icon is 73x55 from x 0, its frame's top edge a row of
-# light grey (R=G=B, 100 and up) across x 8-66 with a near-black line 2-4 rows below; the picture
-# inside may be grey or in colour, the frame is the same.
-ICON_X = (8 / 1600, 66 / 1600)
-ICON_HEIGHT = 55 / 900
-ICON_ZONE = (250 / 900, 700 / 900)  # where the stack can reach, top to bottom
-
-
-def find_minimized(png: Path) -> list[tuple[float, float]]:
-    """Centres (fractions of the window) of the minimized-message icons, bottom first."""
-    im = Image.open(png).convert("RGB")
-    w, h = im.size
-    px = im.load()
-    xs = range(int(ICON_X[0] * w), int(ICON_X[1] * w))
-    tops, y = [], int(ICON_ZONE[1] * h)
-    while y > int(ICON_ZONE[0] * h):
-        row = [px[x, y] for x in xs]
-        dark_below = any(sum(1 for x in xs if max(px[x, y + d]) < 40) > 0.7 * len(xs) for d in (2, 3, 4))
-        # (the frame's light grey dims with the scene: 109-144 seen live, 144-190 another time)
-        if all(abs(r - g) <= 3 and abs(g - b) <= 3 and r >= 100 for r, g, b in row) and dark_below:
-            tops.append(y)
-            y -= int(ICON_HEIGHT * h) - 4  # the next icon up starts a frame above
-        else:
-            y -= 1
-    cx = (ICON_X[0] + ICON_X[1]) / 2
-    return [(cx, (t + ICON_HEIGHT * h / 2) / h) for t in tops]
-
-
-# the stack's slots, bottom first: the bottom icon's centre, then one icon height up each
-# (live: up to eight stacked, about 56 px apart on 900)
-ICON_BOTTOM_Y = 667 / 900
-ICON_PITCH = 56 / 900
-
-
-def minimized_slots(png: Path) -> list[tuple[float, float]]:
-    """Every slot of the minimized-message stack, bottom first ([] when there is none): the
-    frame detector reliably finds the stack's top, and the stack always grows up from the
-    bottom slot."""
-    found = find_minimized(png)
-    if not found:
-        return []
-    top = min(y for _, y in found)
-    n = max(1, round((ICON_BOTTOM_Y - top) / ICON_PITCH) + 1)
-    cx = (ICON_X[0] + ICON_X[1]) / 2
-    return [(cx, ICON_BOTTOM_Y - k * ICON_PITCH) for k in range(n)]
 
 
 def _is_empty_circle(data, cx: int, cy: int, w: int, h: int) -> bool:
@@ -489,6 +451,28 @@ def _xdo(*args) -> str:
     return subprocess.run(["xdotool", *args], capture_output=True, text=True, timeout=10).stdout
 
 
+CENSUS_TAG = "x-input:"
+
+
+def census(action: str, req: dict, **extra) -> None:
+    """One line per screen input the turn loop is about to make, whatever then happens to it (made,
+    refused in a no-click run, or failed): `just click-census` tallies them into the list of what
+    still needs a click (11-14). The request's kind and the game's message event say which decision."""
+    fields = {"action": action, "kind": req.get("kind"), "event": req.get("event"), "scroll": req.get("scroll"),
+              "id": req.get("id"), **extra}
+    log.info("%s %s", CENSUS_TAG, " ".join(f"{k}={v}" for k, v in fields.items() if v not in (None, False, "")))
+
+
+def press_escape(guard=None) -> None:
+    """Close the scroll on top with Escape, in the game window, no pointer: the answer to the bridge's
+    stuck-turn "escape" request. Decision scrolls (marriage, adoption) are not closed here; the bridge
+    presses their buttons by element. With no scroll up Escape opens the game's menu, so call this
+    straight after a look that found the scroll. `guard` as in click(). Refused in a no-click run
+    (parley/xinput.py)."""
+    # the key press itself was deleted 11-21 (no screen input, parley/xinput.py): always refused
+    refuse_x_input("press Escape on a stuck scroll (parley/popups.py)")
+
+
 def click(which: str, at: tuple[float, float] | None = None, guard=None) -> None:
     """Click accept or decline in the game window, at `at` (fractions of the window, found in the
     screenshot) or else where the marriage scroll has it; then the mouse and the focused window
@@ -496,29 +480,8 @@ def click(which: str, at: tuple[float, float] | None = None, guard=None) -> None
     activated first and the button gets a real press and release. `guard`, asked last thing
     before the press: when it says so, nothing is pressed and PapalHold is raised. Refused in a
     no-click run (parley/xinput.py) before the window is even looked up."""
+    # the click itself was deleted 11-21 (no screen input, parley/xinput.py): always refused
     refuse_x_input(f"click {which} on a popup (parley/popups.py)")
-    wid = _window()
-    geo = dict(line.split("=", 1) for line in _xdo("getwindowgeometry", "--shell", wid).split())
-    fx, fy = at or BUTTONS[which]
-    x, y = int(int(geo["WIDTH"]) * fx), int(int(geo["HEIGHT"]) * fy)
-    mouse = dict(line.split("=", 1) for line in _xdo("getmouselocation", "--shell").split())
-    previous = _xdo("getactivewindow").strip()
-    _xdo("windowactivate", "--sync", wid)
-    time.sleep(0.3)
-    _xdo("mousemove", "--window", wid, str(x), str(y))
-    time.sleep(0.3)
-    if guard is not None and guard():  # the papal election opened while the pointer moved
-        _xdo("mousemove", mouse["X"], mouse["Y"])
-        if previous and previous != wid:
-            _xdo("windowactivate", previous)
-        raise PapalHold(f"{which}: the papal election is on screen")
-    _xdo("mousedown", "1")
-    time.sleep(0.15)
-    _xdo("mouseup", "1")
-    time.sleep(0.5)
-    _xdo("mousemove", mouse["X"], mouse["Y"])
-    if previous and previous != wid:
-        _xdo("windowactivate", previous)
 
 
 def parse_decision(answer: str) -> str | None:
@@ -618,6 +581,23 @@ def _past(history: str) -> str:
 
 def marriage_prompt(persona: str, faction: str, suitor: dict, reading: str, history: str = "") -> str:
     traits = ", ".join(suitor.get("traits") or []) or "none known"
+    if suitor.get("female"):  # the other scroll under the same event: see lua offered()
+        return f"""{persona.strip()}
+
+You rule {faction}. The game asks you to decide NOW whether to accept a wife for one of your men.
+
+WHAT THE GAME SHOWS (read from the screen)
+{reading or "(the screen could not be read)"}
+
+THE WOMAN, FROM THE GAME'S RECORDS
+{suitor.get("name")}, age {suitor.get("age")}. Traits: {traits}.
+{_past(history)}
+WEIGH IT
+- A married man can father heirs for your family.
+- Her age matters: an older wife may give him no children.
+
+Answer with one line starting ACCEPT or DECLINE, then your reason in one or two plain sentences.
+"""
     return f"""{persona.strip()}
 
 You rule {faction}. The game asks you to decide a marriage NOW, while it waits.
@@ -681,18 +661,19 @@ Answer with one line starting ACCEPT or DECLINE, then your reason in one or two 
 class Popups:
     def __init__(self, turn_root: Path, game_id: str, seats: dict, personas: dict[str, str],
                  screenshot=screenshot, read=read, click=click, find=find_choice,
-                 find_slots=minimized_slots, same=same_scroll, background: bool = True,
+                 same=same_scroll, background: bool = True,
                  decide_timeout: float = 480,
                  ladder: set[str] | frozenset = frozenset(),
                  decision_log=None,
                  count_stars=count_stars,
-                 papal=None):
+                 papal=None,
+                 dismiss=None):
         self.root, self.game_id, self.seats, self.personas = Path(turn_root), game_id, seats, personas
+        self.dismiss = dismiss  # tests: stands in for press_escape on the bridge's stuck-turn "escape" request
         self.papal = papal or (lambda: papal_phase(self.root))
         self.papal_waiting: set[str] = set()  # requests already logged as waiting on the election
         self.parked: list = []  # decisions waiting out the papal window (no background decider: tests)
         self.screenshot, self.read, self.click, self.find = screenshot, read, click, find
-        self.find_slots = find_slots
         self.count_stars = count_stars
         self.same = same
         self._find_tick = find_tick
@@ -816,7 +797,7 @@ class Popups:
     def _steward(self, kind: str, req: dict, faction: str, suitor: dict) -> tuple[str, int | None] | None:
         """For a seat with `ladder`: the steward answers an offer by rule unless Jigsaw's gate
         escalates it (a close call, high stakes, unknown stars). The answer reads like the
-        ruler's own ("ACCEPT ..."), so the click and the ruler's game message work as before.
+        ruler's own ("ACCEPT ..."), so the `.answer` for the bridge and the ruler's game message work as before.
         (answer, decision id), or None: ask the ruler."""
         if faction not in self.ladder:
             return None
@@ -851,7 +832,10 @@ class Popups:
         return bool(req.get("press_check")) and phase == "notice"
 
     def _press(self, which: str, at, req: dict) -> None:
-        """Click, unless the papal window says hands off; asked again just before the press."""
+        """Click, unless the papal window says hands off; asked again just before the press.
+        Decision scrolls (marriage, adoption) never come here: the turn loop writes `.answer` and
+        `.done`, and the bridge presses the scroll's button by its element (no click, no Escape)."""
+        census(which, req)
         hold = lambda: not self._papal_ok(req, self.papal())  # noqa: E731
         if hold():
             raise PapalHold(f"{which}: the papal election is on screen")
@@ -883,13 +867,26 @@ class Popups:
                 continue
             phase = self.papal()
             if not self._papal_ok(req, phase):  # not even a screenshot (it moves the pointer)
-                if req.get("kind") == "minimized":  # a stuck-turn reopen: the bridge asks again later
+                if req.get("kind") == "escape":  # a stuck-turn Escape: the bridge asks again later
                     req_path.unlink(missing_ok=True)
                     log.info("popup %s: papal election on screen (%s); not reopening anything",
                              req["id"], phase)
                     continue
                 self.seen.discard(req_path.name)  # looked at again once the window closes
                 self._papal_wait(req, req_path, phase)
+                continue
+            if req.get("kind") == "escape":
+                req_path.unlink(missing_ok=True)
+                census("escape", req)
+                try:
+                    if self.dismiss is not None:
+                        self.dismiss(req)
+                    else:
+                        press_escape(guard=lambda: not self._papal_ok(req, self.papal()))
+                except Exception as e:
+                    log.warning("popup %s: Escape failed: %s", req["id"], e)
+                else:
+                    log.info("popup %s: %s closed with Escape", req["id"], req.get("scroll", "scroll"))
                 continue
             self.captures.mkdir(parents=True, exist_ok=True)
             png = self.captures / f"{req['id']}.png"
@@ -903,15 +900,6 @@ class Popups:
                     self.decider.submit(self._vote, req, png, req_path)
                 else:
                     self._vote(req, png, req_path)
-                continue
-            if req.get("kind") == "minimized":  # a stuck turn: reopen a minimized message
-                self._reopen(req, png, req_path)
-                continue
-            if req.get("kind") == "clicks":  # a screen job from the bridge (retraining): click, then close
-                if self.decider:  # on the decider's one worker: never between a decision's look and click
-                    self.decider.submit(self._clicks, req, req_path)
-                else:
-                    self._clicks(req, req_path)
                 continue
             if req.get("kind") == "choice":  # a named scroll: the bridge presses the ruler's pick
                 if self.decider:
@@ -948,9 +936,13 @@ class Popups:
                     atomic_write(req_path.with_suffix(".done"), "")
                     log.info("popup %s: same scroll after 5 looks; not read again", req["id"])
                     continue
-                # a lone check acknowledges the scroll; clearing it would only minimize it
+                # a lone check acknowledges the scroll; clearing it would only minimize it. Pressed here
+                # only when the bridge asks (press_check: the papal notice, which it can't reach): the
+                # bridge closes every other scroll itself, by the game's own button, and two closers
+                # crashed the game (live 11-15 turn 1143: this click acknowledged post_battle_scroll,
+                # the bridge pressed its tick 10 s later, fault at 00c5db34/00c5dc2f)
                 try:
-                    tick = None if self._choice_open() else self._find_tick(png)
+                    tick = None if (self._choice_open() or not req.get("press_check")) else self._find_tick(png)
                 except Exception as e:  # an unreadable screenshot: read it the usual way
                     log.error("popup %s: looking for its check failed: %s", req["id"], e)
                     tick = None
@@ -979,22 +971,32 @@ class Popups:
     def _vote(self, req: dict, png: Path, req_path: Path) -> None:
         """The papal election: find the Vote buttons, ask the ruler which candidate, click it."""
         faction = req.get("faction")
+        by_element = bool(req.get("by_element"))
         try:
             buttons = self.find_votes(png)
         except Exception as e:
-            log.error("popup %s: looking for vote buttons failed: %s", req["id"], e)
+            if not by_element:
+                log.error("popup %s: looking for vote buttons failed: %s", req["id"], e)
             buttons = []
-        if not buttons:
+        if not buttons and not by_element:
             log.warning("popup %s: no vote buttons on screen", req["id"])
             return
+        n_candidates = len(buttons) if buttons else int(req.get("candidates") or 3)
         reading = self._reading(req, png)
-        answer = self._ask(req, faction, lambda persona: vote_prompt(persona, faction, len(buttons), reading))
+        answer = self._ask(req, faction, lambda persona: vote_prompt(persona, faction, n_candidates, reading))
         if answer is PAUSED:
             return
         m = re.match(r"\s*(\d+)", answer or "")
-        pick = int(m.group(1)) if m and 1 <= int(m.group(1)) <= len(buttons) else 1
+        pick = int(m.group(1)) if m and 1 <= int(m.group(1)) <= n_candidates else 1
         reason = answer.strip().split(None, 1)[1] if answer and len(answer.split()) > 1 else "no clear answer; the first was chosen"
         if not req_path.exists():
+            return
+        if by_element:
+            atomic_write(req_path.with_suffix(".answer"), f"{pick}\n")
+            atomic_write(req_path.with_suffix(".done"), "")
+            self._add(faction, req.get("turn", 0), f"A papal election:\n{reading}\nYour cardinals voted for "
+                      f"candidate {pick} of {n_candidates}. Your reason: {reason}")
+            log.info("popup %s: %s voted for candidate %d of %d (by element)", req["id"], faction, pick, n_candidates)
             return
         try:
             self._press("vote", buttons[pick - 1], req)
@@ -1005,71 +1007,6 @@ class Popups:
         self._add(faction, req.get("turn", 0), f"A papal election:\n{reading}\nYour cardinals voted for "
                   f"candidate {pick} of {len(buttons)}. Your reason: {reason}")
         log.info("popup %s: %s voted for candidate %d of %d", req["id"], faction, pick, len(buttons))
-
-    # the settlement scroll's closing seal, bottom right (live, 1600x900: London's scroll)
-    SEAL = (1550 / 1600, 652 / 900)
-
-    def _clicks(self, req: dict, req_path: Path) -> None:
-        """A screen job: click each card the bridge found (positions in the UI's 1024x768 space,
-        which scales to the window), then close the settlement scroll."""
-        cards = req.get("cards") or []
-        # what the clicks met (live: eight clicks on Nottingham's cards queued nothing)
-        self.captures.mkdir(parents=True, exist_ok=True)
-        try:
-            self.screenshot(self.captures / f"{req['id']}-before.png")
-        except Exception as e:
-            log.error("popup %s: screenshot before the clicks failed: %s", req["id"], e)
-        # last card first: a clicked card leaves the row and the ones after it shift left (live:
-        # clicking left to right hit the wrong cards and skipped the worst-hurt unit)
-        for i, (fx, fy) in reversed(list(enumerate(cards))):
-            try:
-                self._press("open", (fx, fy), req)
-            except Exception as e:
-                log.error("popup %s: clicking card %d failed: %s", req["id"], i + 1, e)
-        try:
-            self.screenshot(self.captures / f"{req['id']}-after.png")
-        except Exception as e:
-            log.error("popup %s: screenshot after the clicks failed: %s", req["id"], e)
-        try:
-            self._press("open", self.SEAL, req)
-        except Exception as e:
-            log.error("popup %s: closing the scroll failed: %s", req["id"], e)
-        atomic_write(req_path.with_suffix(".done"), "")
-        log.info("popup %s: %s: clicked %d cards", req["id"], req.get("what"), len(cards))
-
-    def _reopen(self, req: dict, png: Path, req_path: Path) -> None:
-        """A stuck turn (the bridge asks): open one minimized message, the next slot up each
-        time, so a decision buried in the stack is reached and a plain notice reopened and
-        minimized again can't hold the turn forever. Reopening fires the game's onMessageOpen,
-        and the scroll goes the usual way (read, or decided by the ruler)."""
-        try:  # a decision open on screen that no request tracks: the ruler decides it now
-            choice = None if self._choice_open() or not req.get("faction") else self.find(png)
-        except Exception as e:
-            log.error("popup %s: looking for buttons failed: %s", req["id"], e)
-            choice = None
-        if choice:  # live: a marriage offer missed its window and sat on screen all night
-            log.info("popup %s: a decision is open on screen; the ruler decides it", req["id"])
-            decision = dict(req, kind="decision")
-            if self.decider:
-                self.decider.submit(self._decide, decision, png, req_path)
-            else:
-                self._decide(decision, png, req_path)
-            return
-        try:
-            slots = self.find_slots(png)
-        except Exception as e:
-            log.error("popup %s: looking for minimized messages failed: %s", req["id"], e)
-            slots = []
-        if slots:
-            k = self.reopened % len(slots)
-            self.reopened += 1
-            try:
-                self._press("open", slots[k], req)
-                log.info("popup %s: reopened minimized message %d of %d", req["id"], k + 1, len(slots))
-            except Exception as e:
-                log.error("popup %s: reopening failed: %s", req["id"], e)
-        for p in (req_path, req_path.with_suffix(".done")):  # the bridge doesn't wait on these
-            p.unlink(missing_ok=True)
 
     def _orphan(self, req_path: Path) -> bool:
         """A request older than any wait the bridge keeps (it gives up after 180 s and removes
@@ -1247,25 +1184,26 @@ class Popups:
             # under a battle result for longer than three looks
             if tries < OFFER_LOOKS:
                 log.info("popup %s: no buttons on screen yet; trying again later", req["id"])
-                # the game may have minimized the offer at once (live: an offer's icon sat in
-                # the stack while this waited two minutes): reopen one, the next slot each look
-                try:
-                    slots = self.find_slots(png)
-                    if slots:
-                        self._press("open", slots[self.reopened % len(slots)], req)
-                        self.reopened += 1
-                        log.info("popup %s: reopened a minimized message to find it", req["id"])
-                except PapalHold:
-                    log.info("popup %s: papal election on screen; not reopening anything", req["id"])
-                except Exception as e:
-                    log.error("popup %s: reopening failed: %s", req["id"], e)
+                # an offer the game minimized at once is reopened by the bridge, by its icon's
+                # element (handle_popups, K.OFFER_REOPEN_EVERY); the click on its icon here was
+                # deleted 11-21 (no screen input, parley/xinput.py)
                 time.sleep(0 if not self.decider else 5)
                 self._requeue({**req, "_tries": tries + 1}, png, req_path)
             else:
                 log.warning("popup %s: the offer never showed its buttons; not clicking", req["id"])
+                # keep the last look (the game window only) as evidence: 11-05 on the test laptop
+                # offers never showed buttons the finder knew, and nothing showed why
+                try:
+                    kept = req_path.with_name(f"{req['id']}-nobuttons.png")
+                    shutil.copyfile(png, kept)
+                    log.warning("popup %s: its last look is %s", req["id"], kept.name)
+                except OSError as e:
+                    log.error("popup %s: couldn't keep its last look: %s", req["id"], e)
             return
         reading = self._reading(req, png)
-        if kind in ("marriage", "adoption") and not _names(suitor.get("name"), reading):
+        # not a wife: the name on her scroll isn't reliably hers (bench 11-06 07:08: three retries, then
+        # the bridge's wait ran out and stuck recovery answered it as an unknown decision)
+        if kind in ("marriage", "adoption") and not suitor.get("female") and not _names(suitor.get("name"), reading):
             # another offer's scroll is on top (seen live: Humphrey's adoption over Godwine's,
             # and Godwine's answer went to Humphrey). Let it be answered by its own request,
             # then look again; after a few tries, decide whatever is shown.
@@ -1294,7 +1232,9 @@ class Popups:
                 return adoption_prompt(persona, faction, suitor, reading, self._history(faction))
             return decision_prompt(persona, faction, reading)
 
-        steward = self._steward(kind, req, faction, suitor) if kind in ("adoption", "marriage") else None
+        # its score weighs a suitor as a general: nothing it can say about a wife
+        scored = kind in ("adoption", "marriage") and not suitor.get("female")
+        steward = self._steward(kind, req, faction, suitor) if scored else None
         answer, decision_id = steward if steward is not None else (None, None)
         turn = req.get("turn", 0)
         if answer is None:
@@ -1324,30 +1264,18 @@ class Popups:
             log.warning("popup %s: decided too late; the bridge already gave up on it", req["id"])
             self._outcome(decision_id, "too late: the bridge gave up on the offer", turn)
             return
-        try:  # the ruler took a while: is the scroll still up? (live: minimized mid-answer,
-            self.screenshot(png)  # then "accepted" with a click on the map)
-            choice = self.find(png)
-        except Exception as e:
-            log.error("popup %s: last look failed: %s", req["id"], e)
-            choice = None
-        if not choice:
-            log.warning("popup %s: the scroll is gone from the screen; not clicking", req["id"])
-            self._outcome(decision_id, "not clicked: the scroll was gone", turn)
-            return
-        try:
-            self._press(decision, choice[decision] if choice else None, req)
-        except PapalHold:  # opened during the last look or the pointer's move
-            self._park(later, png, req_path, self.papal() or "opening")
-            return
-        except Exception as e:
-            log.error("popup %s: click failed: %s", req["id"], e)
-            self._outcome(decision_id, f"click failed: {e}", turn)
-            return
+        # the bridge presses the answer on the scroll by its element (no click, no key: W03 W21),
+        # and only if the scroll is still on screen; .answer goes first, .done tells it to look
+        atomic_write(req_path.with_suffix(".answer"), decision + "\n")
         atomic_write(req_path.with_suffix(".done"), "")
-        self._outcome(decision_id, f"clicked {decision}", turn)
+        self._outcome(decision_id, f"{decision}: pressed by the bridge", turn)
         reason = answer.strip().split(None, 1)[1] if len(answer.split()) > 1 else ""
         if kind == "marriage":
-            what = f"Marriage offer: {suitor.get('name')} (age {suitor.get('age')}) for your princess."
+            if suitor.get("son"):
+                what = f"Marriage offer: a wife for your {suitor.get('name')} (age {suitor.get('age')})."
+            else:
+                whom = "as a wife for one of your men" if suitor.get("female") else "for your princess"
+                what = f"Marriage offer: {suitor.get('name')} (age {suitor.get('age')}) {whom}."
         elif kind == "adoption":
             what = f"Adoption offer: {suitor.get('name')} (age {suitor.get('age')}) into your family."
         else:

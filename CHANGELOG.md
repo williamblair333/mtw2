@@ -5,6 +5,240 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### 2026-11-22/23: smaller prompts, papal scroll closed by element, three watch wakes fixed at the cause
+
+#### Fixed
+- The papal results scroll closes by its `SCROLL_CLOSE_GADGET` (fork level 6 `activate()`), not an Escape request (#693).
+- The prompt lists only the dead who matter and prints each unit price once (#692); towns list buildings and recruits as "same as X, plus/without" (#696): France's settlements 92 -> 61 KB, the prompt 168 -> 136 KB, lossless by test (`tests/test_prompt_compact.py`).
+- The bench reloads a stale bridge before it runs, and refuses if it can't (`parley_build.txt` vs `bridge_loaded_build.txt`, #694).
+- `parley/trends.py`: an applied-share fall needs 3 refusals of one order type in the newest 3 turns (#698); England's varied mistakes woke the watch twice.
+- The prompt prints the map's bounds once; `M.to_coast` carries a move_army/move_agent aimed at sea with land 1 tile off to that land, noting it (#699).
+- A load under `qa.lock` writes the missing ruler report once the lock goes, instead of skipping it (#700; France waited 720 s at turn 3492).
+
+### 2026-11-21: no screen clicks left; every census click kind benched with clicks refused
+
+#### Added
+- Click coverage, completed: `games/click-coverage.toml` + `scripts/click_coverage.py` (`just click-coverage`); every census click kind maps to a passing `--kind noclick` case (#682–#686, #689). New cases: `popups/minimized_message_reopened_by_element` and `popups/stuck_turn_reopens_minimized_message` (`M.qa.stuck_try` drives `try_dismiss`).
+- Preflight gate `waits-wake-on-stall` (`scripts/preflight_waits.py`): refuses a `pgrep -f` that matches its own command line and a wait loop with no clock (#683).
+- `scripts/campaign_watch.sh` CLICK wake: a new "X input refused" line, matched by timestamp across the log and its rotated copy (#689).
+
+#### Fixed
+- A load waiting on the bench no longer waits for popup captures (`captured()`, #682).
+- A re-issued `merge_armies` whose walk already arrived reports done (`M.walking_merges`, #687).
+- Mercenary pools: each report entry names its pool, the report says it's shared by the region's armies, and `validate_orders` counts hires per pool (#688).
+- The watch re-checks for a no-bot host each time it finds the bot down (#690).
+
+#### Removed
+- Every screen-input fallback (#689): `parley/xinput.py`'s guard is always on, `popups.click`/`press_escape` refuse, the Lua stuck path writes no "minimized" request, `relaunch_game.sh --clicks` is gone, and the `_decide` icon click and `Popups._reopen` are deleted.
+
+### 2026-11-19: the campaign resumes after tc's nightly power-off
+
+#### Fixed
+- `scripts/boot_resume.sh` puts `~/.local/bin` on PATH. The desktop autostart's PATH lacked it, so at 05:44 the resume logged "just: command not found" and the campaign idled from the 11-15 23:59 power-off until a hand restart on 11-19.
+- `scripts/relaunch_game.sh` fails at once when the game exits while loading (seen running, then gone 15 s). On tc at 13:30 the game hit "unspecified error and will now exit" after the main menu map, and the relaunch waited out its whole 240 s before crash-watch retried.
+- `tests/test_boot_resume.py`: the new case runs with a PATH holding only the tools the script uses. Its red run, on a host with `/usr/bin/just`, had started a real crash-watch there.
+
+### 2026-11-15 (evening): workarounds fixed at their cause, offers answered with no click
+
+#### Fixed
+- Open windows come from our EOP fork's `gameSTDUI.getOpenUiElements()`, not an ffi memory walk or a 4,012-name probe. The siege layout names parts at any depth, and the dead retrain click job is gone. Closes W24, W25, W15 and W29 (#642).
+- EOP fork #9 (level 2): `getSubElement` and `elementName` check every pointer, so a closed window's stale part is nil, not a crash.
+- EOP fork #10: the zip ships no `eopData/config` and names the launcher `M2TWEOP GUI.exe`. `install_eop.sh` writes Parley's `uiCfg.json` keys after every unzip (`python -m parley.relaunch ui-cfg`). Closes W53 (#643).
+- The main menu's background map is logged as "main menu map loaded" and never treated as a campaign. Relaunch and the QA runner drop their turn > 0 filter, and the reload's console toggle is gone. Closes W47 (#644).
+- EOP fork #11 (level 3): `getOpenUiElements` lists message scrolls, which hang under their message icon, not strat_ui. Offers (marriage, suitor, adoption) are answered with no click and no Escape: the turn loop writes `<req>.answer` and the bridge presses the check or X by element (`M.press_choice`), bound to the request's own scroll (`M.bind_scroll`). Closes W21 and part of W30 (#645).
+- No pre-marriage: `M.marry_live`, `M.loaded_fresh` and the `marriage_offers` switch are gone, so the game's own offers reach the ruler. Closes W03 and W05 (#646).
+
+### 2026-11-15: fixing everything we can
+
+#### Added
+- `M.open_ui()` reads the game's own list of open UI elements (Steam exe global `0x02c2bc2c`) with ffi; a stuck turn logs what is on screen (#623, #624, #627).
+- Our EOP fork: `gameSTDUI.getOpenUiElements()` (fork #6), live-proven on finance_scroll and its buttons.
+- `just resume-at-boot <name>`: a login autostart resumes the campaign (#622, #630).
+- `just install-eop-zip <zip> <sha256>`: swap the campaign onto another EOP build safely (#628, #631, #633).
+- STANDARDS `fix-what-we-can`.
+
+#### Fixed
+- Claude seat: the prompt goes on stdin; France's 131 KB prompt broke argv and stopped the loop (#632).
+- Bridge: the queue reads every item on the fixed EOP (#620); a reload leaves the console shut on master (#621); the fault catcher reports on after a reload (#625); overlay text isn't doubled on the fixed EOP (#629); the nearest land named for a move is never a foreign town (#618); past the turn limit the report says so (#617).
+- Review fixes: open_ui 48-byte read check, desktop Exec without shell syntax, imgui_fixed not cached before a map (#630).
+- EOP fork: ImGui text as `%s` (#2), tile.isLandConnection/isSeaCrossing restored (#3), getBuildingInQueue 1-based (#4), splitArmy nil on a no-op (#5), CI publish idempotent and concurrency (#7).
+
+### Fixed (2026-11-14, afternoon)
+
+- A second `merge_units` on the same army in one turn is refused: one merges every group (live, England sent
+  four for garrison:York; the bridge refused three and the applied share fell to 73%).
+- Bench: navy landings expect `^land ok` (#607); `forced_ai_siege` takes message 39 however it's logged (#608);
+  `papal_election_vote` is `needs_click` (#611).
+
+### Added (2026-11-14, no-click play)
+- `just qa <suite> kind=noclick`: every bench case, turn cases too, with all screen input refused; `needs_click`
+  marks a case whose subject is a click. `just click-census`: every click or Escape the turn loop makes, by
+  message event. `docs/no-click-challenges.md`: what still needs a click, with leads and how to prove a fix.
+
+### Fixed (2026-11-14)
+- A land order lands one step ashore (a farther tile was ignored by the game yet reported done); a landing not
+  shown yet is pending, not refused. The bench turns suitor offers off. `M.qa.force_ai_siege` starts a siege. In a
+  full QA run the case that ends the campaign runs last.
+
+### Fixed (2026-11-14, a load with no report)
+- A load whose turn has no report from the turn before (a new run's first save, its folders archived) left the ruler nothing to answer; autoplay waited its 720 s and the turn went by with no orders (live 11-14 06:16, run 11 at turn 5). The bridge now writes each seated faction's missing report once the turn loop has made its folder (autoplay only; not under QA).
+
+### Fixed (2026-11-14, merge_units)
+- The report's troops carry each unit's armour and weapon level and whether merge_units leaves it alone (`held`: a general's bodyguard or a unit retraining), from the bridge's own grouping key. The merge_units check and the prompt's "merge_units would combine" line now pair units only within one type and armour/weapon level, as the bridge does; the troops line shows upgrades (`Pike Militia (armour 1) 64/75`). Live 11-13/14, France sent merge_units 20 times on two armies whose worn pair the bridge wouldn't combine.
+
+### Changed (2026-11-13, order checks)
+- `merge_units` is refused before it reaches the game when the army has no two under-strength units of one type (France repeated it 21 times in half an hour).
+
+### Fixed (2026-11-13, marriages)
+- The bridge marries family men only: it had been giving wives to agents and captains, whose records the game frees at their death, so each such wife's own death message read a freed record (the 00eff4db crash).
+
+### Fixed (2026-11-13, stale spouses)
+- The 00eff4db crash (turns 272, 640, 1252): a natural death's message copied the dead character's spouse's name from a freed record. At every faction's turn start the bridge now clears a spouse pointer that no faction's records list, and logs who it was.
+
+### Fixed (2026-11-13, army ids)
+- An order naming "Captain X" no longer finds a fleet "Admiral X" listed earlier: the bridge tries the exact id before the title-free match (France's march_on was refused as "a fleet" four turns running).
+
+### Fixed (2026-11-13, agent missions)
+- One agent mission per target per turn: the order checker and the bridge both refuse a second bribe, assassination, spy or sabotage on a target already ordered this turn. Live at turn 1072 a bribe won a Spanish captain over and the same turn's assassination of him crashed the game.
+
+### Changed (2026-11-13, EOP)
+- tc runs the author's EOP fork build (`author/M2TWEOP-library` #1, pre-release `build-553d2c46...`) instead of upstream master b525628: EOP's minor-settlement cache is dropped each faction turn start and after every battle, so it no longer hands EOP's AI freed settlement pointers (crashes at turns 812 and 265). The old files are kept as `*.bak-b525628`.
+
+### Added (2026-11-13, diagnostics)
+- `battle sides: ...` in the bridge log before every auto-resolve press (`M.battle_sides`): each side's armies (faction, units, leader, tile), `NIL` for an empty one. For the 00612ea6 auto-resolve crash (turns 808/809), which reads a battle side's missing army.
+
+### Fixed (2026-11-13, 10:24)
+- Log rotation killed a healthy game: `rotate_logs.sh` renamed the bridge log during a long AI turn, the silent bridge left none, and crash-watch read the empty timestamp as midnight (37445 s old). The game, busy, missed the probe and was relaunched. Rotation now starts the new log with a stamped line, and crash-watch reads no stamped line as no age.
+
+### Added (2026-11-13, tools)
+- `scripts/pdbsym.py`: names DLL offsets (as fault-stack.txt prints them) from a PDB's public symbols, standard library only.
+
+### Fixed (2026-11-13, turn 705)
+- Turn 705 crash loop (`c0000417`, 3 of 3 from one autosave): the overlay passed the ruler's note to `ImGui.TextWrapped`, which reads it as a printf format; England's "80%." is an invalid directive and the CRT aborted the game. Text for ImGui now goes through `bridge.imgui_text`, which doubles every `%`. Found from the fault catcher's stack (EOP's `TextWrapped` -> `ImFormatStringToTempBufferV` -> ucrtbase).
+
+### Changed (2026-11-13)
+- The fault catcher records every error-class exception (0xC..., with its code), not only access violations; crash reports take Proton's last error-class exception too. Turn 705 died of `c0000417` (msvcrt `_invalid_parameter`) and its report said "none found".
+
+### Added (2026-11-13)
+- The bridge's access-violation catcher (`M.fault_catcher`, bytes from `scripts/fault_catcher_stub.py`): a machine-code vectored exception handler records the last AV (address, registers, up to 4 KB of the faulting stack) into `parley_turns/fault.bin`. Crash reports decode it into `fault-stack.txt` and a `stack:` line that names the callers and says whether it matches Proton's eip. Off with `fault_catcher=0` in bridge.txt. For the twice-seen crash at `eip=00eff4db` (turns 272 and 640), a ref-count copy with 1373 callers.
+
+### Fixed (2026-11-13)
+- `just watch` started on a host without the game (no medieval2.exe, no crash-watch, bridge log 6+ h old) now exits `NOT HERE` instead of a false STALL on a dead local log.
+
+### Fixed (2026-11-11, unattended live run on the test laptop)
+- Turn 246/247/252 crash: an admiral dying of old age crashes the next round. `M.spare_admirals` (`lua/parley_bridge.lua`) holds seated factions' admirals at 50 (#564).
+- Turn 124 crash loop: EOP's campaign AI is off at every load unless bridge.txt has `eop_ai=1` (#574).
+- `scripts/crash_watch.sh` relaunches after a defeat scroll leaves the game at the menu (`scripts/left_to_menu.sh`, #567) and after a turn stuck 20 tries (`PARLEY_STUCK_RELAUNCH_TRIES`, #572).
+- False watch alerts: a stuck line before a reload (#570), a turn not applied yet (#571), and a share fall with fewer than 3 refusals (#577) (`scripts/campaign_watch.sh`, `parley/trends.py`).
+- An army with a worn unit says what `merge_units` would combine (`parley/prompt.py`, #578).
+
+### Added (2026-11-11)
+- `scripts/crash_report.py` keeps Proton's SEH trace around the fault (`proton.log`, `meta.fault`; `PARLEY_PROTON_LOG`, #561).
+
+### Fixed (2026-11-10, afternoon)
+- `handlers.set_tax` reads the level back and fails the order if the game kept the old one (#544).
+- A campaign load writes `heartbeat.txt` for the turn it loaded, so an older save gets its turn folder and report (#545; proven live 14:16).
+
+### Fixed (2026-11-10, morning)
+- Turn-start crash: `M.marry_live` (`lua/parley_bridge.lua`) marries nobody while a family offer is pending (#538; proven live 07:16).
+- `parley/seats/ollama.py` sends `num_ctx` sized to the prompt (#537).
+- `scripts/relaunch_game.sh` waits for Steam to start the game (up to `PARLEY_STEAM_START_TIMEOUT`, 900 s) before the 240 s load wait (#539).
+
+### Changed (2026-11-06, midday)
+- Forced events (`games/forced_events.toml`, `games/qa/forced.toml`, `tests/test_forced_events.py`): 19 of 34 forced by the game's own reaction (#528-#533). Turn-start breadcrumbs in `lua/parley_bridge.lua` (#535). Live run parked on the author's order; rulers move to the test laptop next (HANDOFF).
+
+### Decided (2026-11-06, early)
+- Marriage-offer crash: marry the human slot's single men at turn start instead of answering the scroll (PR #519, `M.marry_live`, `autoplay.marriage_offers`, bench case family/single_men_married_in_advance); not yet merged or proven on the bench.
+
+### Added (2026-11-05, night)
+- Edge and characterization tests, test only (#504-#514): dashboard (empty pause file, newest three crashes), rotate_logs before any campaign, trends with an old restore, and `just qa`'s exit code with quarantined cases.
+- `scripts/rotate_logs.sh` (`just rotate-logs`): the bridge log and logs/*.log kept under PARLEY_LOG_CAP_MB; the campaign watch runs it every 10 min; game.sh opens the turn and bot logs for append (#438); crash-watch runs it too, so it runs whenever a campaign does (#460).
+- The campaign watch wakes on a new crash report (CRASH), even one crash-watch recovered (#463).
+- A crash report lists the orders applied at the turn's start and copies each orders.json (#466).
+- `games/qa/diplomacy.toml` frozen_rival_offers_nothing: the forced case the AI-offer hold needs; not yet run (#468).
+- `games/quarantine.toml` (parley/qa/quarantine.py): a flaky case listed there runs and is reported, but doesn't fail the run (#479).
+- `just stop` pauses the campaign (paused.txt) so autoplay ends no turn unordered; `just play` lifts only that pause; the QA runner's stop is unchanged (#473); plain stop exits 0 again (#485).
+- `just dashboard` shows why the campaign is paused (#484) and each ruler's "unknown army" refusals (#498).
+- `games/qa/family.toml` marriage_offer_answered and `M.qa.marriage_offers_on`: the marriage-click crash's repro, expected to fail until fixed; not yet run (#470); `M.marriages_on` is false before setup (#475, from a cross-model review).
+- `tests/test_turn_cases_need_turns.py`: a turn case must check something only a played turn shows (#465).
+- `tests/test_standards_evidence.py`: STANDARDS evidence the Refinery checker can read without crashing (#500; cause and fix in HANDOFF, #501).
+- Trend alerts posted once each to the audit channel (`Orchestrator._post_new_trends`, #439).
+- `games/qa/quiet.toml` quiet_world_held: the quiet world read back from the game after a bench load; the bench proof `games/interrupts.toml` had named since 11-01 but nobody built (#448, #449). Bench: pass.
+- `games/ruler_eval`: six real run-9 turns as a fixed ruler-eval set; `ruler_eval --set`, `just ruler-eval-fixed <specs>` (#455); each seat's kept orders counted by control area (#458).
+- Preflight gates: tests piped through tail before && commit/merge/reload are refused (#445); a commit with code and no test is refused unless it says `no-test: <reason>` (#450).
+
+### Fixed (2026-11-05, night)
+- QA archive moves the QA game's database with its turn folders; stale per-turn message counts failed diplomacy/orders_next_report (#440).
+- towns/next_turn_delivers passes on a build still queued behind the town's current one; a build is "done" only if the queue grew (#441).
+- popups/papal_election_no_vote gets 3 turns to show 30 s alive (#442).
+- smoke: teleport and skill turn cases dropped; the instant helpers case checks them (#443, test fix #444 after #443 merged red).
+- Lessons reviews start once every ruler has answered and run one at a time (#446).
+- Adoption offers off on the bench (familyTree.maxAdoptionAge 0), back on for a real load (#447).
+- The report's unreadable queue head says a done build is in the queue (#451).
+- Trends measure an answer from the QA restore when a bench run parked the campaign in between (#452).
+- A near-miss army name may drop "admiral" or "captain": "Nigel" finds "Admiral Nigel" (#453).
+- An AI-run faction's "unknown army" refusal names its own game AI as the likely cause (#489), and
+  its ruler's role text says army ids change between turns (#491).
+- A turn's lessons reviews start once even when both rulers answer together (a lock, #454), and are
+  staggered one ruler a turn so each runs in the quiet after everyone answered (#457).
+- A missing popup reader (no agy/claude installed) reads nothing instead of an ERROR per popup (#456).
+
+### Added (2026-11-05, late)
+- `just dashboard <game>` (`parley/dashboard.py`): heartbeat and newest report (who is still deciding), loop/qa.lock/pause, newest 3 crash reports, per-ruler applied/refused/late counts with trend alerts, STANDARDS gaps (#428).
+- `games/qa/diplomacy.toml` two_offers_on_their_turns: two AI offers on their own turns, declined then accepted; a case's `choice` may be a list answered in order (#434). Bench: pass.
+- `games/qa/covert.toml` spy_into_own_town_with_foreign_spies: a guard for the 16:38 live crash; it did not reproduce it (#432). Bench: pass.
+
+### Fixed (2026-11-05, late)
+- `lua/parley_bridge.lua`: an unknown army says why; a garrison id names the town's new owner (#429).
+- `games/qa/popups.toml` papal_election_no_vote accepts either path a no-vote faction gets: the 202 notice and its check, or only the result 203 (#430). Bench: pass.
+- `scripts/game.sh`: no bot token means no bot, not a failed start or QA restore (#431).
+- `scripts/campaign_watch.sh`: DOWN when crash-watch isn't running (#433); no DOWN while a QA run holds qa.lock under an hour (#435); a stuck campaign-over screen is LOST (#436).
+
+### Fixed (2026-11-05, evening: the live campaign on the test laptop)
+- `games/qa/towns.toml`: next_turn_delivers builds in the garrison town; the building stands within 3 turns (#418).
+- `parley/bridge.py`: the turn loop answers each faction's latest report only (the one the game wrote last); stale reports from a relaunch no longer starve the real turn (#419, #424).
+- `tests/test_relaunch.py`: fakes `loginctl`, so the tests no longer fail while the host's screen is locked (#419).
+- `scripts/game.sh`, new `scripts/run_loop.sh`: `just run`, `play` and `restart-loop` borrow the desktop's display when started over ssh (#420).
+- `parley/popups.py`: says once at start when the popup reader's command isn't installed (#421).
+- `lua/parley_bridge.lua`: an agent refused on its target's tile is told to move one tile away first (#422).
+- `parley/prompt.py`: an own army with no units left is said to be going (#423).
+- From a cross-model review (agy): the restore's wait for the player's turn survives an unanswered call; `M.setup` clears the bridge's popup lists on a load; small `pcall`/`record_alive` fixes (#424).
+
+### Changed (2026-11-05, phase 2: bench speed) — merged as #416
+- `parley/qa/runner.py`, `parley/config.py`, `lua/parley_bridge.lua`: bench-only short waits: decision answer 60 s, End Turn hold 90 s, turn timeout 180 s (#391).
+- `lua/parley_bridge.lua`: control requests answered within frames, not on the 2 s tick; a frozen AI let go after 1 s (#393).
+- `parley/qa/runner.py`: a `case=` run gates on smoke's instant cases only (#396); `parley/qa/control.py` polls every 0.1 s (#401).
+- `parley/qa/runner.py`: prints when each turn report was judged and how far the log reached (#406).
+
+### Fixed (2026-11-05, phase 2: played turns) — merged as #416
+- `parley/qa/runner.py`: reads the Wine-written bridge log with `\r\n` made `\n`; expects ending in `\n` or `$` never matched (#407).
+- `parley/qa/runner.py`: a load clears the old campaign's `popup-*` request files; the turn loop kept answering stale ones, clicking under a pending End Turn (crashes 11:57, 12:15) (#411).
+- `parley/qa/runner.py`: the bench holds End Turn for every offer within its 90 s cap (#410, replacing #397's diplomacy-only hold); a restore waits for the player's turn under the QA config (#409).
+- `lua/parley_bridge.lua`: the bench marries England's single men and every general it spawns, so no marriage offer arises (`characterRecord:marryWife`); the marriage age limit is set off on the bench and restored on a real load (#412).
+- `lua/parley_bridge.lua`: a spawned or launched admiral gets his ship as bodyguard (`setBodyguardUnit`), so the game keeps him; a spawned general draws a name nobody else has (#398).
+- `lua/parley_bridge.lua`: `characterRecord.isAlive` read as the property it is (#408); the AI-turn stuck watcher stops deferring to an open decision past its cap (#402).
+- `lua/parley_bridge.lua`: a blockade of a rebel port is refused (it crashed the game 3 of 3) (#414); under the QA hold a battle's auto-resolve is pressed again and its results closed (#415).
+- `lua/parley_bridge.lua`: End Turn waits for agent missions; a load never runs during an AI turn (#375); the QA hold is for the player's turn only (#380); a faction whose envoy parleys stays awake that turn (#381); End Turn waits for an unread message in the popups suite (#399).
+- `games/qa/*.toml`: recruit_merchant builds a market first (#372); sabotage's target gets a building (#403); turn_start_orders' army leads heavy infantry and any siege-maintain path passes (#404); report_fleet_carrying and blockade_port use England's own admirals (#405, #414); faction_overview_closed passes when nothing held (#400); next_turn_delivers may build in the garrison town (#413); besiege_assault_storms joins phase 1 (#415).
+- `parley/popups.py`: keeps `<id>-nobuttons.png` when an offer never shows its buttons (#388).
+- Closed: #392 (spawning bench generals at 66 made them die of old age).
+
+### Added (2026-11-05, later)
+- `just work-until HH:MM`: a Stop hook holds a standing order to keep working until then (#365).
+- `just qa-summary`: the newest report per suite with outcome counts and failing cases (#374).
+- `just ruler-eval`: every seat on every recorded turn, scored on legal orders, answers and time
+  (#379); the first piece of the ruler-eval harness.
+- A QA run's crash writes a crash report before its relaunch, as crash-watch does (#377).
+- The relaunch keeps the bridge log under 20 MB (the old one as `.log.1`) (#369).
+
+### Fixed (2026-11-05, later)
+- Privacy: crash reports capture only the game's windows, never the whole desktop; a test forbids
+  any whole-screen capture (#376). Tests no longer use a personal Discord handle or files outside
+  the repo (#383).
+- A played turn on the bench takes ~80 s, not ~5 min: a frozen AI faction is let go after 3 s
+  (#367).
+- The parallel-seats test proves concurrency with a barrier instead of a wall-clock bound (#368).
+
 ### Added (2026-11-05)
 - `PARLEY_POWER_OFF=HH:MM` (parley/qa/power.py): a QA run refuses to start when its estimate
   (8 min + 40 s a case) would cross the machine's scheduled power-off. the test laptop powers off at

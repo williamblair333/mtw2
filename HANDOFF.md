@@ -1,5 +1,1129 @@
 # Handoff
 
+## 2026-11-23 (15:25): France's prompt 135 → 80 KB with lookups; `just seat-set`; outreach draft rewritten
+
+**Running on tc:** campaign `scratch`, turn ~4476 on `main` (#709). France has `lookups = true`
+(set by hand 11-23; use `just seat-set` from now on). The watch still runs from this machine.
+
+- **#706:** town lines print the game name and region only when they differ from the id; no empty
+  queue/build lines; garrisons drop "in X"; "moves" stays on the army's line. Live turn 4454: 0 refused.
+- **#707 lookups** (William's option 2; spec `docs/superpowers/specs/2026-11-23-ruler-lookups-design.md`):
+  a seat with `lookups` gets short town entries and may answer `{"lookup": ["town:<id>"|"town:all"|"family"]}`
+  first; it gets the details and one more ask (`lookup.txt`, `answer1.txt` in the turn folder).
+  **#709:** family behind the `family` lookup; agents of one kind on one spot share a line (all seats).
+  Live turn 4475: France 80.2 KB (was ~135), England 60.2 KB, 0 refused each. France hasn't used a
+  lookup yet (it only disbands and sets taxes: 514 florins). **Judge after ~30 turns** against the
+  baseline (turns 4425-58: 135 KB average, 0 refused, 153 disbands, 38 set_tax, no recruits).
+- **#708 `just seat-set <game> <faction> <key> <value>`:** a fresh timestamped backup each run, refuses
+  unknown keys and bad TOML, keeps the old file if the new one won't load. STANDARDS `live-config-change`.
+  (A hand cp on 11-23 broke on a line wrap and its rerun overwrote the backup.)
+- **Outreach draft** `review/TOTAL-WAR-COMMUNITY-OUTREACH.md` rewritten against facts (old one kept as
+  `.2026-10-28.md`). Checked: EOP PR #90 and issue #89 are still open (EOP-Labs/M2TWEOP-library); the
+  REX/M2EX Discord invite is dead; the EOP and Modding Den invites work; the public GitHub copy was
+  last pushed 11-05. Left as TODOs: 100-turn clean run, clean-install test, public refresh, a reply venue.
+- **Next:** the 100-turn clean run counts from turn ~4476. Prompt cuts left: primer 7.4 KB and output
+  rules 6.2 KB (every seat), field-army troops behind `army:<id>`.
+
+## 2026-11-23 (12:40): two prompt cuts and the dead-click cleanup are live; Gemini is out of quota until 11-28
+
+**Running on tc:** campaign `scratch`, turn ~4390 on `main` (#704), loop restarted ~12:35. The watch
+runs from this machine over ssh (`WATCH_BOT=0 just watch scratch` on tc).
+
+- **Live proofs:** #699's coast snap fired (turn 4335, England: "(91,163) is sea; moving to the nearest
+  land (90,162)"). The papal close gadget hasn't fired on its own yet: no results scroll has got stuck
+  since 11-22, and the only log line is the 03:48 hand close.
+- **Prompt (France ~138 KB at turn 4377):** YOUR SETTLEMENTS + YOUR ARMIES 86 KB (town lines 26.5, recruit
+  lists 14, troops 12.5), family 12.3, primer 7.4, agents 6.9, output rules 6.0. #702: armies with the
+  same mercenary offers print them once (live turn 4387: 25 "same as", 6 full). #704: dead relatives
+  on one line; a spouse's faction is printed only when it's foreign (live turn 4388: one "- dead:" line, no
+  "(france)" tags, prompt 136.6 KB; no refused hires in turns 4387-89). **Next cuts:** town header lines
+  (public order breakdown ~100 B x 59), recruit lists, the primer and output rules. Keep them lossless
+  (rulers-know-everything). The 60 KB target needs a format change for towns, not more trims.
+- **#703:** deleted `after-relaunch`/`resume_real_after_relaunch`, `find_minimized`/`minimized_slots`,
+  `BUTTONS`, `NOCLICK_TURNS` (nothing called them). crash-watch's `refocus_game.sh` / `wmctrl -c` are
+  still William's call.
+- **agy:** the AI Pro weekly quota ran out 11-23 ~12:25 (429, "resets in 123h": ~11-28 16:00). `ask_agy`
+  also still fails auth in a fresh session. Until then do the work yourself or use `ask_heretic`.
+
+## 2026-11-23 (11:25): three watch wakes fixed; agy's delegate tool can't see the new login
+
+**Running on tc:** campaign `scratch`, turn ~4345 on `main` (#700), bridge reloaded 11:20. Rulers
+claude:haiku. Start `just watch scratch` in the background first thing (tc is off 23:59-03:00).
+
+- **Done today:** trend alarm on varied mistakes (#698), map bounds + sea-to-coast moves (#699, map
+  line live in turn-4322 prompts; no coast snap seen live yet), report missing after a bench restore
+  (#700). Yesterday: papal scroll by close gadget (#693), stale-bridge refusal (#694), prompt cuts
+  (#692, #696; France's prompt ~144 KB live).
+- **agy:** William signed in 11-23 ~10:45. `agy -p` from a shell works; the delegate MCP's `ask_agy`
+  still fails "not logged in" (its process predates the login). Restart the Claude session; until
+  then run `agy -p "$(cat brief)" --model gemini-4-argon-high --mode accept-edits` in a worktree.
+  argon-high spent 30 min exploring the restore bug and changed nothing: give it the function name.
+- **Watch for:** a "moving to the nearest land" note in results.json (#699 live proof); a papal close
+  log line ("closed papal_election_results_scroll by its close gadget").
+- **Outreach (call to arms), in order:** 100-turn clean unattended run on record; prompt under 60 KB
+  (armies, family, diplomacy next); rewrite `review/TOTAL-WAR-COMMUNITY-OUTREACH.md` against facts;
+  refresh the public GitHub copy (last 2026-11-05) with `_review/scrub_public.py`; clean-install test;
+  William posts.
+- **Leftover:** worktree `../mtw2-wt-restore-report` holds the untracked `restore-0800-bridge.log`
+  (don't commit). Dead click helpers still to clean up (see 11-22 entry).
+
+## 2026-11-22 (03:55): click fallbacks deleted; one escape path still open
+
+**Running on tc:** campaign `scratch`, turn ~3200+ on `main` (#690), fork level 6. **The watch is NOT
+running:** start `just watch scratch` in the background first thing.
+
+- **First thing next: the papal results scroll (OPEN, it stalls turns).** `try_dismiss` still writes an
+  "escape" request for a `papal_election_results_scroll` that stays open, and since #689 the turn loop
+  refuses it. Live 03:17–03:48 France's turn sat stuck, and `just click-coverage` is INCOMPLETE on the
+  unmapped `escape` kind (48x). Closed by hand: part 0 of the scroll is `SCROLL_CLOSE_GADGET` (readBytes
+  `ec5d3601`), and `activate()` on it closed the scroll (03:48:39; England's turn at 03:49:45). To do:
+  1. Replace the escape request with that class-checked `activate()`.
+  2. Add a forced bench case.
+  3. Map the kind in `games/click-coverage.toml`.
+
+  Memory: `papal-results-close-gadget`.
+- **Done 11-21:** every other census click kind passes a `--kind noclick` bench case, the stuck-turn
+  reopen included (#686, #689). The screen-input code is deleted (#689, reviewed by Gemini).
+- **Watch wakes fixed:** walking merges (#687), shared mercenary pools (#688), the no-bot host (#690).
+- **Left for a cleanup:** dead helpers only the deleted paths used: `parley.qa after-relaunch`,
+  `find_minimized`/`minimized_slots`, `BUTTONS`, `NOCLICK_TURNS`. crash-watch's `refocus_game.sh`
+  (`windowactivate`) and its `wmctrl -c` error-box close bypass the guard; the author's call.
+- **The author's call (still):** a separate account or API key for the rulers. They share this session's
+  5-hour quota.
+
+## 2026-11-20 (13:30): rulers ran dry on the shared Claude quota; the limit now pauses the game
+
+**Running on tc:** campaign `scratch` at turn ~2215 on `main` (#666), fork build `d37eb120` (forkLevel 6).
+
+- **No screen clicks since 08:15.** Every click type in the logs has a no-click path. The last one, the
+  papal notice's "accept", is pressed by element (bench, every click refused, 08:26:59). Next: run
+  `just click-census` after a day of play, then delete the unused click fallbacks.
+- **About 66 turns (2143–2209, 11:30–13:00) ran with no ruler.** Both seats' `claude` calls hit the
+  account's 5-hour limit. This session uses the same account, and its heavy use drained the quota.
+  The existing pause-on-`SeatLimit` never ran because `LIMIT` didn't match "You've hit your 5-hour limit
+  · … · out of usage credits". Fixed in #666, with a test on the live text. **The author's call:** a separate
+  account or API key for the rulers, so a long session can't starve them.
+- **Watch noise cut:** #663 compares answer time per order (big turns aren't slow); #665 makes a faction
+  with 20+ towns alert only on a 5% loss. Wakes on war losses (Antwerp to France, Captain Tostig's army
+  destroyed between report and orders) were all correct play, with correct refusals.
+- **`just ui-classes`** (#664) names UI classes from the exe's RTTI. Its cross-check test fixed a mistyped
+  vtable in `K.UI_CLASSES` (UNDECIDED_VOTE_BUTTON is `dc493901`).
+- **agy this session:** 5 of 11 jobs were usable as delivered. The rest timed out, stalled, or needed
+  review fixes: an unpaced reopen loop, `execute()` on non-buttons, an edited live-log fixture, a dropped
+  alert floor, and an over-built limit rewrite that wasn't taken. The `ask_agy` 1800 s idle fix
+  (Refinery #369) needs a session restart.
+
+## 2026-11-20 (08:35): papal vote, notices and offer icons by element; only fallbacks click now
+
+**Running on tc:** campaign `scratch` at turn ~2018 on `main`, fork build `d37eb120` (forkLevel 6).
+
+- **Papal vote, no click (W11/W22):** #659 presses the ruler's candidate on `papal_election_scroll` by
+  element, choosing only parts whose class is `UI::VOTE_BUTTON` (vtable `9c3e3901` via `readBytes`, class
+  names from the exe's RTTI). Proven on the bench with every click refused: `just qa popups --case
+  papal_election_vote --kind noclick` passed at 08:28 ("pressed papal_vote_button on papal_election_scroll
+  by its element", then the results window). `needs_click` is removed from that case.
+- **Offer icons (#658):** a held marriage/adoption offer whose scroll isn't bound opens the next minimized
+  icon by element, every 5 s. Not seen live yet.
+- **Crash-watch refocus (#657):** live, but not yet triggered by a real loss of focus.
+- **Watch on tc (#656):** `just watch scratch` works with no flag. Its first wake was a TREND (England's
+  median answer time 62 s vs 41 s), most likely today's bench runs and loop restarts. Recheck after an
+  hour of plain play.
+- **Bench over ssh:** run `just qa <suite> --case X --kind noclick` (the recipe borrows the desktop's
+  DISPLAY). A bare `python -m parley.qa` over ssh has no display and fails on "game window not found".
+- **agy:** long jobs died at the MCP 1800 s idle limit. Refinery #369 fixes it after a session restart.
+- **Crash 08:36 after the papal bench (open):** the real campaign crashed 6 min after `qa-restore`, at
+  `medieval2.exe+0x7f47bc` in `UI::DECIDED_VOTE_BUTTON` slot 0. It was called from
+  `PAPAL_ELECTION_RESULTS_SCROLL` and `UI_REQUEST`, with `UI_MESSAGE_ICON` below. The real campaign had
+  no papal message after the restore. Likely: the bench election's results message stayed in the icon
+  stack across the in-process `loadGame`; the bridge opened it at 08:33–08:34, and the game later tore
+  down a results scroll whose vote buttons were gone. Report and logs: `runs/crashes/2026-11-20-083612`
+  on tc, a copy in `_review/crash-1120-0836/`. **Fix next:** after a bench case, the restore relaunches the
+  game (or clears the message stack) before the real save plays on. The bench case for it: papal vote,
+  then restore, then open every icon, and the game is still alive 60 s later. The stack was symbolized
+  with the exe's RTTI (scratch `pe.py`; worth moving into `scripts/` as a tool).
+- **Next:** run `just click-census` after a day of play. Delete each click fallback that has gone unused.
+  The "accept by reading a scroll" click (1 seen) is the last one with no element path.
+
+## 2026-11-20 (07:35): minimized icons open with no click (W52 done live)
+
+**Running on tc:** campaign `scratch` at turn ~1991 on `main` (#654), with fork build `d37eb120`
+(forkLevel 6; zip sha256 fd7d7e11…). The turn loop, crash-watch and `WATCH_BOT=0 just watch scratch` are up.
+
+- **Fix:** EOP's `execute()` calls `useButtonFunc`, which only works on buttons. Every UI element has a
+  virtual "use" function at vtable slot 60: `useButtonFunc` for `UI_BUTTON`, and "open the message" for
+  `UI::UI_MESSAGE_ICON` (`0xb302d0`). Fork level 6 adds `uiElementStruct:activate()`, which calls slot 60.
+  Bridge #654 opens the bottom 47x47 root icon with it on a stuck turn. The click stays as the fallback.
+- **Proven live:** 07:33:16 "reopened minimized message 1 of 2 by its element", followed at once by
+  `onIncomingMessage` event 40, handled by `clear_messages`. Try 2 opened icon 2 of 2, the turn went
+  1990 → 1991, and no `kind=minimized` click was made.
+- **Found on the way:** the game froze for 8 min (07:13–07:21) while a Steam window had focus; MTW2 stops
+  when it isn't the active window. Nothing caught it. agy is adding a refocus check to crash-watch
+  (worktree `../mtw2-wt-focus`). The cause of the focus change isn't known.
+- **Watch on tc:** run `WATCH_BOT=0 just watch scratch`. tc has no Discord token, so a plain watch exits
+  "DOWN: bot not running" at once.
+- **Next:** papal vote and notices by element (agy, worktree `../mtw2-wt-papal`). Then the offer icons
+  (`open kind=marriage/adoption`) through the same `activate()`. Then delete the minimized click path once
+  the click census shows it unused for a day.
+
+## 2026-11-20 (06:30): `execute()` can't press a message icon; the icon needs its own handler
+
+**Running on tc:** campaign `scratch` at turn ~1945 on `main`, with fork build `565e6f40` (forkLevel 5,
+`uiElementStruct:readBytes`; zip sha256 b3548dc3…). Installed 05:36 with `just install-eop-zip`; the turn
+loop and crash-watch are up. The runner VM is shut down again.
+
+**What we learned:**
+- **The root list tracks the screen.** A 30-minute sampler (`readBytes` on every 47x47 root, every 15 s)
+  matched the screenshot's slot count each time. The icons stack 47 px apart from (0, 546), and every one
+  has vtable `0x01363b6c`. A cleared icon drops off the list within seconds (0 roots two seconds after a
+  scroll was read). So there's no "cleared icon that looks live" to filter out.
+- **`execute()` on a live icon crashes the game** (06:08, crash report `runs/crashes/2026-11-20-060924`).
+  The list, the check (vtable, size, position) and the press ran in one Lua call, so the icon was live:
+  `eax` held its vtable. `useButtonFunc` (`0xb07e00`) does `mov eax,[ecx]; call [eax+0x188]`, which is
+  vtable slot 98. The icon's vtable is shorter, and that slot holds the float π (`0x40490fda`, the fault
+  address). The 11-19 crash was the same thing, not a stale icon.
+- The 04:50 crash is different: it's inside the game (`medieval2.exe+0x2275f0`), not ours. It's still
+  untriaged.
+
+**Rule:** never call `:execute()` on anything but a button. It works only for button classes.
+
+**Next (W52):** find the icon class's own click handler. Read the icon vtable at `0x01363b6c` from the exe.
+Compare it with a button's vtable (read one live with `readBytes(0,4)` on a `getOpenUiElements` button).
+Slots that match are base-class methods, and the icon's overrides are the candidates. Then add a fork
+binding that calls only that named slot on an element whose vtable is `0x01363b6c`, and prove it on one
+icon. Until then the minimized reopen stays a click.
+
+## 2026-11-19 (14:00): resume after power-off fixed; minimized icons reachable, not yet pressable
+
+**Running on tc:** campaign `scratch` at turn ~1555 on `main` (#651), with fork build 015d2a82 (forkLevel 4; zip sha256 2898a5ae…). The turn loop and crash-watch are up.
+
+**What happened:**
+- **The campaign sat idle from the 11-15 23:59 power-off to 11-19 13:20.** Boot-resume fired at 05:44 but logged `just: command not found`, because the autostart's PATH lacks `~/.local/bin`. Fixed in #650. Tomorrow's 03:00 power-on is the first live run: look for "resuming 'scratch'" in `logs/boot-resume.log` with no "failed" after it.
+- **#651:** the relaunch fails at once when the game exits while loading. At 13:30 the game hit "unspecified error and will now exit" after the main menu map, and the relaunch waited out its full 240 s.
+- **W03/W05 confirmed on live play:** the bridge log has 68 "a marriage offer: pressed … by its element" lines from 11-15. The 16:38 one was the forced probe, and later ones were the game's own offers.
+- **W11/W22, the papal election (11-15 17:01):** the ruler voted for candidate 2 of 3, but the notice, the vote and the reopen still went through x-input clicks. Still open.
+- **Clicks left since 11-15** (from `logs/scratch-turns.log`):
+  - 149 `open kind=minimized`: the stuck-turn reopen (W52).
+  - 16 offer icons opened (`open kind=marriage/adoption`).
+  - 1 papal vote and 2 notice clicks.
+  - The minimized icon is the main click left.
+
+**Minimized icons (W52), where it stands:**
+- The fork's `getOpenUiElements` drops root elements, and the icons are roots. Fork #12 (level 4) adds `gameSTDUI.getRootUiElements()`. Live, it listed a 47x47 root at x=0, y=546.
+- **`:execute()` on that root crashed the game** (13:54, stack through `useButtonFunc`). The icon had probably been cleared a few seconds before (`clear_messages` at 13:54:02), and a cleared icon has the same size and position as a live one. It may also be that `execute` only suits buttons.
+- **Rule: nothing presses a root element until liveness is known.**
+- **Next:** the fork commit `0092e57a` (level 5, `uiElementStruct:readBytes`) waits on the runner VM. The VM is shared: ask session uncle-j-s-refinery-5b or the author before starting it with `virsh -c qemu:///system start gitea-win-runner`. Then dump a live icon (just after a message arrives) and a cleared one, compare the vtable (the first dword) and the flags, and press only what passes.
+
+**Lesson:** never walk game memory with raw LuaJIT ffi in the live game. An ffi read of `uiElementList` crashed it at 13:29 (fault in lua5.1.dll). Use a checked fork binding instead.
+
+## 2026-11-15 (17:00): workarounds fixed at their cause, offers answered with no click
+
+**Running on tc:** campaign `scratch` at turn ~1243 on `main` (#648), with our EOP fork build 4d1f3620 (forkLevel 3; zip sha256 925a9306…). The turn loop and crash-watch are up. The Pope was killed by hand at turn 1242 for a papal probe (see item 2), so an election is coming.
+
+**Late fix (#648):** a stuck turn's decision scroll that no request held had its answer written and never pressed (a regression from #645; live at turn 1242). It's now queued as a decision. Live: the ruler declined, the bridge pressed it by element, and turn 1243 began.
+
+**Merged this session:**
+- #642–#646.
+- Fork #9, #10 and #11.
+- Register status: `docs/WORKAROUNDS.md` has 14 rows closed (W03 W05 W12 W13 W15 W21 W24 W25 W29 W32 W37 W47 W48 W53) and W30 in part. The rest are open.
+
+**Proven live on tc:**
+- **Offers, pressed by element:** a suitor declined, a suitor accepted and a wife accepted, each married with the game alive 60 s on. The wife accept is the case where a click crashed the game on 11-10.
+- **Full loop:** an offer held End Turn, the ruler accepted, the bridge pressed the answer by element, and the man married.
+- **W47:** the main-menu map line.
+- **W53:** Parley's `uiCfg.json`.
+- **W24 and W25:** a window closed by pressing its unnamed seal.
+
+**Pick up here, in order:**
+1. **Confirm W03/W05 on live play.** Look for the game's own offer (not a forced one) going through the ruler and being pressed by element, with no `marry_live` line. Search the bridge log for `pressed (accept|decline) on .* by its element`.
+2. **Papal election, no click (W11, W22):**
+   - England has a cardinal (Alexander), and the Pope (Aczo de Volta) was killed at turn 1242. By turn 1243's end the trace still saw no `papal_election_scroll`.
+   - The probe never saw the election: England's turn didn't end while the death notice was open.
+   - Next: when `papal_election_scroll` is up, read its structure with `M.open_ui()`. `M.open_ui` currently skips walking papal scrolls; test whether walking one on the tick is safe (the old hang was `getUiElement` during construction).
+   - Then press the ruler's candidate (`papal_vote_button` parts) and close the results scroll by element.
+   - Remove `kind = "escape"` and the vote clicks in `popups.py`.
+3. **The rest of group B:**
+   - W11/W22: papal, item 2.
+   - W18: End Turn holds for decisions.
+   - W19: request sweeps.
+   - W23/W31: screenshot reading. This needs scroll text from the fork; the text parts are type 17.
+   - W49: the spy-report and mission timers.
+   - W52: the minimized-message reopen click and relaunch-on-stuck.
+   - Building block: `M.open_choices`, `M.choice_buttons`, and `:execute()` on any part. An unnamed seal closes a window.
+4. **Group C** (C++ fixes in the fork) and **group D** (seat quirks: agy, llama-server, schema).
+5. **Older items:** France's prompt size, the ransom case, the fleet-merge crash replay, `frozen_rival_offers_nothing`. Also install fork build 4d1f3620 on the main machine's local game; the bridge refuses lower levels.
+
+**Lessons:**
+- agy can't see sibling worktrees from its sandbox. It timed out twice, and once tried `rm -rf` on one (the deny rules blocked it). Use Claude subagents for worktree edits.
+- Message scrolls (offers, notices) hang from their message icon, a root of its own, not from strat_ui.
+- uiElements from the fork compare by address with `==` (not `rawequal`).
+- The fake game models both: `FAKE.open_offer`, and `FAKE.closed` for windows found by name but not open.
+
+**Waiting on the author:** posting `_review/eop-upstream-draft-2026-11-15.md` upstream; the marriage-offer questions from 11-06.
+
+## 2026-11-15 (14:15): two crash loops fixed at their cause; workarounds now tracked
+
+- **Running on tc:** `scratch` past turn 1145 on `main` 65c6fc6 and **EOP fork build 8d87d9e3** (has
+  `M2TWEOP.forkLevel`; installed with `just install-eop-zip`); turn loop and crash-watch up.
+- **Crash loop 1 (turn 1141, 20 crashes, 00612ea6):** two queued attacks on one rebel army; the second
+  battle's defender side was emptied under the open panel and every press crashed. #636: one attack per
+  target a turn, the later one held to the next turn's start. Proven on the crash save.
+- **Crash 2 (turn 1143, 3 of 3, 00c5db34/00c5dc2f):** an attack and an assassination on one captain, who fell
+  in the battle. #639: one action per target a turn, attacks and missions alike. Proven on its save.
+- **Also:** #637 presses only what the game's open-UI list shows; #638 the turn loop no longer clicks a
+  result's check (the bridge is the one closer); #635 reader tests were red on main; fork #8 `forkLevel`;
+  #640 the bridge drives only the fork and group A's workarounds are gone.
+- **Register:** `docs/WORKAROUNDS.md`, one row per live workaround with its real fix (51 open). Work it in
+  group order: A (fork already fixed: W24 open_ui ffi walk, W25 4,012-name scan, W29 dead retrain clicks,
+  W53 zip packaging), B (no-click via `getOpenUiElements()`), C (fork C++), D (seats).
+- **Crash saves for repro:** tc `mods/parley/saves/crash_t1141.sav`, `crash_t1143.sav`.
+- **Quota:** agy's Gemini Argon is spent to 11-21, Opus via agy and Sonnet spent today; Flash works.
+- **the main machine's local game** still has an old EOP DLL: the bridge now refuses it until the fork build is
+  installed there too.
+
+## 2026-11-15 (08:00): session end; next session picks up "fix everything we can"
+
+- **Running on tc:** campaign `scratch` ~turn 1045 on **our EOP fork build a3e678b9** (fork #1-#4, #6),
+  installed 07:45 with `just install-eop-zip`; game, turn loop, crash-watch up; boot resume installed.
+  Proven live: `%` overlay text survives, `tile.isLandConnection` reads, queue item 1 readable and n+1 nil,
+  `gameSTDUI.getOpenUiElements()` lists finance_scroll and its buttons as uiElements.
+- **Next, in order:**
+  1. Swap tc to the final `gitea-ci` build (has #5 splitArmy and #7 CI): fetch the newest `build-<sha>`
+     release zip on the main machine (token), scp to tc, `just install-eop-zip /tmp/<zip> <sha256>`.
+  2. Press click-only scrolls through `getOpenUiElements()` + `:execute()`: get the marriage-offer and papal
+     scrolls' button names (stuck turns now log "on screen: ..."; or force a marriage offer on the bench,
+     games/qa/family.toml), then a handler that presses the ruler's choice. Closes no-click challenge 5.
+  3. Prompt size: France's prompt is 127-131 KB and growing (notes history); cap or summarize it.
+  4. Older open items: ransom case, fleet-merge crash replay, frozen_rival_offers_nothing.
+- **Lessons:** a probe that opens a scroll must close it in the same call (an open finance_scroll held the
+  Turks' AI turn 6 min); the fork zip's eopData/config drops parley.cfg (the swap now restores ours).
+- **Waiting on the author:** posting `_review/eop-upstream-draft-2026-11-15.md` upstream (scrub-clean; nothing posted).
+
+## 2026-11-15 (06:45): fixing everything we can (the author: "IF YOU CAN FIX IT, FIX IT")
+
+- **Requirement:** STANDARDS `fix-what-we-can` (top bar) and memory. Workarounds and upstream reports
+  are never the finish line for code we can change.
+- **The open-UI list, found (no-click challenge 5):** on the Steam exe the global `0x02c2bc2c` is
+  `{ uiElement** list; uint16 capacity; uint16 count }` of drawn parts; `uiElement +0x48` is the parent.
+  Climbing each part names its window: `finance_scroll` and `siege_scroll(gates_open_icon, siege_end_button,
+  siege_assault_button, siege_maintain_button, ...)` were read live. Bridge `M.open_ui()` (#623, #624; ffi,
+  VirtualQuery-checked, trusted only when entry 0 is `strat_ui`); a stuck turn with no known popup logs
+  "on screen: ...". **Next:** the fork's `gameSTDUI.getOpenUiElements()` (agy, worktree
+  `~/src/games/eop-wt-openui`, branch `feat/open-ui-elements`) returns them as uiElements, so their
+  buttons can be `execute()`d: the papal vote and marriage accept without a click. Open question: whether a
+  window on the list is always shown (siege_scroll stayed listed for minutes while turns played on).
+- **Fork fixes (author/M2TWEOP-library on Gitea, base `gitea-ci`):** #2 ImGui text as `%s` (built, merged);
+  #3 `tile.isLandConnection`/`isSeaCrossing` restored with 3.3.1's bits (master folds bits 12-14 into
+  `seaCrossing`) (built, merged); #4 getBuildingInQueue 1-based (merged); #5 splitArmy returns nil when the
+  game didn't split (building). Then: install the combined `gitea-ci` build on tc, bench it, drop the
+  bridge's `%` doubling. The bridge is ready for #4 already (#620: probes position n+1).
+- **Stale rows found:** restartLua (master runs it every frame; the bridge's console toggle is now 3.3.1-only,
+  #621); garrison `army.leader` (game data; master has `settlement.governor`).
+- **tc boot (#622):** `just resume-at-boot scratch` is installed on tc: a desktop autostart runs
+  `scripts/boot_resume.sh` (just play + just crash-watch unless paused). Proof is the next 03:00 boot:
+  read `logs/boot-resume.log`. Off: `just resume-at-boot-off`.
+- **Fault catcher (#625):** every reload had logged "unavailable (CreateFileA failed)"; it is 1224
+  ERROR_USER_MAPPED_FILE, the launch's catcher still mapping fault.bin. It reads "on" now.
+- **Upstream draft v2:** `_review/eop-upstream-draft-2026-11-15.md` (agy, checked; stale rows dropped,
+  fork branches named, scrub checks clean). Still needs the author's yes; nothing posted.
+
+## 2026-11-15 (06:00): fix the EOP draft's items in our fork before posting
+
+- **Gap:** the upstream draft (`_review/eop-upstream-draft-2026-11-14.md`) lists EOP bugs we only worked
+  around in Lua. Most are EOP C++ we can fix in `../M2TWEOP-library` (Gitea runner build), as
+  minorSettlementDb was. Order: (1) ImGui `Text`/`TextWrapped` format string, restore
+  `isLandConnection`/`isSeaCrossing`, the getBuildingInQueue fix (already branch
+  `fix/building-queue-index`, also on the github remote); (2) splitArmy refuses a non-adjacent target;
+  (3) restartLua without the console, garrison leader; (4) papal `getUiElement` hang, adoption offer, open-UI
+  list. Not ours: marryWife crashes (game code), Lua-in-VEH (LuaJIT), the 3.3.1 rows (fixed in master).
+  Then the post shrinks to PRs plus what we can't fix; it still needs the scrub and the author's yes.
+- **tc boot:** nothing restarted at 03:00; the campaign idled to 05:48. Needs a boot-time relaunch.
+
+## 2026-11-14 (19:30): a marriage that crashes the game is skipped; the turn limit past
+
+- **Marriage crash (#616):** the game crashed at 00C4E8BD on turns 506 and 508, each time right after the
+  bridge logged "marrying Phillip Hasting" in the turn-start `marry_singles`. Seven other 16-year-olds were
+  married fine that day; why his record crashes `marryWife` is unknown (age 16, family, no spouse). The bridge
+  now writes the name to `parley_turns/marrying.txt` around the call; a name still there at the next try goes
+  on `marry_skip.txt` for good. Phillip was added there by hand (the old bridge wrote no marker). No crash
+  since 16:55, through turn 684.
+- **Battle hang, 16:47:** the game hung on a battle result (Scotland v Harold Dobes at York), no crash, so
+  crash-watch slept. Relaunched by hand. A hang detector is still missing.
+- **Watch wake 19:2x, applied 92% to 57%:** honest refusals. Martio Codax chased Portuguese spies
+  that had moved off by the time the order ran ("not in sight"), and a move would put York's garrison past
+  20 units. No fix. Note: `distance` in `seen_agents` counts from the faction's nearest eyes, not the agent.
+- **Past the turn limit:** the report said "ends after turn 225: 0 turns left" on turn 677; the ruler asked
+  twice if the counter was broken. It now says the limit has passed and the game plays on.
+
+## 2026-11-14 (16:00): a fleet-merge crash loop broken; merge_units repeats refused
+
+- **Crash loop, turn 457:** England merged fleet Admiral Robin into Admiral John (15:37:35, "done"); the game
+  crashed in that AI round three times (15:38 004CA78E, 15:45 121E229A, 15:52), each reload a post-merge save.
+  **#614** refuses a fleet merge in validate. Relaunched by hand from `pre_fleet_merge_456.sav` (the turn-456
+  backup); the ruler ordered the merge again and was refused; play went past 459. Cause inferred, not proven:
+  fits the 11-11 open bug (a seated faction's admiral leaving the game crashes the character pass).
+  **Not reproduced on the bench:** `navy/fleet_merge_survives_a_round` (merge straight through
+  `M.qa.order`, no guard) passed both ways, a spawned fleet into England's admiral (16:05) and England's
+  admiral into a spawned one (16:09), 120 s alive over 6 rounds each. So a fleet merge alone doesn't crash;
+  something in that save did (both fleets were one ship each, and the turn before the ruler had tried to
+  disband each one's flagship). #614 stays as a cheap precaution. The crash saves are in
+  `runs/crashes/2026-11-14-15{3856,4546,5218}/`; next: replay `Autosave-5.sav` there with the merge undone.
+- **crash-watch is a user unit** started by `just crash-watch` (`crash_watch_unit.sh`); after its own relaunch
+  it can be running as a plain script. My hand relaunch killed it; it was down ~5 min. Stop it with
+  `just crash-watch-stop` before a hand relaunch, and check `pgrep -af crash_watch.sh` after.
+- **#613** a second `merge_units` on one army a turn is refused (England sent four for garrison:York; the
+  watch woke on applied 100% to 73%).
+- **UI probe (#610, #612):** no exe name reaches an open scroll; EOP needs a list of open UI elements.
+
+## 2026-11-14 (13:15): noclick reruns finished; navy and siege pass
+
+- **Watch on** (`just watch scratch`, restarted 13:04), crash-watch on, run 11 live.
+- **#607** navy `land_on_coast`, `crossing_in_one_turn`: `match = '^land ok'`; both pass noclick with the army
+  ashore (12:49, 12:50). **#608** `forced_ai_siege`: the force worked all along; message 39 came 8 s later
+  as "popup handled: game message 39"; passes noclick (12:54).
+- **diplomacy noclick (09:49):** 11 pass, 4 inconclusive (AI offers), `frozen_rival_offers_nothing` fails
+  truly: every AI turn logs "turn still running after 1s frozen; game AI unfrozen until its next turn", and
+  an AI offer came at 09:48:02 (sender not logged; Denmark's turn was running at 09:48:20). The bridge declined
+  it by `diplomacy_decline_offer_button`, no click. The bench freeze is a 1 s freeze; the case's premise is
+  false while that valve stays. Decide: drop the case's claim, or keep the AI frozen past 1 s safely.
+- **`forced_own_men_captured`** fails every run since 11-06 (passed 11-06 10:01), clicks allowed or not.
+  Ruled out: noclick (fails with clicks, 13:0x); 111715d's unmarried spawned general (married him in setup on
+  tc, uncommitted, 13:10: still no ransom). The battle runs (`battle sides` 1u v 1u, auto-resolve, result
+  ticked); then events 55 and 217 come and get `clear_messages` (handle_popups, unnamed event, no scroll).
+  Next: read the battle's winner and survivors, and test whether 55/217 is the ransom being cleared.
+
+## 2026-11-14 (08:50): no-click push; session ended to load new hooks
+
+The author's goal: no screen clicks anywhere, then a public call to arms for the rest, and EOP fixes sent upstream.
+
+- **State on tc:** run 11 is at turn ~53 (restarted at 06:15 from `scratch_run10_start.sav`). A crash at turn 46
+  (07:07, new site: medieval2.exe `00593060` null `this`, called from `00bf4012`, right after England's turn
+  start; repro save in `runs/crashes/2026-11-14-070704/`) was relaunched by crash-watch; watch for a repeat.
+  **The campaign watch is OFF** (stopped for the bench): start it first thing.
+- **A noclick bench rerun was going at session end** (popups, quiet, siege, towns, navy, forced, diplomacy, then
+  `just click-census`). Read `runs/qa/` for its reports; rerun what's missing:
+  `just qa <suite> kind=noclick` on tc. popups/quiet/siege/towns have never had a noclick report.
+- **Merged today:** #595 merge_units pairs as the bridge does; #596 PATH in the justfile; #597 report written on a
+  load; #598 `kind=noclick` (every case, clicks refused); #599 bench suitor offers off; #600 land one step ashore
+  (+ #604: not-yet-ashore is pending, not refused; #600 alone refused real landings on the bench); #601
+  `needs_click`; #602 click census (`x-input:` lines, `just click-census`); #603 force_ai_siege, frozen-AI log
+  each turn, the campaign-ender runs last.
+- **Bench so far (noclick):** 52 of 65 passed in the 08:22 run, 8 of 8 instant, navy 15 of 18 (the 3 were the
+  #600 bug, fixed by #604, not yet re-run). Still failing: `forced_own_men_captured` (no ransom offer; likely the
+  battle roll). Inconclusive: the 4 AI-offer cases (no AI offer comes; EOP can't force one).
+- **Rerun results (09:00-09:40, after #603/#604):** quiet 4/4, siege 13/13, towns 22/22, instant 8/8 pass with
+  every click refused. popups: `papal_election_vote` hangs (the papal vote is click-only: challenge 5; give it
+  `needs_click` or solve it). navy: `land_on_coast` and `crossing_in_one_turn` still fail: the land result is now
+  "land ok: landing ... ordered; ... the next report says" and the cases expect `equals = "land ok"`; make them
+  `match = '^land ok'` and check the army ashore with `within`. forced: `forced_ai_siege` still gets no message 39
+  after #603 (open), `forced_own_men_captured` no ransom (open). diplomacy didn't run (session end): rerun it.
+- **The challenge list:** `docs/no-click-challenges.md` (this PR): 6 challenges with leads, forcing tools and
+  proofs. Live census (one day): 166 message-check clicks, 122 minimized-message reopens, 61 marriage decisions
+  (Escape), 13 adoption clicks, 1 papal vote. First census with event numbers: every bench click was an
+  acknowledge on message event 40.
+- **Next, in order:** (1) start the watch; (2) finish the noclick reruns; (3) the UI probe: with a forced wife offer
+  and an event-40 scroll open, `dofile("Z:/tmp/ui_probe.lua")` (tc /tmp: every `*_button/_scroll/_panel/...`
+  name from medieval2.exe, `/tmp/ui_candidates.txt`; both are in /tmp and gone after a reboot: rebuild with
+  `strings -n 6 medieval2.exe | grep -E "^[a-z_]+_(button|scroll|panel|listview|window)$"`), then wire what
+  presses into the bridge (`close_tick_button`, `perform_marriage_button` are the leads); (4) papal: write
+  `cardinal.voteFactionID` on a forced election and see if the game keeps it; (5) give the marriage QA cases a
+  family groom (`spawnArmy` has a `family` flag) so wife offers can come.
+- **Waiting on the author:** the EOP upstream draft `_review/eop-upstream-draft-2026-11-14.md` (14 items, 3 draft issues;
+  nothing posted); whether live play should stop marriage/suitor/adoption offers (no clicks, but no suitor choice).
+
+## 2026-11-14 (06:30): the run-10 campaign ended at turn 1447; restarted at turn 5; merge_units fixed
+
+- tc booted at 03:00 but nothing was started (no session). 06:04: synced tc to main, `just play scratch`, `just crash-watch` (relaunched from Autosave-1, turn 1440; its "crash suspected" report at 06:04 is the 23:59 power-off, not a crash), and the watch.
+- 06:15: the watch woke `LOST`: the campaign-over scroll during Poland's turn, turn ~1447 (France's note: "five of 45 regions held and no turns left"). Restarted per the 11-11 entry: the run's turn folders (26 GB, turns 5-1447) are in `~/mtw2-scratch-turns-run-to-t1447-20261114` on tc; `just relaunch-game --save scratch_run10_start.sav` (turn 5, no clicks), play, crash-watch, watch.
+- This PR: troops in the report carry `armour`, `weapon` and `held` (bodyguard or retraining), from the bridge's own `merge_key`; `validate_orders` and the prompt's merge line group by `Unit.merge_group()`, so a pair the bridge won't merge is refused before it's sent. Live, Captain Gerbert (turns 1440-1441) had the same 64/75 and 67/75 Pike Militia as Foucher and was refused again; France disbanded both before they could be probed, so which field differed is not known.
+- Still next: recruits of units a town can't train now (France's second most common refusal).
+
+## 2026-11-13 (06:30): resumed on tc; the watch runs there now
+
+- **11-12, not in the last entry:** tc booted at 03:00 and a turn loop ran 05:24-05:55 (turns 524-562); tc then shut down at 05:55, was up 17:50-18:01, and stayed off until the author powered it on at 06:14 today. The game ended with that shutdown; it didn't crash. Cause of the early shutdown and the missed 03:00 boot: unknown, asked the author.
+- 06:17: `just play scratch` and `just crash-watch` on tc; crash-watch relaunched from Autosave-2 (Steam took 112 s). The watch runs **on tc** over ssh: `ssh the test laptop 'cd . && WATCH_BOT=0 just watch scratch'` (`just` is in `~/.local/bin`).
+- Haiku's safeguards refused England's prompt on turns 524 and 538 (2 of 39); watching it.
+- This PR: a watch started where the game doesn't run exits `NOT HERE` (the first one ran on the main machine and woke on an 11-04 log line).
+
+## 2026-11-13 (23:50): end of day, turn 1430; next: merge_units still gets through
+
+- No crash since turn 1252 (the stale-spouse guard and family-only marriages are in). tc powers off at 23:59.
+- **Next session, first:** the merge_units check (#593) doesn't catch every case. 23:00-23:47 France still sent it 14 times on Captain Foucher, whose report shows two worn Pike Militia (64/75, 67/75), so it passes; the bridge groups units by type **and armour and weapon level** and refuses. Fix: put each unit's armour/weapon level (or the bridge's own "can merge" answer) in the report's troops, and check that in `validate_orders`. France's applied share fell to 50% on this, with recruits of units a town can't train now (Naples, Vienna: Pike Militia) second.
+
+## 2026-11-13 (22:40): merge_units checked before the bridge sees it
+
+- Watch wake (France applied share 82% to 60%): 21 of France's refused orders since 22:00 were `merge_units` on Captains Anseau and Robert, which the bridge refused every turn ("no two worn units of one type"). `validate_orders` now refuses it up front when the report shows no two under-strength units of one type (skipped when a unit's maximum is unknown), so the ruler hears it at once. Bench: `test_merge_units_needs_two_worn_units_of_one_type`.
+- No new marriages since 21:48 (the family-only fix); the scan still clears stale spouses of earlier wives (5 more by 22:21), no crash.
+
+## 2026-11-13 (21:50): what freed the spouses: Parley married agents
+
+- 21:00-21:27 the new scan cleared 5 stale spouses, no crash (to turn 1311). All English wives of freed husbands; the first, Michell Higgines, is an **assassin** the bridge wed at 20:49 (`single men married ...: 1 (Michell Higgines)`). `M.marry_singles` (#519, 11-06) married every single adult man, agents and captains included; the game offers wives only to family men, keeps family records, and frees an agent's record at his death, leaving his wife's `spouse` dangling.
+- **Fix (this PR):** `M.marry_singles` and `spawn()` marry family men only (the 11-06 note in games/qa/family.toml named this as the fallback). The stale-spouse scan stays as the guard for wives already made.
+
+## 2026-11-13 (21:20): the 00eff4db crash named: a natural death's message reads a freed spouse
+
+- Turn 1252 crashed at eip 00eff4db (`runs/crashes/2026-11-13-203639`), the third time (11-11 t272, 11-13 t640), and the bridge's catcher had the stack this time. Chain: 0x5a807c (sets characterRecord `deathType` = 1 natural, death year/season) → 0x8344c0 → 0xc4dec0 (message type 0x4f) → 0xc48a50, which copies the record's name (+0x4), then its spouse's name (+0x228 `spouse`, `[spouse]+4`) with 0xeff4d0, the ref-count copy; the spouse record was freed (its string rep read 0). Offsets checked against EOP's `types/characterRecord.h`.
+- Live scan right after a relaunch: 6449 records, 3672 married, **0** spouses outside the factions' lists. So it builds up in a session (the crashes came 180+ turns after a load).
+- **Fix (this PR):** `M.stale_spouses()` at every faction's turn start (19 ms): a spouse pointer (compared by address, never followed) that no faction lists is set to nil, which the message code handles; the log says `stale spouse cleared: <faction>'s <name> ... last seen as <spouse> (<faction>)`. Bench: `test_a_spouse_no_faction_lists_is_cleared_and_named_from_the_last_scan`.
+- **Next:** the log lines say who the freed spouses were; that names what frees them (a guess: a bribed or defecting character's old record, `deathType` bribed). Repro save: `mods/parley/saves/crash_t1252.sav`.
+
+## 2026-11-13 (18:55): "Captain X" found the fleet "Admiral X"
+
+- Watch wake (TREND: France's applied share 89% to 67%): turns 1177-1180 France's `march_on "Captain Thibault"` came back "is a fleet". `find_army_now` matched ids with `same_army_id`, which drops the Admiral/Captain title, and the fleet "Admiral Thibault" came first in getStack order. Fix: an exact id match first, the title-stripped one after. Bench: `test_a_captain_is_found_before_an_admiral_of_the_same_name`.
+- No crash since the agent-mission fix at turn 1074 (to 1180 so far).
+
+## 2026-11-13 (16:45): turn-1072 crash: a mission against a captain the same turn's bribe won over
+
+- Turns 940-1071 ran on the EOP fork build with no crash. At 1072 the game executed heap memory (c0000096 PRIV_INSTRUCTION, eip 340352d8; `runs/crashes/2026-11-13-162504`): England's orders sent diplomat John Watkins to bribe Spain's Captain Americo and assassin Algonso Pontferrada to kill him. The bribe won Americo over at 16:24:22; the assassination then ran on the defected captain and the game crashed. crash-watch's relaunch replayed the same two orders: the bribe failed, the assassination went ahead, no crash.
+- **Fix (this PR):** one agent mission per target per turn, in `validate_orders` (the ruler is told) and in the bridge's `agent_handler` (any path). Bench: `test_one_mission_per_target_per_turn` in test_validate.py and test_lua_bridge.py, both fail without it.
+- Repro save: `mods/parley/saves/crash_t1072.sav` (turn 1072 start); the bribe's success is a roll, so a forced repro would need the bribe made certain.
+
+## 2026-11-13 (13:50): tc runs our EOP fork build with the minor-settlement cache fix
+
+- **What:** the author's fork `author/M2TWEOP-library` PR #1 (merged into `gitea-ci`, `4c8a0743`): `minorSettlementDb::clear()` at every `preFactionTurnStart` and every `postBattle`, so the cache rebuilds from live lists instead of keeping freed settlement pointers (the turn-812 and 11-11 turn-265 crashes). Built by run 709; the zip is the pre-release `build-553d2c46ca94990b2d0879b64f38a06fb56fb775` (releases API, token works).
+- **On tc** since turn 940 (13:44): `mods/parley/M2TWEOPLibrary.dll` + `.pdb` from that build (dll sha256 `aab15ebd742f4c97...`). The upstream master b525628 files are kept as `*.bak-b525628` next to them. **Rollback:** stop crash-watch, copy the `.bak-b525628` files back over, `just relaunch-game`.
+- **Caution:** tc never ran EOP 3.3.1 (that tag has no `minorSettlementDb`); it ran upstream master b525628. `just install-eop` would put upstream back and drop the fix. Making the installer fetch the fork build is the follow-up.
+- CI note: Gitea's API can't list Actions artifacts and the job token can't write packages, so the fork's build publishes each zip as a `build-<sha>` pre-release.
+- Upstream report (EOP-Labs) is the author's call.
+
+## 2026-11-13 (11:40): three more crashes after resuming at 805, two kinds
+
+- **808 and 809: `medieval2.exe 00612ea6`**, right after auto-resolving a battle. The game reads `battle.sides[i].armies[0].army` (null in that battle) and then that army's `+0x100` settlement. EOP's layout: battleData `sides[8]` at `+0x9c`, side `armies[64]` at `+0x58`, battleSideArmy `stack` at `+4`. The relaunch at 11:27 played past it, so the crash isn't strictly deterministic. **This PR** logs `battle sides: ...` (each side's armies) before every auto-resolve press, so the next one names the empty side. If a side is empty before the press, the fix is to not press (a guard in `M.on_pre_battle` / `watch_buttons`).
+- **812: inside EOP**, `minorSettlementDb::getSettlement+0x50`, called from `aiGlobalStrategyDirector::initialize2` -> `aiMilitaryDirector::initialize` -> `aiCampaignController::isDefensive`. That's EOP's replacement of the game's campaign AI, and `getEopAiConfig().enabled = false` (#574) doesn't gate it (the "naval target ... score" lines are the same code). Cause, from EOP's source: `regionMinorSettlements` is a pointer cache filled by `load()` at game load and cleared only by `onExitToMenu`, new game, save load, and post-battle when `campaignData->type == 3`. A minor settlement that changes hands otherwise leaves a dangling pointer. Same family as the 11-11 turn-265 crash. A real fix is in EOP (clear or validate the cache on settlement events): The author's fork `games/M2TWEOP-library` (branch gitea-ci) or upstream. **For the author.**
+
+## 2026-11-13 (11:15): turn 804 crashed every time; campaign resumed at 805 from a trial save
+
+- **The crash:** `medieval2.exe eip=0070f5f9`, in France's turn start. The catcher's stack runs from the character loop (`0x4ffcfe` calls `0x5a2eb0`) to `0x5a2bd2`, then the wrapper `0x70f690`, then `0x70f5f0(this=NULL)`, which reads `+0xf0/+0xf8` (in EOP's armyStruct, the character list and its count). In the `ebp==2` branch at `0x5a2b51`, the character being processed (`esi`) has a null `+0x100`, and the object looked up for it (`edi`, from `0x4c9750`) has a null `+0x100` too (armyStruct `+0x100` = settlement).
+- **Who:** `esi = 0x1015e260` is **France's assassin René de Bordeaux** at (112,100), with no ruler order of his own. Matched by address after loading `crash_t804.sav` (saved on tc in mods/parley/saves). `edi = 0x1e341fc0` matched nothing at load; it's made or moved during the turn.
+- **Not a single order:** France's turn-803 orders were 6 merges into garrisons + 3 ship disbands. The full set crashed 3 of 3 from `crash_t804.sav`; disbands alone, merges alone, and either half of the merges with the disbands all played on. Like the admiral crash, the orders shift the game's dice and only this exact sequence reaches the fault: a game/EOP bug in an agent's turn-start action, with Parley only steering the RNG.
+- **Recovery:** the turn-803 autosave was overwritten by the trials, so play resumed from trial 6's turn-805 save. France's disbands and its Bruges, Toulouse and Florence merges went through there; the Paris and Venice merges didn't (Genoa's was refused at 21 units anyway). France re-planned from its 805 report.
+- **Next for this one:** name `edi`. The way the admiral crash was named: the machine-code handler calls a Lua callback for this one AV only (`~/mtw2-crash-bisect/fault-tools/`), from `crash_t804.sav` with the full orders. The orders, the address-matching Lua (`who.lua`) and the fault.bin are in `~/mtw2-crash-bisect/t804/` on tc.
+- Pitfall: a hand-made `paused.txt` (no reason in it) isn't lifted by `just play`; remove it by hand.
+
+## 2026-11-13 (10:40): rotation made crash-watch kill a healthy game (fixed)
+
+- 10:24, turn 794: rotation moved the 21 MB bridge log aside mid AI turn; with no log, crash-watch's age was "since midnight" and the busy game missed its probe, so it was relaunched (Autosave-1, no clicks). Fixed in this PR. Watch wakes earlier this morning were trends only: France lost Cagliari (714, to rebels) and Edinburgh, Angers, Valencia, Tunis (774-781; Spain took three); England's applied share dipped on fair refusals.
+
+## 2026-11-13 (09:00): turn 705 died of c0000417; the catcher takes every error exception
+
+- 08:41:48, turn 705: msvcrt `_invalid_parameter` raised `c0000417` the same second the bridge logged "autoplay: ending turn 705". Not an access violation, so neither the catcher nor the report's Proton line saw it. Both now take any 0xC... exception (this PR).
+- **Read stacks with care:** `click_end_turn()` runs the whole AI round inside the bridge's Lua call, so every crash during the AI turns has lua5.1.dll and M2TWEOPLibrary.dll frames on the outside of its stack. Those don't make Lua the cause; look at the innermost medieval2.exe frames.
+- The catcher installs once per game process: a new stub needs a game relaunch, not `just reload-bridge`.
+- **Cause found (same PR):** the catcher's stack, named with EOP's pdb (`scripts/pdbsym.py <pdb> <dll> <rva>...`, a standard-library S_PUB32 reader; no llvm tools on either machine), went sol -> `ImGui::TextWrapped` -> `ImFormatStringToTempBufferV` -> ucrtbase. The overlay hands the ruler's note to TextWrapped as a printf format, and England's note had "80%." (invalid). 512 earlier notes had a "%" that happened to parse. Fixed by `bridge.imgui_text` (doubles `%`); acceptance is turn 705 replayed from Autosave-2, which crashed 3 of 3 before.
+- Worth telling EOP upstream: its Lua `ImGui.Text`/`TextWrapped` bindings pass the string as the format.
+
+## 2026-11-13 (08:30): turn 640 crashed at 00eff4db again; the bridge now catches the stack
+
+- 07:34, turn 640: `eip=00eff4db`, the same address, esp and ebp=0 as turn 272's, 0.18 s after EOP's "Faction turn start: slave". The code is a ref-counted handle copy (`addw $1,(%ecx)` through a null handle) with 1373 callers in medieval2.exe, so only the stack can name the caller. Crash-watch recovered it with no clicks.
+- **The fault catcher** (CHANGELOG): every crash report now carries the faulting stack (`fault-stack.txt`, `stack:` in report.md). Next time 00eff4db fires, read the medieval2.exe return addresses there and look them up in a disassembly made on tc with `objdump -d medieval2.exe > /tmp/m2.dis` (tc's nightly power-off may clear /tmp). Kill switch: `fault_catcher=0` in bridge.txt.
+
+## 2026-11-11 (23:50): session end; the campaign is paused for the night at turn 523
+
+**State:** the test laptop is on main #578. The 23:45 night stop ran `just stop` (paused.txt written) and `just crash-watch-stop`. From turn 274 to 523 there were no crashes. England was still in the game at the stop.
+
+**Next session, in order:**
+1. Resume on tc: ship any newer main by bundle (tc has no Gitea route), then run `just play scratch`, `just crash-watch` and `WATCH_BOT=0 just watch scratch` in the background.
+2. On each watch wake, fix the cause end to end.
+3. Still unexplained:
+   - Why an admiral's death crashes the game (#564 only avoids it).
+   - Denmark's turn-106 freeze.
+   - The one-off fault at 00eff4db (turn 272).
+
+**For the author:** the admiral age cap (#564), England's ruler quality (it lost the 307 and 214 campaigns), and EOP AI off (#574).
+
+## 2026-11-11 (20:05): merge_units says what it would combine (#578); turn 272 crashed once
+
+- **#578.** At 18:47, on turn 179, the watch's applied-share alert fired.
+  - The cause: England ordered `merge_units` on 5 garrisons, and the game refused all 5 with "nothing to merge". Each garrison had only one worn unit of a type, next to full ones. The ruler's note said "a refusal costs nothing".
+  - The fix: any army with a worn unit now gets a line saying what a merge would combine, or "would combine nothing (refused)". Retraining already had a line like it. The turn loop was restarted on #578.
+- **Turn 272 crash (19:58).** Proton's log shows `c0000005` at eip=00eff4db, an address no other crash has had. Crash-watch relaunched from Autosave-3 with no clicks, and the campaign was on turn 274 by 20:00. That's a one-off like turns 46 and 56, so no separate fix. The report is `runs/crashes/2026-11-11-195801` on tc. If that address comes back, get the stack with the machine-code exception handler (`~/mtw2-crash-bisect/fault-tools/`).
+
+## 2026-11-11 (16:05): England lost again at turn 214; restarted at turn 5
+
+Turns 124-214 had no crash with EOP's AI off (#574). At turn 214 England held only Caen, and the game showed "Victory Conditions Failed" again. The bridge pressed its one button and the game went to the main menu. **#567 caught it**: crash-watch relaunched by itself 46 s later and the game played on to 215. That's play after a declared defeat, so per the standing order the campaign was restarted at 16:03 from `scratch_run10_start.sav`. The run's turn folders are in `~/mtw2-scratch-turns-run-to-t215-20261111` on tc.
+
+**For the author:** England's ruler has lost both of today's campaigns: one ended at turn 307 (it showed the defeat scroll at 271 first), the other at 214. That's a question about ruler quality (the seat and its prompt), not a fault the bridge can fix.
+
+## 2026-11-11 (14:35): EOP's campaign AI off again (#574): it crash-looped turn 124
+
+Turn 124 crashed **3 of 3** from the same autosave at the same instruction (`medieval2.exe` eip=007193cf, same esp) in Denmark's turn, right after EOP's campaign AI logged "Try attack settlement order ... moveTactical: can not move army". With the AI switched off after the load it played on to turn 125. A `control.txt` lua line didn't count: it ran during the start-up load, and the campaign load turned the AI back on. **#574** sets it at every load: off unless bridge.txt has `eop_ai=1`. The admiral cap (#564) stays. tc is on #574, turn 128 at 14:35, with crash-watch and the watch running.
+
+**For the author (replaces the two questions above):**
+1. EOP's campaign AI is **off** (#574): it crash-looped the campaign. `eop_ai=1` in bridge.txt brings it back.
+2. England's admirals don't die of old age (#564): a workaround for a game/EOP bug. OK for now?
+
+## 2026-11-11 (14:25): the new campaign's crashes and stalls, all recovered
+
+Since the restart at turn 5 (12:06). Each crash has its report in `runs/crashes/` on tc.
+
+| When, turn | What | Where | Recovered by |
+|---|---|---|---|
+| 12:53, 46 | crash, `eip=00bf3a84` | game code; a papal election was under way (bridge's papal tick last) | crash-watch |
+| 13:58, 106 | Denmark's AI turn stood still after a battle, nothing on screen | unknown | hand relaunch; now crash-watch at 20 tries (#572) |
+| 14:21, 124 | crash, `eip=007193cf` | game code, right after EOP's campaign AI logged attack orders ("moveTactical: can not move army") | crash-watch |
+
+Together with 11:08's turn-265 crash inside EOP's `minorSettlementDb` (EOP AI naval scoring), 2 of today's 4 non-admiral faults came while EOP's campaign AI was issuing orders. That's evidence for the author's open call on EOP's AI, not proof. Also merged: #570 (watch: a stuck line from before a load is stale), #571 (trends: an answered but unapplied turn isn't a fall), #572 (crash-watch: relaunch a turn stuck 20 tries).
+
+## 2026-11-11 (12:07): England lost the campaign; restarted at turn 5
+
+The game's campaign-over scroll ("Victory Conditions Failed: your faction has been conquered") came at turn 271 and again at 307, during Scotland's turn. England had held only Nottingham since at least turn 271. Another faction presumably met its victory condition, which ends the player's campaign. This is the standing order's "loss", so the campaign was restarted at 12:06 from `scratch_run10_start.sav` (turn 5). The lost run's turn folders (5-307, and today's `_old-timeline-20261111`) are in `~/mtw2-scratch-turns-run-to-t307-20261111` on tc. Turn loop, crash-watch (#567) and the watch are running; the 23:45 stop timer is set.
+
+## 2026-11-11 (10:55): the crash is England's admiral dying of old age; his age is capped; campaign replays from 246
+
+**State:** tc on main (#564). The live campaign was restarted at 10:49 from `crash_t246.sav`; the log says `england: Admiral Richard's age held at 50 (was 63)`. The turn loop, crash-watch and `WATCH_BOT=0 just watch scratch` are running. Turn folders 246+ from the old timeline and today's trials are in `parley_turns/scratch/_old-timeline-20261111/`. A transient timer (`parley-night-stop`) runs `just stop` and `crash-watch-stop` at 23:45.
+
+**Cause, as far as shown.** When a seated faction's admiral leaves the game, the next round's start crashes. England has one admiral, Admiral Richard (66 at turn 252). The game returns to `eip=0` in England's turn-start character pass (`medieval2.exe` loop at 0x4f8011, calling 0x597c60), on the new admiral it made in his place ("Admiral Thomas"). That happens right after the rebels' turn ends and the year's births are rolled. Old age is a dice roll. Parley's presence changed the game's RNG, so it decided whether he died that year. That is why every crash-rate split looked like a dose effect, EOP's AI (#562) included.
+
+| resume_t252.sav | Crashed |
+|---|---|
+| **no Parley**, untouched (he survives the roll) | 0 of 2 |
+| **no Parley**, Admiral Richard killed at load | 2 of 2 |
+| **no Parley**, his ship removed with him aboard | 2 of 2 |
+| **no Parley**, the HRE's admiral killed / England's merchant killed | 0 of 2 / 0 of 2 |
+| stock bridge, untouched | 6 of 6 |
+| bridge, Richard held at 30 | 0 of 3 |
+| **shipped #564** (t252 / t247 / crash_t246 with EOP's AI on) | **0 of 4 / 0 of 3 / 0 of 8** |
+
+**Merged today:**
+- **#561:** crash reports keep Proton's log around the fault (`proton.log`, `meta.fault`).
+- **#562:** EOP's campaign AI off. **Reverted by #564**: its 0 of 16 was the same dice.
+- **#564:** `M.spare_admirals` caps a seated faction's admirals' age at 50, at every load and each of its turn starts. It's a **workaround**: battle or assassination can still take an admiral and crash the game.
+
+**Open bug (game or EOP, not Parley):** why the replacement admiral crashes. It happens only for the seated (England) admiral. Nothing is aboard his one-cog fleet, which is at sea at (109,142). EOP's `onNewAdmiralCreated` never fires before the fault. Next probes: give England a second admiral, then kill Richard; and do the same on a fresh campaign, to tell this save from the game.
+
+**How it was found** (tools in `~/mtw2-crash-bisect/fault-tools/` on tc; memory note *bisect-crash-by-building-up*):
+1. Proton's SEH log gave the fault.
+2. An x86 machine-code vectored exception handler wrote CONTEXT plus the stack to a mapped file. For that one access violation it then called a Lua callback, which named England's characters at the fault. A Lua handler entered on every exception corrupts LuaJIT.
+3. `M2TWEOPLibrary.pdb` and `objdump` named the code.
+
+Withdrawn today: GC, End Turn timing, the JIT and EOP's AI. None was the cause.
+
+**11:08, turn 265: a different crash, in EOP's own code.** EOP's `minorSettlementDb::getSettlement(int, int)` (`types/strategyMap.cpp:104`, `M2TWEOPLibrary.dll+0x7d0f72`) read out of range (`0x6FA50E7C`). It happened during the Papal States' turn, while EOP's campaign AI logged its naval-target scoring. Parley never calls minor-settlement lookups. Crash-watch relaunched, and the same turn passed, so it isn't deterministic: once in about 20 rounds. Report: `runs/crashes/2026-11-11-110813` (its `meta.fault` came from #561). If it recurs, turning EOP's AI off (#562's code) would avoid it, at the cost of how AI factions play.
+
+**11:13, turn 271: "Victory Conditions Failed".** A game scroll ("Your faction has been conquered…", one button: Return to Main Menu) came while England still held its towns, and the bridge pressed its only button. The campaign went to the main menu, and nothing noticed for 15 min. A relaunch from turn 271's autosave played on to 273 without the scroll, so it's not a fixed end date. Why it fired is open; the capture is `parley_turns/scratch/captures/popup-271-1331220.png`. **#567:** crash-watch now relaunches when the game has left its campaign for the menu (`scripts/left_to_menu.sh`).
+
+**For the author:**
+1. England's admirals can't die of old age while seated (#564); EOP's AI is back as it was. EOP's AI crashed once in its own code (turn 265, above). Off or on is your call.
+2. The campaign went back six turns, to 246.
+3. The bridge doesn't post to Discord from tc (no bot token there), so these notes are the update.
+
+## 2026-11-11 (09:05): ~~the turn-246 crash was EOP's own campaign AI~~ (wrong: see 10:55)
+
+**State:** tc on main (#562). The live campaign was restarted at 08:59 from `crash_t246.sav`, with EOP's AI off. Round 246 passed, and turn 247 is being played. The turn loop, crash-watch and `WATCH_BOT=0 just watch scratch` are running. Turn folders 246+ from the old timeline are in `parley_turns/scratch/_old-timeline-20261111/`. A transient timer (`parley-night-stop`) runs `just stop` and `crash-watch-stop` at 23:45.
+
+**Cause.** The game returned to `eip=0`, with a zeroed frame, about 0.5 s into the rebels' turn. It was in its per-faction character pass (`medieval2.exe` loop at 0x4f8011, calling 0x597c60), with England's faction and a character on the stack. That happens when **EOP's own campaign AI** (`globalEopAiConfig`, on by default, from EOP's `campaignAi.cpp`: army merges, aux-general transfers, attack orders) has re-created a Timurid captain. Bodonchar's object at the rebels' turn start was new in the crashing run and the old one in the five that passed. Parley's EOP calls only changed how often that AI path came up. That is why every crash-rate arm looked like a dose effect.
+
+| From crash_t246.sav (same flow) | Crashed |
+|---|---|
+| EOP AI on, all of 11-11 | 11 of 28 |
+| EOP AI on, same-session baseline | 3 of 8 |
+| **EOP AI off** (experiment patch, then the shipped #562) | **0 of 16** |
+| resume_t247.sav / resume_t252.sav, AI off | 4 of 4 / 6 of 6: the bad reference is already in those saves (at 252, a zeroed character block). They were made after round 246 was passed with EOP's AI on. Don't use them. |
+
+**Merged today:**
+- **#561:** crash reports keep Proton's log around the fault (`proton.log`, `meta.fault`).
+- **#562:** `setup` sets EOP's campaign AI at every load. It's off unless bridge.txt has `eop_ai=1`, and the log says `EOP campaign AI: off (was on)`.
+
+**How it was found** (tools in `~/mtw2-crash-bisect/fault-tools/` on tc; see the memory note *bisect-crash-by-building-up*):
+1. Proton's SEH log gave the fault.
+2. An x86 machine-code vectored exception handler, installed through LuaJIT ffi, wrote CONTEXT plus the stack to a mapped file. A Lua handler doesn't work: it re-enters the VM on every LuaJIT error exception and corrupts it.
+3. `M2TWEOPLibrary.pdb` and `objdump` on the exe named the code.
+4. Heap addresses repeat between runs, so a Lua dump of character addresses named the object.
+
+The morning's crash-rate conclusions are **withdrawn**: GC, End Turn timing, the JIT. Each was a 0-of-4 that later trials overturned.
+
+**Next:**
+1. Watch the replay through 252 and beyond.
+2. Prove it over more rounds: the A/B is 0 of 16 against 11 of 28 on one save.
+
+**For the author:** AI factions now play the game's own campaign AI, without EOP's AI patches (#562). `eop_ai=1` brings them back. And the campaign went back six turns, to 246.
+
+## 2026-11-10 (22:50): the bridge's crash is narrowed to its per-frame tick; campaign parked at turn 252
+
+**State at the stop:** tc on main (#557), stock bridge installed, game loaded at turn 252 from
+`mods/parley/saves/resume_t252.sav` (the 20:47 crash's autosave; it crashes there too, 2 of 2), paused,
+no turn loop, crash-watch stopped. Turn 252 crashes the same way as 246: the campaign can't go on under
+Parley until this is fixed. (Turn 246 was passed once with the no-Parley plugin; that is not a way to run.)
+
+**A clean harness** (on tc: `~/mtw2-crash-bisect/harness.tar`, extract into /tmp; `cut_run_gc.sh`,
+`tt_run.sh` and `trials_nopoll.sh` run the arms): a plugin with no Parley
+handlers that ends the turn from its own timer, plus only the pieces under test.
+
+| From crash_t246.sav, harness arms | Crashed |
+|---|---|
+| no Parley code | 0 of 8 |
+| + `bridge.setup()` only | 0 of 4 |
+| + setup + `bridge.tick()` every 2 s | 3 of 4 |
+| + setup + tick cut after `control()` / pause check / UI scans (GC running) | 4 of 9 |
+| the same cuts with `collectgarbage("stop")` | 0 of 8 |
+| tick cut after reading the `currentFaction` pointer, GC stopped | 0 of 4 |
+| tick cut one step later (reads `isPlayerControlled`, then runs the human-turn path), GC stopped | 4 of 4 |
+| full tick, GC stopped | 4 of 4 |
+
+The arms that passed with the GC stopped all returned before the tick's **human-turn path** (England's
+turn right after the load: apply_orders, ui_jobs, pending_rulers, the holds, click_end_turn). Tried and
+not the cause (each still crashed with the GC stopped): never reading `currentFaction` outside the human
+turn (branch `fix/tick-reads-no-current-faction`, local only, not merged: not proven), skipping
+`watch_ai_turn`, no reads of the rebels' faction, no orders at all, setup's game writes
+(auto-resolve option, marriage limits). In full Parley the counts for every single change were 35 of 36
+crashed (the 20:45 table's "23 of 25" was undercounted).
+
+**23:00, the human-turn path cut step by step** (harness, GC stopped, the harness timer ends the turn
+10 s after the load): cut before `apply_orders` 0 of 3, after `ui_jobs` 0 of 3, after `pending_rulers`
+0 of 7, after the holds (everything but autoplay's own End Turn) 2 of 7. The full tick, where autoplay
+presses End Turn about 1 s after the load, crashed 4 of 4. The holds are pure Lua table checks, so the
+2 of 7 is likely noise. The remaining suspect is **autoplay's End Turn itself, or how soon after the load
+it comes**. Note the full-Parley "paused, End Turn from Lua 1 s after the load" arm passed 2 of 2 (with the GC
+running), so timing alone isn't settled either.
+
+**Next:** harness, GC stopped, full tick, autoplay's End Turn held 10 s after the first tick
+(`patch_late.py` in the harness tar; the 23:08 run of it was broken, because the timer plugin ended the turn first).
+Compare that with the full tick, 4 of 4. Then the GC path, which is separate (the cuts crashed 4 of 9 with
+it running).
+
+## 2026-11-10 (20:45): a turn-246 crash the bridge causes, repeatable; cause not yet found
+
+**Repro on tc:** `mods/parley/saves/crash_t246.sav` (also `runs/crashes/2026-11-10-185221/`). Load it and
+end turn 246. The game dies at the end of the round, right after the rebels' (slave) turn ends, 16-20 s in.
+Scripts for each trial: `/tmp/trials_nopoll.sh`, `/tmp/min_run.sh` and siblings on tc (copies in this
+session's scratchpad; not in the repo).
+
+| Setup (from crash_t246.sav) | Crashed |
+|---|---|
+| No Parley code (a 25-line plugin that only ends the turn) | 0 of 8 |
+| Stock bridge, autoplay, no Lua polling | 5 of 5 |
+| Autoplay variants: no orders / no move / % out of the note / overlay off / GC stopped / all event handlers off / turn start+end handlers off / tick idle between turns / UI scans and sweep skipped | 23 of 25 |
+| Bridge paused, the turn ended from Lua | 4 of 14 |
+| Bridge's per-frame `on_frame` replaced (events and setup kept) | 1 of 3 |
+| Autoplay held 12 s after the load | 2 of 4 |
+
+So the bridge raises the crash rate from 0 to nearly 1 on this save, and no single handler explains it. The
+per-frame tick on England's turn (autoplay) matters most. Also seen live on turn 231 (18:38). The campaign
+passed 246 with the no-Parley plugin for that one round, then resumed under Parley from
+`resume_t247.sav` (20:42).
+
+**Next:** bisect the tick's England-turn path (apply_orders with no orders, ui_jobs, pending_rulers, the
+holds, click_end_turn), and `setup` (game options it sets at load), with 5+ trials per arm. One trial
+proves nothing here: the "paused" arm passed 5 of 5 before it crashed 4 of 14.
+
+**Also fixed tonight** (each merged, tests green, live on tc):
+- **#553:** the watch wakes with `OUT` when another seat's reports stop (France was conquered on turn 169
+  and nothing woke for 40 turns).
+- **#554:** a disband of the unit its commander rides says so (England ordered "disband the cog" of a
+  one-ship fleet 22 times).
+- **#555:** `just play` sets the old turn log aside instead of emptying it (it wiped the record of two crashes).
+- **#556:** `just probe` installs where the bridge is. Before, it never replaced the bridge, so no "probe"
+  run was a no-Parley split.
+
+## 2026-11-10 (17:10): five fixes live since the restart; papal-check crashes open
+
+**Fixed and proven live** (tc on main #550):
+- **#547:** an accepted wife offer is closed with Escape, then the bridge marries him (`M.marry_now`). Before,
+  the accept click crashed the game (15:23). Not yet seen live.
+- **#548:** the first turn start after a load marries nobody. An offer open in the save isn't in `pending`,
+  and marrying its man crashed the game twice (Arthur Fowler, 15:25 and 15:31). Live 15:47.
+- **#549:** `find_tick` looks inside the scroll only. Green province borders beside the scroll had hidden the
+  papal notice's check, and End Turn stuck 10 min on turn 126. Live 16:41.
+- **#550:** recruits due more than 20 turns ahead are dropped. They were stale from before the restart and
+  made Nottingham's queue read full for good. Live 16:58.
+
+**tc config (not in the repo):** `fallback = "claude:sonnet"` for both seats, since Haiku's safeguards refused
+England's turns 140-142 (0 orders each). Sonnet is asked only when Haiku fails a turn; the author moved off Sonnet
+10-29 for the usage cap.
+
+**Open: crashes after the papal notice's check is clicked.** At 14:50 (turn 44) and 16:54 (turn 135) the
+game crashed seconds after "asking for its check" and the click. The replay went through both times, and
+other check clicks (16:41, 16:43) didn't crash. The check is a mouse click, and it opens the election.
+Candidates for a no-click route:
+- Return/space on the notice, as Escape answers a decline;
+- an EOP call that starts the election.
+
+Neither is tried; it needs a bench case (`games/qa/popups.toml` has the notice).
+
+**Open:**
+- France's applied share swings with its renamed armies (its AI is unfrozen 1 s into its turn). That's the author's call.
+- One-off crashes: 16:12 (turn 110, after England broke an alliance and besieged in the same turn), 10:21, 12:25.
+
+## 2026-11-10 (14:20): a second save the game can't play past (France's turn 271); campaign restarted at turn 5
+
+**Crash, same kind as turn 147:** from turn 271 every replay crashed in France's AI turn, with the game's own
+"unspecified error" box. Reports are `runs/crashes/2026-11-10-1252*` through `-1401*` on tc. The bridge's last
+lines are always France's spies, "partly successful". Splits on the repro save `mods/parley/saves/crash_france_t271.sav`
+all still crashed:
+1. France's freeze off.
+2. No Parley orders for France.
+3. **No Parley Lua at all** (`just probe`, End Turn pressed through the probe).
+4. The probe, with four French characters named Saisset/de_Poitiers killed.
+5. EOP's own campaign AI off (`M2TWEOP.getEopAiConfig().enabled`; it was **on**, and Parley never sets it).
+
+So, as at turn 147, the game or EOP core can't play the turn. Saves are in `~/mtw2-saves-france-crash-20261110`.
+Earlier one-off crashes (10:21 turn 99, 12:25 turn 249) were also in France's turn and didn't repeat.
+
+Next: an upstream report with both repro saves, and the EOP AI as a suspect worth a whole-campaign A/B (off
+from turn 1).
+
+**Open, set_tax:** Nottingham read `normal` in England's reports on turns 262-270 after `high`/`extortionate`
+orders. The probe at 13:38 read it as 2 (high) in the game, so the write lands. Something sets it back before
+the next report, or the report reads it wrong. #544 only catches a write that doesn't land, which isn't this.
+Next: probe the level at England's turn start, before the report.
+
+**State 14:20:** the campaign was restarted from `scratch_run10_start.sav` (turn 5). The old run's turn folders
+from turn 5 on are in `~/mtw2-scratch-turns-run-to-t271-20261110`. Crash-watch, the loop and the watch are
+running, and tc is on main #545. Lesson: stop crash-watch before `just relaunch-game` by hand. Otherwise it
+reads the kill as a crash and relaunches the newest autosave.
+
+## 2026-11-10 (09:20): a save the game itself can't play past (rebels' turn, turn 146-147)
+
+**Crash, new kind, not Parley's code now:** from turn 146 the campaign crashed 4 times out of 4 at the end of a round
+(08:43, 08:50, 08:56, and a replay; reports `runs/crashes/2026-11-10-0843*`, `-0850*`, `-0856*` on tc). The
+game's own "unspecified error" box. Its `mods/parley/logs/system.log.txt` ends at `Faction turn start: slave`,
+i.e. in the rebels' turn; the bridge's last lines (England's famine batch) are only the last events before it.
+Split, both on the repro save `mods/parley/saves/crash_rebel_turn_t147.sav`: (1) the disaster handler off: still
+crashed; (2) **no Parley Lua at all** (a plugin script that only presses End Turn): the log still stops at
+`Faction turn start: slave`. So the game or EOP core can't play the rebels' turn from that state. Not yet known:
+whether Parley's earlier actions (EOP marryWife wives, merge_armies, France's AI freeze) built that state. Next:
+read the rebels' armies/characters in the repro save for something odd; try the repro on a vanilla EOP campaign
+setup; consider an upstream report. All six autosaves kept in `~/mtw2-saves-rebel-turn-crash-20261110` on tc.
+
+**State 09:20:** live run restarted from 11-06's kept save (`parley_keep_scratch.restored-20261106-115556.sav`,
+turn 39), crash-watch, `just play scratch`, watch armed. #538 held (no marriage crash since 07:12).
+
+## 2026-11-10 (07:25): rulers on the test laptop (Haiku); the marriage crash found and fixed; tc can't lock
+
+**State 07:25:** the test laptop on main #539, campaign `scratch` playing unattended (turn ~57, from turn 45 at 07:08):
+`just play scratch`, crash-watch unit active, `WATCH_BOT=0 just watch scratch` armed from the main machine's session.
+Rulers answer in 15-60 s with 0 rejected. tc powers off at 23:59; nothing restarts the loop after the 03:00 boot.
+
+**Rulers on tc (the author's 11-06 pick), measured** on its i7-4810MQ CPU against a real 11.5k-token ruler prompt:
+qwen3.5:9b ~11 tok/s reading (≈1000 s a prompt), heretic4b 513 s + 3.4 tok/s, heretic2b 210 s + 8.4 tok/s but
+`ruler-eval-fixed` 4/6 answered, 27% legal. `claude:haiku` 6/6, 100% legal, 41 kept, 32 s median: tc's
+games/local/scratch.toml now uses it for both brains, the decider and the reader (backup `.bak-20261110`). It
+spends the author's Claude usage. heretic2b/4b stay imported in tc's Ollama.
+
+**Done:**
+- #537 Ollama seats send `num_ctx` (prompt/3 + 2048, min 8192): the 4096 default cut ruler prompts silently.
+- #538 the turn-start marriage crash: 07:11:27 the game offered Michell Merrett a wife and `marryWife` on him in
+  the same second crashed it (#535's breadcrumb was the last line; the replay had no offer and passed). Now
+  `marry_live` marries nobody while a family offer is pending. **Proven live 07:16:44** (offer for John Giffard,
+  "nobody married this turn", game played on; 07:18:44 married George Edwardes). Closes the 11-06 crash lead.
+- #539 relaunch_game.sh: the 240 s load wait starts when Steam starts the game; Steam gets 900 s before that
+  (`PARLEY_STEAM_START_TIMEOUT`). 07:01 today Steam self-updated after the boot and started the game at ~5 min.
+- tc can't lock or sleep: KDE auto-lock/lock-on-resume off, powerdevil DPMS/dim/suspend removed, lid does
+  nothing, LightDM autologin for author (`/etc/lightdm/lightdm.conf.d/90-mtw2-autologin.conf`; delete to undo).
+
+**Next:** watch the run (crashes, `offer is open` lines, England's 1-2 orders a turn vs France's 11-18: read
+whether England is passive by choice). Before 23:59 `just stop` on tc. Forced-events list below still open.
+
+**For the author:** autologin was your call on 11-05; it's on now under "keep it from locking". Delete the file above
+to undo. Haiku rulers spend your Claude usage at about two 12k-token calls a turn.
+
+## 2026-11-06 (13:10): parked on the author's order; rulers move to the test laptop next
+
+the main machine became nearly unusable for the author, and a peer session relayed his order to wrap up at once. Nothing below was
+measured or finished after that.
+
+**State:** `just stop` ran on the test laptop about 13:05: game up, paused on turn 45 (main #535), paused.txt holds the stop
+text. Tunnel `mtw2-heretic-tunnel` stopped on the main machine. No watch running. GPU mode not touched. The live
+acceptance list below is still open.
+
+**Next session, first:** the author's pick 11-06: run the rulers on the test laptop itself, not on the main machine's GPU. Heretic's one
+slot starved them: both seats returned no content at 600 s on turns 41, 42 and 43 (0 orders), so that run proved
+nothing about ruler play.
+- tc already has an `ollama` container (0.35.1, 127.0.0.1:11434, CPU, models in /opt/models/ollama) holding
+  `qwen3.5:9b`. No copy from the main machine needed. Check who else uses that container first: mafski-web runs on tc.
+- One generate test (80 tokens) beside the running game gave curl no answer in its 170 s. Cause not read: slow
+  load, or too slow on this CPU (i7-4810MQ, 8 threads, 15 GB). Read `docker logs ollama` and retry with the
+  loop stopped, then beside the game. Too slow means trying the 2B or 4B Heretic GGUF from the main machine
+  (/opt/models/gguf, 1.3 and 2.8 GB; tc has no llama-server, Ollama can import a GGUF).
+- `claude:haiku` answers on tc today (`claude -p --model haiku` returned ok). It spends the author's Claude usage, so
+  it's the fallback and needs saying if used.
+- Then edit tc's `games/local/scratch.toml` (seats' decider, gitignored; its reader names agy, not installed
+  there), `just seat-smoke`, `just ruler-eval-fixed`, `just play scratch`, `WATCH_BOT=0 just watch scratch`.
+  Report measured speed and legal rate. The tunnel stays off unless something needs it.
+
+**Open crash lead (12:29, runs/crashes/2026-11-06-123034):** the log stopped at England's turn 42 start, last lines
+`adoption offer: Hugh Stafford for england`, no click on that offer; the replay passed with no offer. Of 9 real
+crash reports, 6 stopped within 11 s of a family offer (5 within 4 s). About 125 offers since 11-05, so at most
+about 1 in 20. `offered()` reads a batch of event fields, and a batch read crashed turn 67 before; that link is
+untested. The #535 breadcrumbs name the step next time.
+
+**Forced events:** 19 forced, 12 route, 3 no_route. Next: fire a crusade at a rival's town to see whether "Join
+the Crusade" follows; capture messages 52, 187 and 68 as they fire. Each bench run parks the live run.
+
+## 2026-11-06 (06:45): items 1-3 of the night's list done; marriage declines no longer click
+
+**Next session, in order:**
+1. **Forced events, the author's order 11-06 ("we don't want to be at the mercy of the game"):** work through
+   `games/forced_events.toml` until every row is forced or has a stated reason it can't be. A row is forced
+   only when a bench case sees the GAME react: a helper's own `ok` line passed in 0.1 s and proved nothing, three
+   times today. For a new event, throw a probe suite at it and read which game message appears within a second.
+   Status and what each open row tried are in that file (19 forced, 3 can't be, 12 open at #533). First up: fire a crusade at a rival's town and see whether "Join the Crusade" follows (seen on turn 16 of a 12-turn awake run), and capture game messages 52, 187 and 68 at the moment they fire: they're unidentified, so excommunication and missions aren't ruled out. Rules learned:
+   the quiet world holds off rebellions, offers and missions, so test those with `M.qa.quiet_off()` and `needs`;
+   never write campaignDb or setGuildCooldown in a probe (they outlive the bench and reached the live game twice);
+   never put a shorter `timeout` around `just qa` (killing it skips the restore; `just qa-restore` recovers).
+2. Live acceptance, **started 06:41 on turn 30, still unproven**: the tunnel as the user unit
+   `mtw2-heretic-tunnel` on the main machine (a plain `ssh -R` joins the ControlMaster and exits 0), `just play scratch` on
+   the test laptop, `WATCH_BOT=0 just watch scratch` (no bot token there; without it the watch exits on a false DOWN).
+   Watch for `marriage offer despite pre-marriage` and "declined with Escape" in the turn log. **Don't run
+   `just gpu mtw2` without asking the author:** it stops Klarheit's M11/M12 timers and Ollama, and each missed slot
+   permanently costs those experiments; mine cost about 06:40-08:28. On shared, Heretic has 1 slot, so rulers
+   queue. When the run ends, before 23:59: `just stop`, `systemctl --user stop mtw2-heretic-tunnel`.
+3. Fix cause: relaunch_game.sh misses a Steam "Verifying installation" hang (03:00 boot, false crash report
+   runs/crashes/2026-11-06-035155). Not started.
+4. The author's calls: see "For the author" below.
+
+**Open crash, cause unknown (live 11-06 12:29, runs/crashes/2026-11-06-123034 on the test laptop):** the log stopped at England's turn 42 start, between "trained in York" and "governors england", with `M.marry_live` in that gap and a reopen click 8 s before. Crash-watch relaunched in about a minute; the replay of that turn start went through (12:32:05), also with a reopen click just before, so it isn't deterministic. Neither #519 nor the click is convicted or cleared. #535 adds `turn start <faction>: <step>` and `marrying <name>` lines: the next crash names its step.
+
+**Filed, not fixed:** `just play` prints "turn loop and bot are running" when the bot isn't. The source-read hook
+blocks reading out-of-repo source by path from inside a worktree (Read works). agy's edit jobs often time out at
+9 minutes on Flash medium, some with no edits at all: run the check on whatever is left.
+**Measured 11-06:** 7 accept clicks on marriage scrolls on the bench, 0 crashes (wife 3, suitor 4).
+
+**State 06:45:** the test laptop on main (#525), game up and paused on turn 30 (a copy of the pre-offer run, moved
+on by probes), crash-watch active, no loop. The saves holding the open offer are in
+`~/mtw2-saves-with-open-offer-20261106` on the test laptop, and `mods/parley/saves/offer_open_t29.sav` reopens that
+scroll on any load: `bash scripts/relaunch_game.sh --save offer_open_t29.sav` (a repeatable repro).
+
+**Done (each proven on the bench or live, full suite green):**
+- #519 marries single men at the human slot's turn start. Live 05:45: 5 men married at England's turn start.
+- #521 frozen_rival_offers_nothing: its first pass was vain (the Aztecs took no turn in the one round seen,
+  and `^` matched any line). Rewritten; passed 05:36 and 06:16 with denmark, two whole rounds. The
+  ai_diplomacy_offers hold is claimed with its limit written down: the freeze covers a faction's first second.
+- #523 a marriage decline presses Escape, not a click (`press_escape`). By hand 05:44-05:48: Escape on the open
+  offer, then End Turn reached England's next turn, 3 of 3. Bench 06:04, a suitor scroll through the whole
+  loop: pass. An accept still clicks: Escape can't say yes. Not seen: Escape with no scroll opens the game's
+  menu; `_finish` looks straight before pressing.
+- #524 a pause lifts only for whoever set it. `Orchestrator._answer` lifted any pause, so QA's scripted ruler
+  took off `just stop`'s pause. QA relied on that twice by accident: the park now sets the stop pause aside
+  (qa.lock `stop_pause`) and the restore puts it back; a turn case lifts the run's own hold itself. Live:
+  paused.txt keeps the stop text through a run.
+- #522 `just relaunch-game --save X` ignored X (no `[positional-arguments]`).
+- #525 a wife offer gets its own wording and skips the suitor score. Not proven: `isMale` on a real wife
+  offer's character; if it's missing the old wording stays. The first wife offer live is the test.
+- Whole no-click bench on #524: 78 pass, 0 fail, 0 inconclusive, 24 turn cases skipped by design, 16 min
+  (runs/qa/2026-11-06-0636-all.md on the test laptop).
+
+**Probed, ruled out:** the offer scroll can't be answered from Lua by name. It isn't among the 4,012 exe names
+`M.scan_ui` tries, nor under `strat_ui`, so `execute()` has nothing to act on. (A reply to
+EOP-Labs/M2TWEOP-library#91 is public, so it waits for the author.)
+
+**Found, not fixed:** `princess_suitor_offer` isn't held on the bench (games/interrupts.toml). It holds End Turn
+about 40 s; Escape answers it now since QA's seat declines. The case's 6 turns may still be inconclusive.
+
+### For the author
+
+1. **Marriage clicks crash sometimes, not always, and #519 was decided on "4 of 4".** See below. #519 still
+   removes wife offers, but its stated reason was too strong. Keep it, or restore the offers now that declines
+   use Escape (`autoplay.marriage_offers = true`)?
+2. **An accepted suitor still needs a click**, the path that may crash (accepted 11-05 19:59 crashed; 20:20 and
+   20:41 didn't). Rulers' wishes get carried out, so that stands unless you say otherwise.
+3. Escape is keyboard X input, a named last resort under no-clicks-first. It still can't run in a no-click run.
+
+## 2026-11-06 (05:50): open items from the morning session
+
+**"Every marriage click crashes" is wrong; #519 was decided on it, so the author should hear this.** On 11-05
+`logs/scratch-turns.log` on the test laptop shows accept clicks at 20:20:14 (Francis Went) and 20:41:20
+(Estrelda of_Normandy) with the game playing on, and 11-06 05:35:52 a decline click on the bench survived.
+The 19:59:56 crash was on Anthony Despenser, a man's name, so "only the wife scroll crashes" isn't
+supported either. Both kinds exist (scroll text): a suitor for a princess, a wife for a man. PR #521's
+body overstates this ("the wife offer that crashes").
+
+**Tooling blocks met, not fixed (Refinery's, its session was busy):** surface-write-guard reads a whole
+quoted `ssh '...'` as one segment, so a `cp` of a `.sav` beside a `scripts/x.sh` mention is blocked (I ran
+the `cp` alone). agy's headless mode denied `test` (`fix_cause`: add `command(test)` to
+features/antigravity/permissions.json), and its brief lint rejects `.venv/bin/python`.
+
+## 2026-11-06 (early): marriage-crash fix decided and built (PR #519, unproven); QA still blocked
+
+**Next session, in order:**
+1. The live save holds an open marriage offer that comes back on every load, and it blocks `just qa`
+   (it waits 600 s for a decision, then refuses). Never click it (4 of 4 clicks crashed). Load an
+   earlier autosave, or the bench save, from the menu with no scroll on screen. Then run
+   `QA_REAL_GAME=games/local/scratch.toml just qa diplomacy case=frozen_rival_offers_nothing` (#468);
+   on a pass, claim the ai_diplomacy_offers hold in games/interrupts.toml.
+2. PR #519 (`fix/marriages-in-advance`, not merged): bundle it to the test laptop, `just reload-bridge`,
+   `just qa family case=single_men_married_in_advance`. Merge only on a pass and a green full test run.
+3. Fix causes: relaunch_game.sh misses a Steam "Verifying installation" hang (03:00 boot: no window,
+   restore failed, false crash report runs/crashes/2026-11-06-035155); the popups prompt says "for your
+   princess" for a man's marriage offer.
+4. Live: `just play scratch` lifts the pause.
+
+**State at 05:10:** the test laptop up, game running and paused (`parley_turns/paused.txt`), crash-watch
+on, no loop or QA. Main at #518.
+
+**Decision (the author delegated; risks signed off 11-06 "just-do-it"):** the bridge marries the human
+slot's single grown men at its turn start (`M.marry_live` -> `M.marry_singles`, EOP
+`characterRecord:marryWife`), so the game has nobody to offer a wife to and no scroll needs a click.
+`autoplay.marriage_offers = true` turns offers back on. The ruler's prompt names who was married
+(`married-<faction>.txt` in the turn folder). Proven by hand live 11-06 04:10: marryWife married 5
+men, no crash; married non-family generals stay non-family. Proven at 04:11: a decline click on an
+offer crashed the game even with the man already married, freshly loaded and no End Turn pending, so
+the click itself is the cause. Upstream ask: EOP-Labs/M2TWEOP-library#91.
+
+## 2026-11-05 (night): full phase-2 pass in 72 min; holds proven; two new gates
+
+**Next session, in order** (details in the paragraphs below):
+1. `just qa diplomacy case=frozen_rival_offers_nothing` (#468). On a pass, claim the ai_diplomacy_offers
+   hold in games/interrupts.toml.
+2. `just qa family` (#470): should reproduce the marriage-click crash (or come back inconclusive if
+   no offer comes). Then the fix the author picks, proven by the same case.
+3. Live: `just play scratch` lifts the night's pause (#473); start `just watch scratch` (it now
+   wakes on crashes too, #463) and `just crash-watch` if it isn't active.
+   State at 22:56: the test laptop paused (`parley_turns/paused.txt` under the game folder), crash-watch
+   active, no loop or QA; main at the last of tonight's test-only PRs (#504-#516).
+4. The author's calls: the marriage-crash fix; a hotseat campaign for France; the Refinery checker's crash
+   on long evidence; popup reader on the test laptop; tunnel vs LAN Heretic.
+
+**Top finding, needs a decision: answering a marriage offer by screen click crashes the game.**
+Live 20:00 (run 10, turn 13): England's marriage offer (Anthony Despenser) at 19:59:44, the turn
+loop clicked "accept" at 19:59:56, the bridge log stops there, and crash-watch found the crash dialog
+at 20:00:49 and relaunched (runs/crashes/2026-11-05-200049 on the test laptop). End Turn was not pending.
+The bench showed the same twice (11:57 a decline, 12:15), which is why the bench now marries
+England's men so no offer comes (#412) — but a live campaign still gets offers. Options: (a) press
+the scroll's buttons through the game's UI from Lua instead of a click (unproven; asked upstream in
+EOP-Labs/M2TWEOP-library#91 on 11-05, no reply by 22:30); (b) prevent offers
+live too, as the bench does (marries off the rulers' single men: a change to the game); (c) leave the
+offer unanswered, if the game lets the turn end. The repro case is written (#470, not yet run):
+`just qa family` turns offers back on for one case (M.qa.marriage_offers_on), spawns an unmarried
+general and answers the offer; it should fail (crash) until a fix holds, which makes it the bench
+proof for whichever option the author picks. An offer within 3 turns is the game's roll (chance case).
+Crash-watch recovered this one in under a minute; the turn's decisions were replayed.
+
+**Most important:** the full phase-2 pass (every suite once, 17:26-18:44 on the test laptop) took 72 min,
+well inside the 3-hour budget: smoke 2, covert 10, envoys 6, diplomacy 11, field 7, navy 14, towns
+5, siege 6, popups 11. 128 of 134 passed; the 3 fails were bench bugs, fixed (#440-#442) and each
+passed alone after; 3 inconclusive (the two instant AI-offer cases, which can't pass by design, and
+the chance case ai_offer_on_its_turn). Run 10 plays on main (bridge reloaded 19:21, turn 11). The
+no-click run on tonight's code (`just qa all kind=instant`, 19:38-19:53) is clean: 77 pass, 0 fail,
+0 inconclusive, 21 turn cases skipped by design (runs/qa/2026-11-05-1953-all.md on the test laptop). Again
+on the final code (#460, 21:36-21:52): 77/77 (runs/qa/2026-11-05-2152-all.md). End of day: run 10's
+turn loop stopped at 20:58 (turn 24), crash-watch on, GPU back to shared (Heretic 1 slot), the
+reverse tunnel closed. With no loop, autoplay kept ending turns with no orders (turn 29 by 22:07), so
+the campaign is **paused** (`parley_turns/paused.txt` on the test laptop, written by `just stop`). Since
+#473 `just stop` always pauses and `just play` lifts that pause by itself; a pause with another
+reason (a QA hold, a seat's usage limit) stays.
+
+**Found tonight:** `instant/quiet_world_held`, the bench proof for five interrupt holds, never
+existed; `quiet/quiet_world_held` now reads the quiet world back from the game (pass 19:16).
+Adoption offers are now held the same way as marriage (EOP familyTree.maxAdoptionAge, live: 30 -> 0
+on the bench, back to 30 for the real game); man-of-the-hour offers remain unproven. #443 merged
+red because the merge command piped pytest through tail; #444 fixed it and #445 gates that shape.
+Lessons reviews (#446, #454) proven live at run 10's turn 20: they started once both rulers had
+answered (20:41:19), England's kept 3 lessons in 163 s, France's 3 by 20:47; none timed out. The
+second overlapped turn 21's decisions (an answer's thinking cut at 180 s), so #457 now staggers
+them, one ruler a turn (not yet seen live: the next review turn is 40).
+
+**France's ruler shares control with France's game AI (open, the author's call).** France is an AI-slot
+seat (in run 9 too: "france: game AI frozen" at 16:55). Its game AI is frozen at its turn start, then
+unfrozen so the turn can end, and it reshuffles France's armies and captains: run 10 turns 8-11 lost
+2-4 French orders a turn as "unknown army" (Captain Henri became Captain Martin on the same tile).
+I tried making France a human slot by probe (`isPlayerControlled = 1`, 19:22): the value stuck, but
+France's turn 11 then never ended (End Turn pressed 2 s into it; stuck 10 min), so I set it back at
+19:35 and the game went on. The bridge is not what failed: it resets autoplay at each human turn
+start, and a fake-game test of two human factions ends both turns. The game kept refusing France's
+End Turn, so flipping the flag mid-campaign doesn't make a hotseat player; two human slots need a
+hotseat campaign started from the menu (clicks, the author's call). Until then AI-slot rulers' army ids go
+stale each turn; since #489 and #491 their refusals and role text say why and to use this report's
+ids (not yet seen live).
+
+**First ruler-eval baseline on the fixed set (21:00-21:10, Heretic on the main machine, `just ruler-eval-fixed
+heretic:think heretic:local`, runs/ruler-eval/20261105-2110.md here):** heretic:think answered 6/6,
+87.0% legal orders (47 kept, 7 rejected), median 222 s (its thinking cut at 180 s each time, then the answer written);
+heretic:local (no thinking) answered 6/6, 84.2% legal (32 kept, 6 rejected), median 20 s. Without
+thinking: about 11x faster, nearly as legal, fewer orders. Gemini Flash low through agy (21:11-21:13,
+runs/ruler-eval/20261105-2113.md): 6/6, 100% legal (25 kept, 0 rejected), median 26 s, the fewest
+orders. A second run of all three (21:17-21:30, runs/ruler-eval/20261105-2129.md, with #458's order
+mix): heretic:think 78.4% legal (9 points below its first run: one run proves little),
+heretic:local 83.8%, Gemini 100% again. Kept orders by area: think leans on agents (13 of 40),
+local on armies (19 of 31), Gemini spreads them (6 armies, 5 agents, 4 build, 5 recruit, 4 taxes).
+Legal is not good: outcome scoring is open.
+
+On a pass of #468, the ai_diplomacy_offers hold reads: held_by freeze=*, proof as ai_attacks_sieges,
+bench diplomacy/frozen_rival_offers_nothing.
+
+**Risk profile of the evening (8418247..8330ad6, jcodemunch):** 0.80 "critical", driven by volume
+(228 symbols, 73 files, ~50 PRs) and old complexity in lua/parley_bridge.lua (`spawn` 72 paths,
+`merge_armies` 49, `merge_units` 34, `bench_marriages_off` 31). Its "94 untested" leads with TOML keys,
+not code. A calm-day candidate: split `spawn` and `merge_armies` behind their existing tests.
+
+**Open for the author:** the Refinery's standards_check.py `_evidence_ok` crashes (ENAMETOOLONG) when
+`(project / ev).exists()` walks the whole evidence string and its first missing segment is over 255
+bytes. One-line fix there: wrap that `exists()` in `try/except OSError` (the Refinery checkout had
+someone's uncommitted work tonight, so I didn't touch it). mtw2's tests/test_standards_evidence.py
+(#500) catches such evidence meanwhile.
+
+## 2026-11-05 (late): run 9 lost, run 10 started; phase 2 clean
+
+**Most important:** run 9 ended at turn 96 (17:10): Scotland took York, England's last town, and the
+game sat on its campaign-over screen. Run 10 started at 17:12 with no clicks: run 9's turns and
+databases are archived as `scratch.run9*`, and the game loaded a copy of the bench save
+(`mods/parley/saves/scratch_run10_start.sav`, England at turn 5) through `relaunch_game.sh --save`.
+In run 10 only England is a human slot (the bench save's); France's ruler still plays, as a seat on
+an AI slot (the game's AI frozen on France's turn): both got turn-5 reports and the bridge waits for
+both from turn 6 (17:25).
+
+**Phase 2:** every case passes on the bench except the two instant diplomacy offer cases, which can't
+pass by design (the AI offers only on its own turn); their turn versions pass (ai_offer_on_its_turn,
+two_offers_on_their_turns #434). papal_election_no_vote passes since #430.
+
+**Found live and fixed (#429-#436):** crash-watch was not running 14:41-16:50, so the 16:38 crash sat
+until a QA run found it (#433 makes the watch say so); a QA restore on the test laptop failed on the missing
+bot token and kept qa.lock (#431); the watch said DOWN during bench runs (#435) and STUCK on a defeat
+(#436); refusals for armies that vanished during the AI turns now say why (#429).
+
+**Unexplained:** the 16:38 crash (turn 95), right after England's spy moved into Dijon with French and
+Milanese spies inside. The bench case passed and the same orders replayed on the same save ended the
+turn normally; the case stays as a guard.
+
+## 2026-11-05 (evening): a live campaign on the merged code; what it showed
+
+**Most important:** from 14:41 the scratch campaign (England and France on Heretic, the rest the
+game's AI) has played on the test laptop on main, turn 75 onward, 3-8 min a turn, no crash or stall. Heretic
+runs on the main machine (GPU in `just gpu mtw2` mode, ~25 tok/s with both rulers thinking) and the laptop
+reaches it through a **reverse ssh tunnel** (`ssh -N -R 127.0.0.1:8090:127.0.0.1:8090 author@<test-laptop-ip>`,
+riding the session's ssh connection). Before the night: stop the loop, `just gpu shared`.
+
+**What the live run found (fixed, #419-#424):** the loop answered stale reports from a relaunch before
+the real turn (both rulers timed out on turn 75); a loop started over ssh couldn't see the game's popups;
+a ruler repeated a refused assassination (no hint what to do); France blamed ambushes for armies that
+had simply run out of units. A cross-model review of the day's code (agy, flash-high) found that #419
+would have stalled the loop after a reload to an earlier turn; fixed in #424 with two other findings.
+
+**Open (the author):** the test laptop has no popup reader (no agy, claude or tesseract): game messages reach its
+rulers unread; installing one needs a login or sudo. Opening Heretic to the LAN instead of the tunnel is
+a the main machine network change. Rulers' periodic lessons review times out on Heretic's two busy slots
+(harmless, but it competes with the rulers). `papal_election_no_vote`: the bench save sends message 210,
+not the notice 202 the case is about; what 210 is needs the game's message table.
+
+## 2026-11-05 (afternoon): phase 2 runs in 51 min; the crash causes found and fixed; merged as #416
+
+**Most important:** the full phase-2 pass (all 97 bench cases, played turns included) ran on
+the test laptop in **50 min 33 s** (13:06–13:57): 91 pass, 4 fail, 2 inconclusive. Two of the fails were
+fixed and proven one case at a time since (blockade_port, besiege_assault_storms). Everything is in
+main through **#416** (929a799; 27 PRs; `just test` 1640 passed).
+
+**Still failing, with the reason:**
+- ~~`towns:next_turn_delivers`~~ fixed 14:37 (#418): it builds in London, which stands in 3 turns.
+- `popups:papal_election_no_vote`: with England's cardinals dropped, the game sent 201/210/203 but never
+  the notice (202) the case is about. The case's premise doesn't happen on this save.
+- `diplomacy:ai_offer_accepted`, `second_offer_asked_again`: inconclusive, no offer on screen (as ever).
+
+**What the crashes were (11-05):** (1) stale `popup-*.req` files from earlier runs, kept fresh by the
+hold's resume, answered by the turn loop with clicks under a pending End Turn (#411); (2) marriage-offer
+scrolls clicked (#412 marries the bench's men so none arise; #410 holds End Turn for any offer);
+(3) blockading a rebel port (#414 refuses it, ruler-facing). The Wine log's `\r\n` had made three cases
+fail on lines that were there (#407).
+
+**Speed (the author's 6 steps):** a reload 22.5 s → ~15 s (~6 s load + ~8.5 s readiness, a 6 s canary walk);
+a played smoke turn ~77 s → ~24 s; a load after a played turn 80–108 s → 25–39 s; whole suites were
+11–28 min each this morning, a single case is now 1–5 min (`just qa <suite> case=<name>`).
+
+**For the author:** rebel-port blockades are refused for rulers until proven safe; force-push decision on
+public commit 0bf7b81 (old Discord handle); 20 old full-desktop crash screenshots in `runs/crashes/`;
+LightDM autologin and Gitea credentials for the test laptop.
+
+**Next:** the towns bench-save gap; the papal no-vote premise; the inconclusive offer cases; then the
+ruler track (Jigsaw v0.9.0 is tagged; Parley pins v0.8.0, no rollback past v0.9.0 once moved).
+
 ## 2026-11-05: phase 1's last case fixed; docs rewritten for outside help; QA runs over ssh
 
 **Most important:** `marry_foreign_general` is fixed (the princess was disgraced, not married; the

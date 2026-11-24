@@ -83,13 +83,13 @@ while [ $# -gt 0 ]; do
             extra+=(--no-smoke)
             shift
             ;;
-        kind=*)  # just qa <suite> kind=instant: instant cases only, no clicks (turn cases skipped)
+        kind=*)  # kind=instant: instant cases only (turn cases skipped); kind=noclick: every case, every click refused
             extra+=(--kind "${1#kind=}")
             shift
             ;;
         --kind)
             shift
-            [ -n "${1:-}" ] || die "--kind requires all or instant"
+            [ -n "${1:-}" ] || die "--kind requires all, instant or noclick"
             extra+=(--kind "$1")
             shift
             ;;
@@ -126,6 +126,7 @@ else
 fi
 
 if [ "$cmd" = "run" ]; then
+    # the bench checks the game runs this checkout's bridge itself (runner._check_bridge_build)
     exec uv run python -m parley.qa run "$suite" --real "$real_toml" ${extra[@]+"${extra[@]}"}
 elif [ "$cmd" = "bench-save" ]; then
     exec uv run python -m parley.qa bench-save "$step" --real "$real_toml" ${extra[@]+"${extra[@]}"}

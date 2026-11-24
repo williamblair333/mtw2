@@ -227,6 +227,57 @@ expect = [
     { log = 'popup button on screen: pressing diplomacy_accept_offer_button' },
 ]
 
+# Two AI offers on the AI's turns, answered one by one: two rivals' envoys court England's town at
+# their own turn starts; the scripted ruler declines the first offer and accepts the second, and the
+# bridge presses each answer. The turn version of second_offer_asked_again (instant, phase 2: the AI
+# makes no offer in a held turn). When the declined offer's screen is still open as the second comes,
+# this is #297's scene and the log also says "a new offer: asking the ruler again"; the case doesn't
+# require that line, since whether the screen stays open is the game's. A chance case, as
+# ai_offer_on_its_turn: an AI may re-task its envoy or propose nothing (inconclusive, never a pass).
+[[cases]]
+name = "two_offers_on_their_turns"
+chance = true
+max_turns = 2
+choice = ["decline", "accept"]
+setup = [
+    { lua = 'return M.qa.rival("england", 1)', bind = "first" },
+    { lua = 'return M.qa.rival("england", 2)', bind = "second" },
+    'return M.qa.stance("england", "$first", "peace")',
+    'return M.qa.stance("england", "$second", "peace")',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at1" },
+    { lua = 'return M.qa.spawn_agent("$first", "diplomat", $at1_x, $at1_y, "QA Envoy")', bind = "envoy1" },
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 3)', bind = "at2" },
+    { lua = 'return M.qa.spawn_agent("$second", "diplomat", $at2_x, $at2_y, "QA Envoy")', bind = "envoy2" },
+    'return M.qa.court("$envoy1", "$garrison_town")',
+    'return M.qa.court("$envoy2", "$garrison_town")',
+]
+expect = [
+    { log = 'qa: court: $envoy1 parleys with $garrison_town at $first.s turn start$' },
+    { log = 'qa: court: $envoy2 parleys with $garrison_town at $second.s turn start$' },
+    { log = 'pressing diplomacy_decline_offer_button[\s\S]*?pressing diplomacy_accept_offer_button' },
+]
+
+# The bench's frozen AI makes no offer (games/interrupts.toml ai_diplomacy_offers: "prove it with a
+# forced case before claiming it"). A rival at peace with an envoy beside England's town, never
+# courted: two whole AI rounds, each with the rival's own turn in it, must pass with no AI offer.
+# Evidence of absence over two rounds only; ai_offer_on_its_turn shows a courted envoy does offer.
+# The first version passed in vain (live 11-06 05:28): its rival was the Aztecs, who took no turn in
+# the round it saw, it stopped at the second "ending turn" (one round, not two), and its ^ matched any
+# line (the checker searches MULTILINE), so \A here. same_religion: a rival that takes its turns.
+[[cases]]
+name = "frozen_rival_offers_nothing"
+max_turns = 3
+setup = [
+    { lua = 'return M.qa.rival("england", 1, true)', bind = "rival" },
+    'return M.qa.stance("england", "$rival", "peace")',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_agent("$rival", "diplomat", $at_x, $at_y, "QA Envoy")', bind = "envoy" },
+]
+expect = [
+    # from the start of the case's log: round, the rival's turn in it, round end, twice, no offer
+    { log = '\A(?:(?!an AI.s diplomatic offer)[\s\S])*?autoplay: ending turn(?:(?!an AI.s diplomatic offer)[\s\S])*?$rival: game AI frozen(?:(?!an AI.s diplomatic offer)[\s\S])*?autoplay: ending turn(?:(?!an AI.s diplomatic offer)[\s\S])*?$rival: game AI frozen(?:(?!an AI.s diplomatic offer)[\s\S])*?autoplay: ending turn' },
+]
+
 # Last: nothing gives the town back.
 [[cases]]
 name = "cede_settlement"

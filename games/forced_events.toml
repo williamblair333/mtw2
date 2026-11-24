@@ -1,0 +1,238 @@
+# Everything the game can raise on a ruler, and how to make it happen at will so it can be tested
+# without waiting on the game's dice (STANDARDS forced-events; the author 11-06: "we don't want to be at the
+# mercy of the game"). tests/test_forced_events.py holds this honest:
+#
+#   forced    `case` (<suite>/<name>) makes it happen every time; it must exist and not be a chance case
+#   route     a way is known (`route`) but no bench case proves it yet: the work list
+#   no_route  tried, and it can't be forced; `why` says what was tried. Never without trying
+#
+# `route` calls come from the EOP source (M2TWEOP Code/M2TWEOP library/types/). A route is a claim until
+# a case fires it. `interrupt` names the games/interrupts.toml event this forces, `inventory` the row(s)
+# of docs/decision-inventory.md, `scrolls` the K.GAME_POPUPS names the bridge knows it by.
+
+[events.marriage_wife_offer]
+what = "a woman offered as a wife for one of the ruler's men"
+status = "forced"
+case = "family/forced_wife_declined_by_element"
+interrupt = "marriage_offer"
+inventory = ["C4"]
+
+[events.marriage_suitor_offer]
+what = "a man offered as a suitor for the ruler's princess"
+status = "forced"
+case = "family/forced_suitor_declined_by_element"
+interrupt = "princess_suitor_offer"
+inventory = ["C4"]
+
+[events.adoption_offer]
+what = "a man offered for adoption into the family"
+status = "route"
+route = "no direct call in EOP (createMessageMarriageProposal has no adoption twin). 4 turns awake with offers on: nothing (11-06). Next: agy's lead, overriding onCalculationRatioForBirth from Lua (patchesForGame.cpp:3844), unverified"
+interrupt = "adoption_man_of_hour"
+inventory = ["C4"]
+[events.man_of_the_hour]
+what = "a captain offered as man of the hour after a victory"
+status = "route"
+route = "Captain Robin attacked a rival's Peasants with offers on: no offer (11-06), but who won wasn't read. Try: read the outcome; a bigger win; more tries"
+inventory = ["C4"]
+[events.papal_election]
+what = "the Pope dies and an election scroll opens"
+status = "forced"
+case = "popups/papal_election_vote"
+interrupt = "papal_election"
+inventory = ["C2"]
+scrolls = ["papal_election_scroll", "papal_election_results_scroll"]
+
+[events.ai_diplomatic_offer]
+what = "an AI faction proposes alliance, trade, ceasefire, or demands tribute"
+status = "no_route"
+why = "no EOP call makes an AI propose (games/qa/diplomacy.toml, confirmed in EOP 11-06). The AI decides on its own turn: diplomacy/ai_offer_on_its_turn courts an envoy and is a chance case by design, and a thawed AI also offered unasked on 11-06. Tested by that chance case, never at will"
+interrupt = "ai_diplomacy_offers"
+inventory = ["D16"]
+scrolls = ["diplomacy_scroll"]
+[events.diplomacy_screen_open]
+what = "the diplomacy screen left open on a ruler"
+status = "forced"
+case = "diplomacy/screen_left_open_closed"
+
+[events.event_message]
+what = "a plain event message scroll"
+status = "forced"
+case = "popups/event_scroll_closed"
+scrolls = ["event_scroll", "message_scroll", "faction_events_scroll", "hotseat_message_scroll"]
+
+[events.faction_overview]
+what = "the faction overview opens by itself"
+status = "forced"
+case = "popups/faction_overview_closed"
+
+[events.spy_report]
+what = "a spy's report scroll"
+status = "forced"
+case = "forced/forced_spy_report"
+note = "the spy order with GoodSpy 5, beside a hostile town, one bench run so far; the mission still rolls, so a failed roll would fail this case: watch it"
+inventory = ["A1"]
+
+[events.disaster]
+what = "earthquake, flood, storm, volcano, famine, locusts, fire, dustbowl or horde"
+status = "forced"
+case = "forced/forced_flood"
+note = "flood raises message 44, earthquake 42 (forced_earthquake), both within a second. Storm, riot, fire, famine, locusts, volcano and horde showed nothing on a town's tile (11-06): they may need other terrain, and riot has its own row"
+interrupt = "disaster"
+inventory = ["C7"]
+
+[events.plague]
+what = "plague breaks out in a town"
+status = "forced"
+case = "forced/forced_plague"
+interrupt = "plague"
+inventory = ["C7", "R21"]
+
+[events.riot]
+what = "a town riots"
+status = "route"
+route = "M.qa.force_disaster('riot'): no reaction seen yet, may be one of messages 44 and 42"
+inventory = ["C7"]
+
+[events.rebellion]
+what = "a town rebels"
+status = "route"
+route = "quiet world off, rebels thawed, 10 turns of an empty town at extortionate tax with scriptRebel, isProvokedRebellion, turmoil 100 and rebelFactionChance 100: no rebel log line (11-06). provoke_rebellion by town or province: nothing seen. settlement:changeOwner(slave) moves the town with no scroll, so a ruler's lost town can be staged. Read messages 52, 187 and 68 too"
+interrupt = "rebellion"
+inventory = ["C7"]
+[events.general_defects]
+what = "a general defects to the rebels"
+status = "route"
+route = "with the quiet world off, loyalty 0 on every English man for 3 turns: nothing (11-06). character:switchFaction moves him silently, so the outcome can be staged but not the scroll. Untried: a longer window"
+interrupt = "general_defects"
+[events.succession]
+what = "the leader or heir dies and the succession changes"
+status = "forced"
+case = "forced/forced_leader_death"
+interrupt = "succession"
+inventory = ["C5"]
+
+[events.crusade_called]
+what = "a crusade is called, with its join prompt"
+status = "forced"
+case = "forced/forced_crusade"
+note = "message 179 a second after M.qa.force_crusade. The join prompt on a later turn is not proven yet"
+interrupt = "crusade_jihad"
+inventory = ["W14", "W20"]
+
+[events.jihad_called]
+what = "a jihad is called, with its join prompt"
+status = "forced"
+case = "forced/forced_jihad"
+note = "message 180 a second after the call. The join prompt needs a muslim seat and is not proven"
+interrupt = "crusade_jihad"
+inventory = ["W14"]
+[events.crusade_warnings]
+what = "the warning scrolls about a crusade against an ally or a neutral"
+status = "no_route"
+why = "tried 11-06: a crusade on an ally's town, then character:joinCrusade: it joined with no warning scroll. As with the attack warnings, it guards an order made by hand and rulers' orders use these same calls. Not tried: a click, which no-clicks-first rules out"
+scrolls = ["join_crusade_against_ally_scroll", "join_crusade_against_neutral_scroll", "join_jihad_against_ally_scroll", "join_jihad_against_neutral_scroll"]
+[events.attack_warnings]
+what = "the warning scrolls before attacking an ally, a neutral, or risking excommunication"
+status = "no_route"
+why = "tried 11-06: armyStruct:attackArmy on a neutral and on an ally opens the battle with no warning scroll. The warning guards an order made by hand; rulers' orders go through these same EOP calls, so a ruler shouldn't meet it. Not tried: a click on the map, which no-clicks-first rules out"
+scrolls = ["ally_attack_warning_scroll", "neutral_attack_warning_scroll", "excommunication_attack_warning_scroll"]
+
+[events.papal_mission]
+what = "a papal mission, or the excommunication threat in it"
+status = "route"
+route = "no EOP call gives a mission, by agy's search. Quiet world off, Pope and neighbours thawed, standing -1, a war on a catholic, 12 turns: no log line, but messages 52, 187 and 68 appeared and aren't identified (ids don't name events), so read those first"
+interrupt = "papal_missions"
+inventory = ["C3", "W22"]
+[events.council_mission]
+what = "a council, guild or senate mission"
+status = "route"
+route = "no direct call. Script command create_mission with no arguments or a faction raised nothing (11-06); its arguments are unknown. Try: setScriptCounter on the game's mission triggers"
+interrupt = "council_missions"
+inventory = ["C3"]
+scrolls = ["mission_target_scroll"]
+
+[events.guild_offer]
+what = "a guild offers to build a guild house"
+status = "route"
+route = "standing 1000 with a real id (assassins_guild, level1 100) showed nothing in 3 turns (11-06). The cooldown may have blocked it, but setGuildCooldown is process-wide and leaked to the live game. Try: more turns; a town with the guild's required buildings; the cooldown only with a restore step in the runner"
+inventory = ["R15"]
+
+[events.excommunication]
+what = "the faction is excommunicated"
+status = "route"
+route = "no EOP call, by agy's search. isExcommunicated = 1 raised nothing; standing -1 with a war on a catholic for 12 turns awake gave no log line, but messages 52, 187 and 68 aren't identified, so read those first. Probes must not write campaignDb: it outlives the bench"
+
+[events.battle_prebattle]
+what = "an AI army attacks the ruler and the battle scroll opens"
+status = "forced"
+case = "forced/forced_ai_attack"
+note = "the battle panel opens and autoplay auto-resolves it. The bridge's prebattle_scroll lookup logs (not found) on it"
+interrupt = "ai_attacks_sieges"
+inventory = ["W8", "W19"]
+scrolls = ["prebattle_scroll", "battle_delay_scroll", "end_deployment_scroll"]
+
+[events.battle_result]
+what = "a battle's result scroll, and its statistics"
+status = "forced"
+case = "forced/forced_battle_result"
+inventory = ["W8"]
+scrolls = ["post_battle_scroll", "post_battle_stats_scroll"]
+
+[events.siege_of_ruler]
+what = "an AI army besieges the ruler's town and the siege scroll opens"
+status = "forced"
+case = "forced/forced_ai_siege"
+note = "message 39 a second after M.qa.force_ai_siege, then 71 and 1"
+interrupt = "ai_attacks_sieges"
+inventory = ["W3"]
+scrolls = ["siege_scroll", "break_siege_confirmation_scroll"]
+
+[events.settlement_captured]
+what = "the ruler takes a town: occupy, sack or exterminate"
+status = "forced"
+case = "forced/forced_town_captured"
+note = "M.qa.force_empty_town then a siege: the town falls at once. siege/besiege_assault_storms is instant and doesn't reach this scroll"
+inventory = ["W10"]
+scrolls = ["loot_settlement_scroll", "convert_settlement_warning_scroll"]
+
+[events.captives]
+what = "prisoners taken: ransom, release or execute"
+status = "route"
+route = "two battles against a rival's Peasants showed no scroll (11-06), but who won wasn't read. Try: read the outcome first; more English horse, so the routed enemy is caught"
+inventory = ["W15"]
+scrolls = ["captor_ransom_scroll"]
+[events.own_men_captured]
+what = "the ruler's men captured: pay their ransom or not"
+status = "forced"
+case = "forced/forced_own_men_captured"
+note = "Peasants attack a general's stack and lose"
+inventory = ["W15"]
+scrolls = ["captive_ransom_scroll", "ransom_result_scroll"]
+
+[events.ally_call]
+what = "an ally asks for help, or war is declared on an ally"
+status = "forced"
+case = "forced/forced_war_on_ally"
+note = "message 114 a second after a third faction's war on the ally; message 64 is the alliance itself. Whether request_assistance_scroll is that message isn't proven (ids don't name events)"
+inventory = ["W21"]
+scrolls = ["request_assistance_scroll"]
+
+[events.exchange]
+what = "the exchange scroll between two armies"
+status = "route"
+route = "two adjacent English armies; untried"
+inventory = ["W18"]
+scrolls = ["exchange_scroll"]
+
+[events.victory_conditions]
+what = "victory conditions met or failed, and the campaign-over screen"
+status = "forced"
+case = "forced/forced_campaign_lost"
+note = "one town left, no garrison, a rival's siege: \"Victory Conditions Failed\" (screenshot 11-06). The runner relaunches past it. Winning is not forced"
+inventory = ["C8"]
+scrolls = ["conditions_complete_scroll"]
+[events.generic_decision]
+what = "any decision scroll with a check and an X, whatever its text"
+status = "route"
+route = "M.qa.force_decision raises game message 91 at once, and the turn loop acknowledged it with one check: find why isChoice shows no X"

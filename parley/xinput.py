@@ -11,8 +11,11 @@ loaded at start-up; 10-31) and runs in a no-click run. Reading the screen (xdoto
 ImageMagick `import`) is not input and stays allowed: scripts/crash_dialog.sh still looks for Wine's
 crash dialog in a no-click run.
 
-The real campaign's loop and crash-watch, restarted by the QA restore, get an environment without
-the variable (env_without): the real game still answers its popups by clicking until phase 2."""
+Since 11-21 the guard is always on, live play too: every click kind the census ever saw has a
+passing no-click bench case (`just click-coverage`), the live campaign made no screen input all day,
+and a switch to turn clicks back on was a way for them to come back unseen. A code path that still
+asks for X input is refused and logged ("X input refused"), and the campaign watch wakes on it
+(scripts/campaign_watch.sh, CLICK). The variable is still set by no_click_run (harmless now)."""
 
 from __future__ import annotations
 
@@ -35,14 +38,14 @@ class XInputRefused(RuntimeError):
 
 
 def no_x_input() -> bool:
-    """True in a no-click run: PARLEY_NO_X_INPUT set to anything but empty or 0."""
-    return os.environ.get(ENV_VAR, "").strip() not in ("", "0")
+    """Always True: every run is a no-click run (11-21; there is no switch to turn clicks on)."""
+    return True
 
 
 def refuse_x_input(what: str) -> None:
-    """Raise XInputRefused naming `what` in a no-click run; else return."""
-    if no_x_input():
-        raise XInputRefused(f"X input refused in a no-click run: {what} ({ENV_VAR}=1)")
+    """Raise XInputRefused naming `what`: Parley makes no screen input."""
+    raise XInputRefused(f"X input refused in a no-click run: {what} (Parley makes no screen input; "
+                        "press it by element in the bridge)")
 
 
 def refuse_xdotool(args: tuple[str, ...] | list[str]) -> None:

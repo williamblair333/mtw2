@@ -52,24 +52,6 @@ def test_bench_load_of_a_missing_save_sends_nothing_to_the_game(tmp_path):
     assert ctrl.lines == [] and called == []
 
 
-def test_resume_after_relaunch_refuses_a_restored_keep_that_vanished(tmp_path, monkeypatch):
-    turn_root = tmp_path / "parley_turns"
-    saves = tmp_path / "mods" / "parley" / "saves"
-    turn_root.mkdir()
-    saves.mkdir(parents=True)
-    keep = saves / "parley_keep_g1.restored-20261031-120000.sav"
-    keep.write_bytes(b"save")
-    (turn_root / runner.LAST_RESTORE_FILE).write_text('{"newest_save_mtime": 9e18}')
-    (turn_root / runner.LOG_FILE).write_text("2026-10-31 12:00:00 bridge loaded campaign at turn 7\n")
-    real_is_file = Path.is_file
-    # the keep is renamed between the choice and the load
-    monkeypatch.setattr(Path, "is_file", lambda p: False if p.name == keep.name else real_is_file(p))
-    ctrl = FakeControl()
-    with pytest.raises(QARunError, match="qa: load refused: no save at mods/parley/saves/parley_keep_g1.restored"):
-        runner.resume_real_after_relaunch(turn_root, control_factory=lambda root: ctrl, timeout=1, poll_interval=0.01)
-    assert ctrl.lines == []
-
-
 def test_a_bridge_refusal_fails_the_load_wait_at_once(tmp_path):
     log = tmp_path / "parley_bridge.log"
     log.write_text("2026-10-31 12:00:00 qa: load refused: no save at mods/parley/saves/x.sav\n")

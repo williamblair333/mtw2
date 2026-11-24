@@ -3,7 +3,8 @@
 #   game.sh new-game <name> [opts]   make games/local/<name>.toml from your template (--help: examples)
 #   game.sh play <name>              stop anything running, start turn loop + Discord bot for <name>
 #   game.sh bot <name>               start only the Discord bot for <name> (its turn loop stays stopped)
-#   game.sh stop                     stop the turn loop and the bot
+#   game.sh stop [--pause]           stop the turn loop and the bot; --pause (just stop) also holds the
+#                                    campaign (paused.txt) so autoplay ends no turn unordered
 #   game.sh status                   what's running, and for which game
 #   game.sh logs <name>              latest output from both
 set -uo pipefail
@@ -11,6 +12,14 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 GAMES_DIR="${PARLEY_GAMES_DIR:-games/local}"
 LOGS=logs
+
+# a loop started over ssh has no display: it can't screenshot the game's popups, so every offer runs
+# to its 540 s timeout (live 11-05 14:56, the test laptop: "screenshot failed: game window not found").
+# Borrow the logged-in desktop's, as qa.sh does
+# shellcheck source=desktop_env.sh
+. scripts/desktop_env.sh
+desktop_env_borrow >/dev/null 2>&1 \
+    || echo "warning: nobody is logged in to the desktop; the turn loop can't see the game's popups" >&2
 
 die() { echo "$*" >&2; exit 1; }
 
@@ -76,10 +85,14 @@ play() {
     local cfg="$GAMES_DIR/$name.toml"
     [ -f "$cfg" ] || die "no such game: $cfg (create it with: just new-game $name)"
     stop_all >/dev/null
+    resume_after_stop
     mkdir -p "$LOGS"
     # monitors off slow the game to a crawl (live 10-31: 66.5 s loads); keep them on while it runs
     bash scripts/screen_awake.sh start || echo "warning: screen-awake didn't start (just screen-awake)" >&2
-    setsid nohup uv run python -m parley run "$cfg" >"$LOGS/$name-turns.log" 2>&1 < /dev/null &
+    # a fresh file, appended to: scripts/rotate_logs.sh cuts it in place while the loop holds it open.
+    # The old one is set aside (keep_log.sh), never emptied: it holds the record of the last run
+    bash scripts/keep_log.sh "$LOGS/$name-turns.log"
+    setsid nohup uv run python -m parley run "$cfg" >>"$LOGS/$name-turns.log" 2>&1 < /dev/null &
     launch_bot "$name" "$cfg"
     echo "starting game '$name'..."
     await_bot "$name" || return 1
@@ -93,8 +106,9 @@ play() {
 }
 
 launch_bot() {  # launch_bot <name> <cfg>: start the Discord bot in its own session
+    : > "$LOGS/$1-discord.log"  # emptied, then appended to (scripts/rotate_logs.sh cuts it in place)
     setsid nohup bash -c 'set -a; [ -f .env ] && . ./.env; set +a; exec uv run python -m parley discord "$1"' \
-        _ "$2" >"$LOGS/$1-discord.log" 2>&1 < /dev/null &
+        _ "$2" >>"$LOGS/$1-discord.log" 2>&1 < /dev/null &
 }
 
 await_bot() {  # await_bot <name>: wait up to 30 s for the bot to connect
@@ -105,6 +119,13 @@ await_bot() {  # await_bot <name>: wait up to 30 s for the bot to connect
             return 0
         fi
         if [ -z "$(running discord)" ] && [ -s "$LOGS/$name-discord.log" ]; then
+            # a machine with no bot token (the test laptop, by design) runs the turn loop alone. Live 11-05
+            # 16:45 a QA restore there failed here after the loop had started, and kept qa.lock;
+            # the campaign watch (WATCH_BOT=1) still reports a missing bot where one is expected
+            if grep -q "DISCORD_BOT_TOKEN is not set" "$LOGS/$name-discord.log"; then
+                echo "warning: no Discord bot here (DISCORD_BOT_TOKEN is not set); the turn loop runs without it" >&2
+                return 0
+            fi
             echo "the bot stopped:" >&2; tail -5 "$LOGS/$name-discord.log" >&2; return 1
         fi
         sleep 0.5
@@ -141,6 +162,23 @@ restart_loop() {  # restart only the turn loop (picks up new Python code); the b
 }
 
 GAME="${MTW2_GAME_DIR:-$HOME/.steam/steam/steamapps/common/Medieval II Total War}"
+TURNS="${PARLEY_TURN_ROOT:-$GAME/parley_turns}"
+# with the loop stopped, autoplay still ends each turn once its wait for orders runs out, ordered by
+# nobody (live 11-05: run 10 went from turn 24 to 29 in an hour). `just stop` (stop --pause) holds the
+# campaign with paused.txt; play takes off only a pause with this reason (never a QA hold or a seat's
+# usage-limit pause). The QA runner's plain `stop` writes nothing: its bench turns must play
+STOP_REASON="stopped by just stop: the turn loop is off"
+pause_campaign() {
+    [ -d "$TURNS" ] || return 0
+    printf '%s; just play (or removing this file) resumes\n' "$STOP_REASON" > "$TURNS/paused.txt"
+    echo "campaign paused ($TURNS/paused.txt); just play resumes it"
+}
+resume_after_stop() {
+    if grep -qs "^$STOP_REASON" "$TURNS/paused.txt"; then
+        rm -f "$TURNS/paused.txt"
+        echo "resumed the campaign 'just stop' had paused"
+    fi
+}
 
 game_command() {  # write a command to the bridge's control file; it runs on the bridge's next tick
     printf '%s\n' "$@" >> "$GAME/parley_turns/control.txt"
@@ -180,7 +218,7 @@ case "${1:-}" in
     new-game) shift; new_game "$@" ;;
     play) shift; play "$@" ;;
     bot) shift; bot "$@" ;;
-    stop) stop_all ;;
+    stop) shift; stop_all; if [ "${1:-}" = "--pause" ]; then pause_campaign; fi ;;
     status) status ;;
     logs) shift; logs "$@" ;;
     restart-loop) shift; restart_loop "$@" ;;

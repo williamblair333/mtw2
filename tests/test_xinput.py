@@ -20,7 +20,7 @@ from parley.qa.runner import (
     SKIPPED_TURN_CASE,
     QARunError,
     _ProcessManager,
-    _no_click_guarded,
+    _instant_refused,
     _run_instant_case,
     bench_save_record,
     load_bench_save,
@@ -42,17 +42,18 @@ def _clicks_allowed_by_default(monkeypatch):
 # --- the guard ----------------------------------------------------------------------------------
 
 
-def test_the_guard_refuses_only_in_a_no_click_run(monkeypatch):
-    refuse_x_input("anything")  # unset: allowed
-    monkeypatch.setenv(ENV_VAR, "0")
-    refuse_x_input("anything")
-    monkeypatch.setenv(ENV_VAR, "1")
-    with pytest.raises(XInputRefused, match="X input refused in a no-click run: a click"):
-        refuse_x_input("a click")
+def test_the_guard_always_refuses_whatever_the_variable_says(monkeypatch):
+    # 11-21: no switch turns clicks back on; a fallback can't come back unseen
+    for value in (None, "0", "", "1"):
+        if value is None:
+            monkeypatch.delenv(ENV_VAR, raising=False)
+        else:
+            monkeypatch.setenv(ENV_VAR, value)
+        with pytest.raises(XInputRefused, match="X input refused in a no-click run: a click"):
+            refuse_x_input("a click")
 
 
 def test_xdotool_reads_pass_and_input_verbs_refuse(monkeypatch):
-    monkeypatch.setenv(ENV_VAR, "1")
     for verb in ("search", "getwindowgeometry", "getmouselocation", "getactivewindow"):
         refuse_xdotool([verb, "x"])
     for verb in ("mousemove", "click", "mousedown", "mouseup", "key", "type", "windowactivate", "windowraise"):
@@ -84,13 +85,12 @@ def _no_subprocess(monkeypatch) -> list:
 
 def test_popup_click_refuses_before_touching_x(monkeypatch):
     calls = _no_subprocess(monkeypatch)
-    monkeypatch.setenv(ENV_VAR, "1")
     with pytest.raises(XInputRefused, match="click accept on a popup"):
         popups.click("accept")
-    with pytest.raises(XInputRefused, match="pointer move"):
-        popups._clear_pointer("22")
-    with pytest.raises(XInputRefused, match="pointer move"):
-        popups.screenshot(Path("x.png"))  # it moves the pointer first
+    # a screenshot is a read: it goes ahead, and the pointer is left where it is (a noclick QA run
+    # screenshots popups; 11-14)
+    popups._clear_pointer("22")
+    popups.screenshot(Path("x.png"))
     with pytest.raises(XInputRefused, match="xdotool mousemove"):
         popups._xdo("mousemove", "1", "2")
     assert all(c[:2] != ["xdotool", "mousemove"] for c in calls)
@@ -99,11 +99,14 @@ def test_popup_click_refuses_before_touching_x(monkeypatch):
     assert calls[-1] == ["xdotool", "search", "--name", "x"]
 
 
-def test_popup_click_still_clicks_outside_a_no_click_run(monkeypatch):
+def test_popup_click_and_escape_are_refused_in_live_play_too(monkeypatch):
+    # 11-21: the click and the Escape key press were deleted; no variable set, still refused
     calls = _no_subprocess(monkeypatch)
-    monkeypatch.setattr(popups.time, "sleep", lambda s: None)
-    popups.click("accept")
-    assert ["xdotool", "mousedown", "1"] in calls
+    with pytest.raises(XInputRefused, match="click decline on a popup"):
+        popups.click("decline", (0.5, 0.5))
+    with pytest.raises(XInputRefused, match="press Escape on a stuck scroll"):
+        popups.press_escape()
+    assert calls == []
 
 
 def _fake_bin(tmp_path: Path) -> tuple[Path, Path]:
@@ -119,8 +122,8 @@ def _fake_bin(tmp_path: Path) -> tuple[Path, Path]:
 
 def test_relaunch_script_refuses_clicks_before_killing_anything(tmp_path: Path):
     bin_dir, log = _fake_bin(tmp_path)
-    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", ENV_VAR: "1",
-           "PARLEY_TURN_ROOT": str(tmp_path)}
+    # no variable: the clicking path was deleted 11-21, so --clicks is refused in live play too
+    env = {**env_without(), "PATH": f"{bin_dir}:{os.environ['PATH']}", "PARLEY_TURN_ROOT": str(tmp_path)}
     r = subprocess.run(["bash", str(ROOT / "scripts" / "relaunch_game.sh"), "--clicks"], env=env,
                        capture_output=True, text=True, timeout=30)
     assert r.returncode == 3
@@ -128,8 +131,9 @@ def test_relaunch_script_refuses_clicks_before_killing_anything(tmp_path: Path):
     assert not log.exists()  # no pgrep, pkill, steam, xdotool or wmctrl
 
 
-def test_process_manager_relaunches_in_a_no_click_run_but_refuses_the_qa_loop(monkeypatch, tmp_path: Path):
-    # the relaunch makes no clicks (hidden launcher, save loaded at start-up): allowed
+def test_process_manager_relaunches_and_starts_the_qa_loop_which_makes_no_input(monkeypatch, tmp_path: Path):
+    # the relaunch makes no clicks (hidden launcher, save loaded at start-up), and since 11-21 the
+    # QA loop's popup thread can't click either: both start
     ran: list = []
     monkeypatch.setattr("parley.qa.runner.subprocess.run", lambda argv, **k: ran.append(argv))
     monkeypatch.setattr("parley.qa.runner.subprocess.Popen", lambda argv, **k: ran.append(argv))
@@ -140,12 +144,58 @@ def test_process_manager_relaunches_in_a_no_click_run_but_refuses_the_qa_loop(mo
     pm.relaunch_game()
     assert ran[-1] == ["bash", str(ROOT / "scripts" / "relaunch_game.sh")]
     ran.clear()
-    with pytest.raises(QARunError, match="the QA turn loop"):
-        pm.start_qa_loop(tmp_path / "qa-x.toml")
-    assert ran == []
-    # injected starters are guarded too
-    with pytest.raises(QARunError, match="X input refused"):
-        _no_click_guarded(lambda: pytest.fail("called"), "the QA loop")()
+    pm.start_qa_loop(tmp_path / "qa-x.toml")
+    assert ran and ran[-1][-2:] == ["run", str(tmp_path / "qa-x.toml")]
+    # an instant run plays no turns: its starter, injected or not, is refused before it is called
+    with pytest.raises(QARunError, match="refused in an instant run"):
+        _instant_refused(lambda: pytest.fail("called"), "the QA loop")()
+
+
+def test_a_noclick_run_skips_the_cases_whose_subject_is_a_click():
+    # 11-14: forced_wife_declined_by_escape hung the first full noclick run on its refused Escape
+    import tomllib
+    from parley.qa.cases import Suite
+    from parley.qa.runner import SKIPPED_NEEDS_CLICK, _without_clicks
+    # #645: marriage offers are pressed by element, so the family suite has no click case left
+    # #659: the papal vote is pressed by element, so the popups suite has no click case left either
+    def suite(name):
+        return Suite.model_validate(tomllib.loads((ROOT / "games" / "qa" / f"{name}.toml").read_text()))
+    family, popups = suite("family"), suite("popups")
+    kept, skipped = _without_clicks([family, popups])
+    assert [c.name for c in kept[0].cases] == [c.name for c in family.cases] and skipped["family"] == []
+    assert [c.name for c in kept[1].cases] == [c.name for c in popups.cases] and skipped["popups"] == []
+    from parley.qa.cases import Case
+    click_case = Case(name="dummy_click", needs_click="needs click reason", expect=[])
+    dummy = Suite(name="dummy", faction="england", cases=[click_case])
+    kept_d, skipped_d = _without_clicks([dummy])
+    assert kept_d[0].cases == []
+    assert skipped_d["dummy"] == [("dummy_click", SKIPPED_NEEDS_CLICK + "needs click reason")]
+
+
+def test_the_case_that_ends_the_campaign_runs_last_in_a_full_run():
+    # 11-14: forced (with forced_campaign_lost) ran sixth; its defeat screen ended the run and six
+    # suites never ran
+    from parley.qa.runner import _resolve_suites
+    suites = _resolve_suites("all", ROOT / "games" / "qa")
+    assert suites[0].name == "smoke" and suites[-1].name == "forced"
+    assert suites[-1].cases[-1].name == "forced_campaign_lost"
+
+
+def test_a_pointer_over_the_scroll_is_left_there_in_a_no_click_run(monkeypatch):
+    calls: list = []
+
+    def xdo(*args):
+        calls.append(args)
+        if args[0] == "getwindowgeometry":
+            return "X=0\nY=0\nWIDTH=1000\nHEIGHT=1000\n"
+        if args[0] == "getmouselocation":
+            return "X=500\nY=500\n"  # over the scroll band
+        raise AssertionError(f"not a read: {args}")
+
+    monkeypatch.setattr(popups, "_xdo", xdo)
+    monkeypatch.setenv(ENV_VAR, "1")
+    popups._clear_pointer("22")
+    assert [c[0] for c in calls] == ["getwindowgeometry", "getmouselocation"]
 
 
 def test_the_real_campaigns_restarts_never_inherit_the_no_click_variable(monkeypatch):

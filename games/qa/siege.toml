@@ -107,7 +107,9 @@ expect = [
 [[cases]]
 name = "besiege_assault_storms"
 kind = "instant"
-phase2 = "the assault's battle waits on the pre-battle screen: live 10-31 20:55 the siege formed (can_assault=true), the storm order was taken, the battle panel opened and nothing resolved in 150 s with clicks off"
+# phase 1 since 11-05: under the hold the bridge re-presses auto-resolve and closes the battle's results
+# (it waited on the pre-battle screen until then: live 10-31 20:55, 150 s with clicks off); passed live
+# 11-05 14:16 (the test laptop) in 64 s
 setup = [
     { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
     { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },

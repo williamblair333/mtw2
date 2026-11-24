@@ -236,6 +236,65 @@ def test_without_the_report_a_renamed_captain_stays_unknown(lua):
     write_orders(lua, TURN - 1, "venice", [{"type": "move_army", "army": "Doge Enrico", "x": 100, "y": 60}])
     start_turn(lua, "venice")  # no report in that folder: nothing to match the tile against
     assert "unknown army 'Doge Enrico'" in results(lua)[0]["reason"]
+    assert "not one of your armies now" in results(lua)[0]["reason"]
+
+
+def test_a_garrison_whose_town_fell_says_who_holds_it(lua):
+    # live 11-05 (scratch, turn 92): Nottingham fell during the AI turns while England decided, and
+    # hire_mercenary on garrison:Nottingham came back a bare "unknown army"
+    control(lua)
+    write_orders(lua, TURN - 1, "venice", [{"type": "hire_mercenary", "army": "garrison:Milan",
+                                            "unit": "Mercenary Crossbowmen"},
+                                           {"type": "disband", "army": "garrison:Nowhere", "unit": "Peasants"}])
+    start_turn(lua, "venice")
+    r = results(lua)
+    assert r[0]["reason"].startswith("unknown army 'garrison:Milan': Milan now belongs to milan")
+    assert "unknown army 'garrison:Nowhere': not one of your armies now" in r[1]["reason"]
+
+
+def test_a_garrison_id_for_a_town_still_ours_but_empty_says_so(lua):
+    # #429's other garrison case: the town is still the faction's, but no stack of its is in it
+    control(lua)
+    # Ragusa is Venice's in the fake game, and no Venetian stack stands in it
+    write_orders(lua, TURN - 1, "venice", [{"type": "disband", "army": "garrison:Ragusa", "unit": "Peasants"}])
+    start_turn(lua, "venice")
+    assert results(lua)[0]["reason"] == "unknown army 'garrison:Ragusa': no troops of yours are in Ragusa now"
+
+
+def test_a_merge_into_an_army_that_moved_this_turn_waits_a_turn(lua):
+    # live 11-05 (run 10, turn 11): England moved Robert, then merged garrisons into him; refused with
+    # a reason the ruler can act on. Pins merge_armies' order of checks before any refactor
+    control(lua)
+    write_orders(lua, TURN - 1, "venice", [
+        {"type": "move_army", "army": "Doge Enrico", "x": 100, "y": 60},
+        {"type": "merge_armies", "army": "garrison:Venice", "into": "Doge Enrico"},
+    ])
+    start_turn(lua, "venice")
+    r = results(lua)
+    assert r[0]["ok"], r
+    assert r[1]["reason"] == "'Doge Enrico' already moved or besieged this turn; merge next turn"
+
+
+def test_merge_armies_refuses_an_army_into_itself(lua):
+    # pins one more of merge_armies' refusals (England ordered it live, run 9 turn 92)
+    control(lua)
+    write_orders(lua, TURN - 1, "venice", [{"type": "merge_armies", "army": "Doge Enrico", "into": "Doge Enrico"}])
+    start_turn(lua, "venice")
+    assert results(lua)[0]["reason"] == "an army can't merge into itself"
+
+
+def test_an_unknown_army_on_an_ai_run_faction_names_its_own_ai(lua):
+    # live 11-05 (run 10): France's game AI renamed its captains between turns; its ruler blamed skirmishes
+    control(lua)
+    lua.execute("FAKE.byName.venice.isPlayerControlled = 0")
+    write_orders(lua, TURN - 1, "venice", [{"type": "disband", "army": "Captain Gone", "unit": "Peasants"}])
+    start_turn(lua, "venice")
+    reason = results(lua)[0]["reason"]
+    assert reason.startswith("unknown army 'Captain Gone': not one of your armies by that name now")
+    assert "the game AI that also runs your realm moves armies and renames their captains" in reason
+    # the turn audit still reads the name whole (it runs to the last quote)
+    from parley.audit import UNKNOWN
+    assert UNKNOWN.search(reason).group(1) == "Captain Gone"
 
 
 def test_garrison_cannot_march(lua):
@@ -515,7 +574,7 @@ def test_entry_script_wires_eop_events(tmp_path, monkeypatch):
     rt = LuaRuntime(unpack_returned_tuples=True)
     rt.execute(f"package.path = '{ROOT}/tests/lua/?.lua;{ROOT}/lua/vendor/?.lua;' .. package.path")
     rt.execute("FAKE = require('fake_game'); FAKE.reset(); "
-               "M2TWEOP = { unlockGameConsoleCommands = function() UNLOCKED = true end }")
+               "M2TWEOP.unlockGameConsoleCommands = function() UNLOCKED = true end")
     rt.execute(f"dofile('{ROOT}/lua/luaPluginScript.lua')")
     rt.execute("onPluginLoad(); onCampaignMapLoaded(); onFactionTurnEnd({ faction = FAKE.byName.venice })")
     assert rt.eval("UNLOCKED")
@@ -784,6 +843,8 @@ def test_agent_already_inside_the_target_is_refused(lua):
               "if c.namedCharacter.fullName == 'Marco' then c.xCoord, c.yCoord = 115, 80 end end")
     done, r = issue(lua, {"type": "spy", "agent": "Marco", "target": "Innsbruck"}, inside)
     assert done == [] and "already inside Innsbruck" in r["reason"]
+    # and it says what to do (live 11-05: England repeated the same refused order three turns)
+    assert "move_agent" in r["reason"] and "next turn" in r["reason"]
 
 
 def test_a_campaign_load_forgets_which_agents_had_an_order(lua):
@@ -810,6 +871,70 @@ def test_one_action_per_agent_per_turn(lua):
     start_turn(lua, "venice")
     assert calls(lua) == ["assassinate Iacopo Ulrich"]
     assert "already has an order this turn" in results(lua)[1]["reason"]
+
+
+def test_a_spouse_no_faction_lists_is_cleared_and_named_from_the_last_scan(lua):
+    # live 11-11 t272, 11-13 t640 and t1252: eip 00eff4db, a natural death's message copied the
+    # dead man's spouse's name from a freed record (characterRecord +0x228)
+    lua.execute("""
+        local ids, n = {}, 0
+        BRIDGE.record_addr = function(t)
+            if type(t) ~= 'table' then return nil end
+            if not ids[t] then n = n + 1; ids[t] = n end
+            return ids[t]
+        end
+        local v = FAKE.byName.venice
+        WIFE = FAKE.add_named(v, { name = 'Maria Dandolo', age = 30 })
+        GONE = FAKE.add_named(v, { name = 'Lucia Contarini', age = 40 })
+        FINE = FAKE.add_named(v, { name = 'Marco Dandolo', age = 35, male = true, spouse = WIFE })
+        WIDOWER = FAKE.add_named(v, { name = 'Pietro Contarini', age = 50, male = true, spouse = GONE })
+    """)
+    assert lua.eval("BRIDGE.stale_spouses()") == 0
+    # the game frees Lucia's record: the factions stop listing it, Pietro's pointer stays
+    lua.execute("""
+        local v = FAKE.byName.venice
+        for i, r in ipairs(v.named) do if r == GONE then table.remove(v.named, i) end end
+        v.numOfNamedCharacters = #v.named
+    """)
+    start_turn(lua, "venice")  # the scan runs at every faction's turn start
+    assert lua.eval("WIDOWER.spouse") is None
+    assert lua.eval("FINE.spouse == WIFE")
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "stale spouse cleared: venice's Pietro Contarini" in log
+    assert "last seen as Lucia Contarini (venice)" in log
+    assert lua.eval("BRIDGE.stale_spouses()") == 0
+
+
+def test_a_captain_is_found_before_an_admiral_of_the_same_name(lua):
+    # live 11-13 turns 1177-1180: France's march_on "Captain Thibault" found the fleet "Admiral
+    # Thibault" (earlier in getStack order; the id match drops titles) and was refused as a fleet
+    lua.execute("""
+        local fac = FAKE.byName.venice
+        FAKE.add_army(fac, 'Captain Lewes', 130, 85)
+        local fleet = FAKE.add_fleet(fac, 'Admiral Lewes', 120, 95)
+        table.remove(fac.stacks)
+        table.insert(fac.stacks, 1, fleet)
+    """)
+    write_orders(lua, TURN - 1, "venice", [
+        {"type": "march_on", "army": "Captain Lewes", "target_settlement": "Ragusa"}])
+    start_turn(lua, "venice")
+    r = results(lua)[0]
+    assert r["ok"], r
+    assert "moveToTile Captain Lewes 140 80" in calls(lua)
+
+
+def test_one_mission_per_target_per_turn(lua):
+    # live 11-13 turn 1072: a bribe won the captain over, then the same turn's assassination of
+    # him crashed the game
+    lua.execute(next_to("Pietro", "Ulrich"))
+    lua.execute(next_to("Iacopo", "Ulrich"))
+    write_orders(lua, TURN - 1, "venice", [
+        {"type": "bribe", "agent": "Pietro", "target": "Ulrich"},
+        {"type": "assassinate", "agent": "Iacopo", "target": "Ulrich"},
+    ])
+    start_turn(lua, "venice")
+    assert calls(lua) == ["bribe Pietro Ulrich"]
+    assert "already the target of Pietro's mission" in results(lua)[1]["reason"]
 
 
 # a Milan general also called Ulrich, in sight next to the HRE spy Ulrich
@@ -984,6 +1109,8 @@ def test_report_lists_the_mercenaries_an_army_may_hire_where_it_stands(lua):
     doge = next(a for a in r.armies if a.id == "Doge Enrico")
     # in stock, in its dates, open to a catholic, not crusading-only, no event needed
     assert [(m.unit, m.cost, m.available, m.max, m.exp) for m in doge.can_hire] == [("Albanian Mercenaries", 570, 2, 3, 1)]
+    # the region's pool by name: every army in the region shares it (live 11-21, turn 3130)
+    assert [m.pool for m in doge.can_hire] == ["pool1"]
     assert all(a.can_hire == [] for a in r.armies if a.id != "Doge Enrico")  # the garrison has no general
     assert all(s.model_dump().get("can_hire") is None for s in r.settlements)  # not a settlement matter
 
@@ -1072,6 +1199,24 @@ def test_recruits_beyond_the_training_slots_wait_and_the_queue_holds_nine(lua):
     ready = sorted(t["ready"] for t in json.loads((turn_dir(lua, TURN, "venice").parent.parent / "training.json").read_text()))
     turn = lua.eval("FAKE.campaign.turnNumber")
     assert ready == [turn + 1] * 2 + [turn + 2] * 2 + [turn + 3] * 2 + [turn + 4] * 2 + [turn + 5]
+
+
+def test_recruits_from_a_later_save_are_dropped(lua):
+    # live 11-10: the campaign restarted at turn 5 kept turn-271 recruits for Nottingham, and its
+    # queue read full (9 waiting) for good while the report showed it empty
+    control(lua)
+    lua.execute("FAKE.byName.venice.money = 100000; FAKE.settlements.Venice.pools = "
+                "{ { eduIndex = 7, availablePool = 20 } }")
+    turn = lua.eval("FAKE.campaign.turnNumber")
+    stale = [{"edu": 7, "unit": "Spear Militia", "faction": "venice", "settlement": "Venice", "ready": turn + 200}] * 9
+    (turn_dir(lua, TURN, "venice").parent.parent).mkdir(parents=True, exist_ok=True)
+    (turn_dir(lua, TURN, "venice").parent.parent / "training.json").write_text(json.dumps(stale))
+    write_orders(lua, TURN - 1, "venice", [{"type": "recruit", "settlement": "Venice", "unit": "Spear Militia"}])
+    start_turn(lua, "venice")
+    assert results(lua)[0]["ok"], results(lua)
+    assert f"venice: Spear Militia for Venice dropped: ready turn {turn + 200} is from a later save" in bridge_log(lua)
+    ready = [t["ready"] for t in json.loads((turn_dir(lua, TURN, "venice").parent.parent / "training.json").read_text())]
+    assert ready == [turn + 1]
 
 
 def test_training_survives_a_reload(lua):
@@ -1250,22 +1395,135 @@ def test_move_army_off_the_map_refused(lua):
     assert "off the map" in results(lua)[0]["reason"] and calls(lua) == []
 
 
-def test_move_army_onto_sea_refused_with_the_nearest_land(lua):
-    # live: Alfred's order to step out of Dublin onto (92,163), a sea tile, came back "done"
+def test_move_army_onto_sea_far_from_land_is_refused(lua):
+    # live: Alfred's order to step out of Dublin onto (92,163), a sea tile, came back "done".
+    # Fake sea: x >= 115 and y >= 90; (121,96) is 6 tiles from land
     control(lua)
-    write_orders(lua, TURN - 1, "venice", [{"type": "move_army", "army": "Doge Enrico", "x": 116, "y": 91}])
+    write_orders(lua, TURN - 1, "venice", [{"type": "move_army", "army": "Doge Enrico", "x": 121, "y": 96}])
     start_turn(lua, "venice")
-    reason = results(lua)[0]["reason"]
-    assert "(116,91) is sea" in reason and "nearest land is (" in reason and calls(lua) == []
+    r = results(lua)[0]
+    assert not r["ok"] and r["reason"] == "(121,96) is sea" and calls(lua) == []
 
 
-def test_move_agent_onto_sea_refused_with_the_nearest_land(lua):
-    # live (2026-10-29): Gregory Budinge's move to (105,138), a sea tile, came back "done"
+def test_move_army_onto_sea_near_land_walks_to_the_coast(lua):
+    # live 11-23: England's agent to (88,178), the nearest land (91,179) three tiles off, refused;
+    # the coast within 3 tiles is the ruler's wish
+    control(lua)
+    write_orders(lua, TURN - 1, "venice", [{"type": "move_army", "army": "Doge Enrico", "x": 116, "y": 92}])
+    start_turn(lua, "venice")
+    r = results(lua)[0]
+    assert r["ok"] and "(116,92) is sea; moving to the nearest land (" in r["note"]
+
+
+def test_move_agent_onto_sea_near_land_walks_to_the_coast(lua):
+    # live (2026-10-29): Gregory Budinge's move to (105,138), a sea tile, came back "done";
+    # live 11-23: England's agent to (88,178), land three tiles off, refused
     control(lua)
     write_orders(lua, TURN - 1, "venice", [{"type": "move_agent", "agent": "Pietro", "x": 116, "y": 91}])
     start_turn(lua, "venice")
-    reason = results(lua)[0]["reason"]
-    assert "(116,91) is sea" in reason and "nearest land is (" in reason and calls(lua) == []
+    r = results(lua)[0]
+    assert r["ok"] and "(116,91) is sea; moving to the nearest land (" in r["note"]
+
+
+@pytest.mark.parametrize("order", [{"type": "move_army", "army": "Doge Enrico"},
+                                   {"type": "move_agent", "agent": "Pietro"}])
+def test_a_sea_target_one_tile_off_the_coast_goes_to_the_coast(lua, order):
+    # live 11-22, England: "(98,165) is sea; the nearest land is (99,164)" and "(106,172) is sea; the nearest
+    # land is (105,171)": the ruler wanted that coast. Sea is x >= 115 and y >= 90 here; (114,89) is land
+    control(lua)
+    write_orders(lua, TURN - 1, "venice", [{**order, "x": 115, "y": 90}])
+    start_turn(lua, "venice")
+    r = results(lua)[0]
+    assert r["ok"] and "(115,90) is sea; moving to the nearest land (114,89)" in r.get("note", ""), r
+    assert calls(lua), "the move was not made"
+
+
+INNSBRUCK_COAST = """
+    local mainland = FAKE.stratMap.getTile
+    FAKE.stratMap.getTile = function(x, y)  -- Innsbruck (115,80) on a coast: land only there and at (114,80)
+        if x >= 110 and x <= 120 and y >= 75 and y <= 85 then
+            return { isLand = ((x == 115 or x == 114) and y == 80) and 1 or 0 }
+        end
+        return mainland(x, y)
+    end
+"""
+
+
+def test_the_nearest_land_named_for_a_sea_move_is_not_a_foreign_town(lua):
+    # live 11-14 21:53: England's agent sent to (91,163), sea, was told "the nearest land is (90,162)":
+    # Dublin, which the next order was refused for walking into. Three turns went round that loop.
+    lua.execute(INNSBRUCK_COAST)
+    control(lua)
+    write_orders(lua, TURN - 1, "venice", [{"type": "move_agent", "agent": "Pietro", "x": 116, "y": 80}])
+    start_turn(lua, "venice")
+    # Pietro stands across the water, so the walk is then refused: by the tile chosen, (114,80)
+    r = results(lua)[0]
+    assert "(114,80) can't be reached over land" in r["reason"], r
+
+
+def test_an_agent_sent_into_a_foreign_town_stops_beside_it(lua):
+    # live 11-23: England's agents sent into Antwerp, Angers and Rennes, France's into Antioch,
+    # refused 6 times; the tile beside the town is the wish
+    control(lua)
+    x, y = lua.eval("FAKE.settlements.Milan.xCoord"), lua.eval("FAKE.settlements.Milan.yCoord")
+    write_orders(lua, TURN - 1, "venice", [{"type": "move_agent", "agent": "Pietro", "x": x, "y": y}])
+    start_turn(lua, "venice")
+    r = results(lua)[0]
+    assert r["ok"] and "milan's settlement: an agent can't walk in; stopping beside it at (" in r["note"], r
+    [call] = [c for c in calls(lua) if c.startswith("moveToTile")]
+    bx, by = (int(v) for v in call.removeprefix("moveToTile Pietro ").split())
+    assert max(abs(bx - x), abs(by - y)) == 1
+
+
+def test_an_agent_sent_into_a_foreign_town_on_an_island_picks_the_land_not_the_town(lua):
+    lua.execute(INNSBRUCK_COAST)
+    control(lua)
+    write_orders(lua, TURN - 1, "venice", [{"type": "move_agent", "agent": "Pietro", "x": 115, "y": 80}])
+    start_turn(lua, "venice")
+    assert "(114,80) can't be reached over land" in results(lua)[0]["reason"]
+
+
+def test_open_ui_is_nil_without_the_forks_list(lua):
+    # gameSTDUI.getOpenUiElements is the fork's (#6); without it nothing is known, never guessed
+    lua.execute("gameSTDUI.getOpenUiElements = nil")
+    assert lua.eval("BRIDGE.open_ui()") is None
+    assert lua.eval("BRIDGE.open_ui_line()") is None
+    lua.execute("gameSTDUI.getOpenUiElements = function() error('boom') end")
+    assert lua.eval("BRIDGE.open_ui()") is None
+
+
+def test_open_ui_names_the_shown_windows_and_not_the_closed_ones(lua):
+    # live 11-15: a closed siege_scroll is still found by name, but isn't on the game's list
+    lua.execute("FAKE.open_scroll('finance_scroll', {'finance_ok_button'}); "
+                "FAKE.open_scroll('siege_scroll', {'siege_maintain_button'}); "
+                "FAKE.open_scroll('end_turn', {}); FAKE.closed = { siege_scroll = true }")
+    assert lua.eval("BRIDGE.open_ui_line()") == "finance_scroll(finance_ok_button)"
+    lua.execute("BRIDGE._open_at = nil")
+    assert lua.eval("BRIDGE.on_screen('finance_ok_button')") is True
+    assert lua.eval("BRIDGE.on_screen('siege_maintain_button')") is False
+
+
+def test_open_ui_finds_named_parts_at_any_depth_and_keeps_their_elements(lua):
+    # finance_scroll's ok button sits under an unnamed "null" part (live 11-15)
+    lua.execute("""
+        local ok = { elementName = 'finance_ok_button', subElementsNum = 0 }
+        local null = { elementName = 'null', subElementsNum = 1, getSubElement = function(self, i) return ok end }
+        FAKE.ui.finance_scroll = { elementName = 'finance_scroll', subElementsNum = 1,
+                                   getSubElement = function(self, i) return null end }
+        OK_BUTTON = ok
+    """)
+    assert lua.eval("BRIDGE.open_ui_line()") == "finance_scroll(finance_ok_button)"
+    assert lua.eval("BRIDGE.open_ui()[1].parts.finance_ok_button == OK_BUTTON") is True
+
+
+def test_a_papal_scrolls_parts_are_never_walked(lua):
+    lua.execute("""
+        WALKED = false
+        FAKE.ui.papal_election_scroll = { elementName = 'papal_election_scroll', subElementsNum = 1,
+                                          getSubElement = function() WALKED = true end }
+    """)
+    assert lua.eval("BRIDGE.open_ui_line()") == "papal_election_scroll"
+    assert lua.eval("WALKED") is False
 
 
 ISLAND = """
@@ -1328,7 +1586,6 @@ def test_move_on_the_same_island_goes_ahead(lua):
 
 @pytest.mark.parametrize("kind, order, says", [
     ("army", {"type": "move_army", "army": "Doge Enrico"}, "besiege it"),
-    ("agent", {"type": "move_agent", "agent": "Pietro"}, "agent's own order (spy, assassinate"),
 ])
 def test_move_onto_a_foreign_settlement_refused_with_the_order_that_fits(lua, kind, order, says):
     # live (2026-10-29, the turn audit): 15 moves onto others' settlements came back "done", nobody moved
@@ -1429,15 +1686,29 @@ def test_move_onto_an_own_settlement_goes_ahead(lua):
     assert results(lua)[0]["ok"] and f"moveToTile Pietro {x} {y}" in calls(lua)
 
 
-def test_fleet_onto_land_refused_with_the_nearest_sea(lua):
-    # live, turns 32-34: a fleet ordered onto one coast three turns running, one tile off each time
+def test_fleet_onto_land_far_from_the_sea_is_refused(lua):
+    # live, turns 32-34: a fleet ordered onto one coast three turns running
+    lua.execute("FAKE.add_fleet(FAKE.byName.venice, 'Admiral Lewes', 116, 92)")
+    control(lua)
+    write_orders(lua, TURN - 1, "venice", [{"type": "move_army", "army": "Admiral Lewes", "x": 60, "y": 40}])
+    start_turn(lua, "venice")
+    r = results(lua)[0]
+    assert not r["ok"] and r["reason"] == "a fleet can't sail onto land (60,40): no sea within 12 tiles of it"
+    assert calls(lua) == []
+
+
+def test_fleet_onto_land_beside_the_sea_sails_to_the_nearest_sea(lua):
+    # live 11-23 turns 4576-4591: England sent Admiral Edgar to Caen's port tile (land) seven
+    # times, refused each time though the nearest sea was one tile off. Fake sea: x >= 115, y >= 90
     lua.execute("FAKE.add_fleet(FAKE.byName.venice, 'Admiral Lewes', 116, 92)")
     control(lua)
     write_orders(lua, TURN - 1, "venice", [{"type": "move_army", "army": "Admiral Lewes", "x": 120, "y": 88}])
     start_turn(lua, "venice")
-    reason = results(lua)[0]["reason"]
-    assert "a fleet can't sail onto land (120,88)" in reason and "the nearest sea is (" in reason
-    assert calls(lua) == []
+    r = results(lua)[0]
+    [call] = calls(lua)
+    sx, sy = (int(v) for v in call.removeprefix("moveToTile Admiral Lewes ").split())
+    assert r["ok"] and sx >= 115 and sy >= 90 and max(abs(sx - 120), abs(sy - 88)) <= 3
+    assert f"(120,88) is land; sailing to the nearest sea, ({sx},{sy})" in r["note"]
 
 
 def test_move_army_moves_a_general_by_his_own_name(lua):
@@ -1447,6 +1718,83 @@ def test_move_army_moves_a_general_by_his_own_name(lua):
     write_orders(lua, TURN - 1, "venice", [{"type": "move_army", "army": "Rufus", "x": 110, "y": 88}])
     start_turn(lua, "venice")
     assert results(lua)[0]["ok"] and "moveToTile Rufus 110 88" in calls(lua)
+
+
+def test_a_second_attack_on_one_army_waits_for_the_next_turn(lua):
+    # live 11-15 turn 1141 (20 crashes): two queued attacks on one rebel army; the second battle's panel
+    # opened on the first battle's loser and the game emptied its side under it. Alone, it fought fine
+    control(lua)
+    lua.execute("FAKE.add_army(FAKE.byName.venice, 'Captain Marco', 120, 88)")
+    write_orders(lua, TURN - 1, "venice", [
+        {"type": "attack", "army": "Doge Enrico", "target": "Heinrich", "target_faction": "hre"},
+        {"type": "attack", "army": "Captain Marco", "target": "Heinrich", "target_faction": "hre"}])
+    start_turn(lua, "venice")
+    r = results(lua)
+    assert r[0]["ok"] and not r[1]["ok"] and "waits for the next turn's start" in r[1]["reason"]
+    assert calls(lua) == ["attack Doge Enrico Heinrich"]
+    # the next turn's start carries it out, before that turn's own orders
+    lua.execute("FAKE.campaign.turnNumber = FAKE.campaign.turnNumber + 1")
+    write_orders(lua, TURN, "venice", [])
+    start_turn(lua, "venice")
+    assert calls(lua)[-1] == "attack Captain Marco Heinrich"
+    assert "venice held attack Captain Marco -> Heinrich: done" in bridge_log(lua)
+
+
+def test_an_attack_no_battle_came_of_is_reported_next_turn(lua):
+    # live 11-20 turns 2380-2384: attackArmy took England's attack on Captain Alfred ("done") five turns
+    # running, and no battle came: the one-unit rebel stepped away first each time
+    control(lua)
+    write_orders(lua, TURN - 1, "venice", [
+        {"type": "attack", "army": "Doge Enrico", "target": "Heinrich", "target_faction": "hre"}])
+    start_turn(lua, "venice")
+    assert results(lua)[0]["ok"]
+    unmade = _next_turn_moves_not_made(lua)
+    assert [(m.id, m.order_type, m.target, m.target_x, m.target_y) for m in unmade] == [
+        ("Doge Enrico", "attack", "Heinrich", 112, 80)], unmade
+    assert "venice: Doge Enrico's attack on Heinrich came to no battle" in bridge_log(lua)
+
+
+def test_a_general_who_leads_no_stack_is_checked_on_his_own_tile(lua):
+    # live 11-20 (35 times in two logs): "move check failed: ...:214: attempt to call method
+    # 'findInSettlement' (a nil value)": a general leading no stack got a stand-in table that
+    # stack_pos can't read, and the error dropped every check of the faction's turn
+    control(lua)
+    write_orders(lua, TURN - 1, "venice", [{"type": "move_army", "army": "Doge Enrico", "x": 125, "y": 88}])
+    start_turn(lua, "venice")
+    assert results(lua)[0]["ok"]
+    lua.execute("""
+        local v = FAKE.byName.venice
+        for _, c in ipairs(v.characters) do
+            if c.namedCharacter.fullName == 'Doge Enrico' then c.armyLeaded = nil end
+        end
+        table.remove(v.stacks, 1); v.stacksNum = #v.stacks
+    """)
+    unmade = _next_turn_moves_not_made(lua)
+    assert "move check failed" not in bridge_log(lua)
+    assert [(m.id, m.from_x, m.from_y) for m in unmade] == [("Doge Enrico", 121, 88)], unmade
+
+
+def test_an_attack_that_was_fought_is_not_reported(lua):
+    control(lua)
+    write_orders(lua, TURN - 1, "venice", [
+        {"type": "attack", "army": "Doge Enrico", "target": "Heinrich", "target_faction": "hre"}])
+    start_turn(lua, "venice")
+    lua.execute("FAKE.byName.hre.stacks[1].units[1].soldierCountStratMap = 12")  # the battle cost him men
+    assert _next_turn_moves_not_made(lua) == []
+
+
+def test_an_attack_and_a_mission_on_one_target_are_not_both_queued_in_a_turn(lua):
+    # live 11-15 turn 1143 (3 of 3, 00c5db34/00c5dc2f): Humphrey attacked Captain Loefwine and an assassin
+    # was sent at him in the same turn; he fell in the battle and the queued mission crashed the game
+    control(lua)
+    lua.execute(next_to("Iacopo", "Heinrich"))
+    write_orders(lua, TURN - 1, "venice", [
+        {"type": "attack", "army": "Doge Enrico", "target": "Heinrich", "target_faction": "hre"},
+        {"type": "assassinate", "agent": "Iacopo", "target": "Heinrich"}])
+    start_turn(lua, "venice")
+    r = results(lua)
+    assert r[0]["ok"] and not r[1]["ok"] and "is already the target of Doge Enrico's attack" in r[1]["reason"]
+    assert not any(c.startswith("assassinate") for c in calls(lua))
 
 
 def test_attack_refused_when_the_id_now_belongs_to_another_faction(lua):
@@ -1546,6 +1894,36 @@ def test_merge_far_apart_walks(lua):
     assert "marches out of Venice under a captain" in r["note"] and "Venice is left without a garrison" in r["note"]
 
 
+def _walk_then_reissue(lua, arrived_units):
+    """A merge that walks, then the same merge re-issued after the walker is gone (arrived or not)."""
+    control(lua)
+    lua.execute("FAKE.byName.venice.stacks[1].leader.xCoord = 130")
+    merge = [{"type": "merge_armies", "army": "garrison:Venice", "into": "Doge Enrico"}]
+    write_orders(lua, TURN - 1, "venice", merge)
+    start_turn(lua, "venice")
+    # the walk ends before the next orders: the garrison is gone, Doge Enrico holds what came
+    lua.execute("local v = FAKE.byName.venice; table.remove(v.stacks, 2); v.stacksNum = #v.stacks; "
+                f"v.stacks[1].numOfUnits = {arrived_units}; "
+                "FAKE.campaign.turnNumber = FAKE.campaign.turnNumber + 1")
+    turn_dir(lua, TURN, "venice").mkdir(parents=True, exist_ok=True)
+    write_orders(lua, TURN, "venice", merge)
+    start_turn(lua, "venice")
+    return json.loads((turn_dir(lua, TURN, "venice") / "results.json").read_text())[0]
+
+
+def test_a_reissued_merge_whose_walk_arrived_is_done(lua):
+    # live 11-21 (scratch, turn 3086): Walter Kynner and Aston Morgan joined George Harfford at turn
+    # start, after the report; England's re-issued merges came back "unknown army", two refusals
+    r = _walk_then_reissue(lua, 4)
+    assert r["ok"], r
+    assert "already arrived and joined Doge Enrico" in r["note"], r
+
+
+def test_a_reissued_merge_whose_walker_fell_on_the_way_is_refused(lua):
+    r = _walk_then_reissue(lua, 2)
+    assert not r["ok"] and "it was walking to join Doge Enrico" in r["reason"], r
+
+
 # EOP gives a stack inside a settlement no leader; the general there must still be found
 ROBIN_IN_VENICE = "FAKE.general_in_town(FAKE.byName.venice, 'Captain Robin', FAKE.settlements.Venice)"
 
@@ -1611,21 +1989,80 @@ def test_naval_orders_issue_the_right_calls(lua, order, call):
     assert call in calls(lua) and results(lua)[0]["ok"], results(lua)
 
 
+def test_a_rebel_port_is_never_blockaded(lua):
+    # QA bench 11-05 12:15:05, 12:31:39, 12:40:28: the game crashed at the turn start that applied a
+    # blockade of rebel Bruges, 3 times of 3
+    control(lua)
+    lua.execute(FLEET + "; for _, s in pairs(FAKE.settlements) do "
+                "if s.name == 'Innsbruck' then s.ownerFaction = { name = 'slave' } end end")
+    write_orders(lua, TURN - 1, "venice", [{"type": "blockade", "fleet": "Admiral Polo", "settlement": "Innsbruck"}])
+    start_turn(lua, "venice")
+    r = results(lua)[0]
+    assert not r["ok"] and "rebel port" in r["reason"], r
+    assert not any(c.startswith("blockade ") for c in calls(lua))
+
+
 def test_fleets_sail_on_water_only_and_armies_land_on_land_only(lua):
     control(lua)
     lua.execute(FLEET + "; local f = FAKE.byName.venice.stacks[3]; local doge = FAKE.byName.venice.stacks[1]; "
                 "f.boardedArmy = doge; doge.shipArmy = f; doge.leader = nil; "
-                "FAKE.byName.venice.characters[1].xCoord, FAKE.byName.venice.characters[1].yCoord = 118, 92")
+                "FAKE.byName.venice.characters[1].xCoord, FAKE.byName.venice.characters[1].yCoord = 115, 91")
     write_orders(lua, TURN - 1, "venice", [
         {"type": "move_army", "army": "Admiral Polo", "x": 100, "y": 80},
-        {"type": "land", "army": "Doge Enrico", "x": 119, "y": 93},
+        {"type": "land", "army": "Doge Enrico", "x": 116, "y": 92},
         {"type": "land", "army": "Doge Enrico", "x": 114, "y": 92},
     ])
     start_turn(lua, "venice")
     r = results(lua)
-    assert "onto land" in r[0]["reason"] and "not land" in r[1]["reason"]
+    assert "onto land" in r[0]["reason"]
+    assert "(116,92) is not land; land next to it: (114,90), (114,91), (114,92)" in r[1]["reason"]
     # the whole army splits ashore (live 10-31 18:30: moveToTile landed the general alone)
-    assert r[2]["ok"] and "splitArmy venice Venetian Heavy Infantry,Mailed Knights 114 92" in calls(lua)
+    assert r[2]["ok"], r[2]
+    assert "splitArmy venice Venetian Heavy Infantry,Mailed Knights 114 92" in calls(lua)
+
+
+def test_a_landing_is_one_step_ashore_and_an_ignored_split_is_not_done(lua):
+    # live run 10 turns 1013-1016: "land order on (105,135) reported done, yet Nigel stayed aboard";
+    # the tile was two from the fleet, and splitArmy ignores a target that far off as if done
+    control(lua)
+    lua.execute(FLEET + "; local f = FAKE.byName.venice.stacks[3]; local doge = FAKE.byName.venice.stacks[1]; "
+                "f.boardedArmy = doge; doge.shipArmy = f; doge.leader = nil; "
+                "FAKE.byName.venice.characters[1].xCoord, FAKE.byName.venice.characters[1].yCoord = 115, 91")
+    write_orders(lua, TURN - 1, "venice", [{"type": "land", "army": "Doge Enrico", "x": 113, "y": 92}])
+    start_turn(lua, "venice")
+    (r,) = results(lua)
+    assert not r["ok"] and r["reason"].startswith("(113,92) is 2 tiles from the fleet at (115,91); an army lands one step ashore")
+    assert "splitArmy" not in " ".join(calls(lua))
+
+
+def test_a_landing_not_shown_yet_is_pending_not_refused(lua):
+    # the general is moved a moment after the split (bench 11-14, land_on_coast: refused by an early
+    # read though the landing took), so a general still aboard right after is a note, not a refusal
+    control(lua)
+    lua.execute(FLEET + "; local f = FAKE.byName.venice.stacks[3]; local doge = FAKE.byName.venice.stacks[1]; "
+                "f.boardedArmy = doge; doge.shipArmy = f; doge.leader = nil; "
+                "FAKE.byName.venice.characters[1].xCoord, FAKE.byName.venice.characters[1].yCoord = 115, 91; "
+                "doge.units[1].character = FAKE.byName.venice.characters[1]; "  # his bodyguard (live: getUnit(0))
+                "FAKE.byName.venice.splitArmy = function() end")
+    write_orders(lua, TURN - 1, "venice", [{"type": "land", "army": "Doge Enrico", "x": 114, "y": 92}])
+    start_turn(lua, "venice")
+    (r,) = results(lua)
+    assert r["ok"], r
+    assert "the next report says whether Doge Enrico is ashore" in (r.get("note") or r.get("reason") or str(r)), r
+    assert "Doge Enrico's landing at (114,92) ordered; not ashore yet" in bridge_log(lua)
+
+
+def test_a_landing_that_takes_its_general_ashore_is_done(lua):
+    control(lua)
+    lua.execute(FLEET + "; local f = FAKE.byName.venice.stacks[3]; local doge = FAKE.byName.venice.stacks[1]; "
+                "f.boardedArmy = doge; doge.shipArmy = f; doge.leader = nil; "
+                "FAKE.byName.venice.characters[1].xCoord, FAKE.byName.venice.characters[1].yCoord = 115, 91; "
+                "doge.units[1].character = FAKE.byName.venice.characters[1]")
+    write_orders(lua, TURN - 1, "venice", [{"type": "land", "army": "Doge Enrico", "x": 114, "y": 92}])
+    start_turn(lua, "venice")
+    (r,) = results(lua)
+    assert r["ok"], r
+    assert lua.eval("FAKE.byName.venice.characters[1].xCoord") == 114
 
 
 # --- movement points: a mover with none left is refused, not reported "done" ------------------
@@ -1758,6 +2195,26 @@ def test_set_tax(lua):
     assert lua.eval("FAKE.settlements.Venice.settlementTaxLevel") == 2 and results(lua)[0]["ok"]
 
 
+def test_a_tax_the_game_keeps_is_a_failed_order(lua):
+    # live 11-10, turns 262-270: Nottingham read "normal" after nine set_tax orders, each "done"
+    control(lua)
+    lua.execute("""
+        local s = FAKE.settlements.Venice
+        local real = {}
+        for k, v in pairs(s) do real[k] = v end
+        for k in pairs(real) do s[k] = nil end
+        setmetatable(s, { __index = real, __newindex = function(_, k, v)
+            if k ~= "settlementTaxLevel" then real[k] = v end
+        end })
+    """)
+    before = lua.eval("FAKE.settlements.Venice.settlementTaxLevel")
+    write_orders(lua, TURN - 1, "venice", [{"type": "set_tax", "settlement": "Venice", "level": "high"}])
+    start_turn(lua, "venice")
+    r = results(lua)[0]
+    assert lua.eval("FAKE.settlements.Venice.settlementTaxLevel") == before
+    assert not r["ok"] and "Venice" in r["reason"] and "high" in r["reason"]
+
+
 def test_build_must_be_on_offer_and_affordable(lua):
     control(lua)
     lua.execute("FAKE.byName.venice.money = 1000")
@@ -1796,6 +2253,138 @@ def test_full_control_turns_the_governors_off(lua):
     assert lua.eval(f"{pc}.isAutoManagedConstruction") is False
     assert lua.eval(f"{pc}.isAutoManagedRecruitment") is False
     assert lua.eval(f"{pc}.isAutoManaged") is False
+
+
+OLD_ADMIRAL = ("local f = FAKE.byName.venice; FAKE.add_fleet(f, 'Admiral Lewes', 120, 95); "
+               "for i = 0, f.numOfCharacters - 1 do local c = f:getCharacter(i); "
+               "if c:getTypeName() == 'admiral' then c.namedCharacter.age = AGE end end")
+
+
+def admiral_age(lua):
+    return lua.eval("(function() local f = FAKE.byName.venice; for i = 0, f.numOfCharacters - 1 do "
+                    "local c = f:getCharacter(i); if c:getTypeName() == 'admiral' then return c.namedCharacter.age end "
+                    "end end)()")
+
+
+def test_a_seated_factions_old_admiral_is_held_at_the_age_cap_at_load(lua):
+    # 11-11: England's only admiral dying (old age, 66) crashed the next round's start, with or without Parley
+    control(lua, "", "autoplay=1\n")
+    lua.execute(OLD_ADMIRAL.replace("AGE", "66"))
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert admiral_age(lua) == 50
+    assert "Admiral Lewes's age held at 50 (was 66)" in (Path(lua.root) / "parley_bridge.log").read_text()
+
+
+def test_the_cap_holds_at_each_turn_start_too_and_leaves_young_admirals_alone(lua):
+    control(lua, "", "autoplay=1\n")
+    lua.execute(OLD_ADMIRAL.replace("AGE", "40"))
+    start_turn(lua, "venice")
+    assert admiral_age(lua) == 40
+    lua.execute(OLD_ADMIRAL.replace("AGE", "51"))
+    start_turn(lua, "venice")
+    assert admiral_age(lua) == 50
+
+
+def test_fork_level_and_refusal_when_supported(lua):
+    assert lua.eval("BRIDGE.fork_level()") == 3
+    assert lua.eval("BRIDGE.refusal()") is None
+
+
+def test_fork_level_2_is_refused(lua):
+    # level 2 doesn't list message scrolls (#11): an offer could never be pressed by element
+    lua.execute("M2TWEOP.forkLevel = 2")
+    assert "(forkLevel 2, need 3)" in lua.eval("BRIDGE.refusal()")
+
+
+def test_load_below_fork_level_refuses_to_drive_game(lua):
+    control(lua, "", "autoplay=1\n")
+    write_orders(lua, TURN - 1, "venice", [{"type": "build", "settlement": "Venice", "building": "wooden_wall"}])
+    lua.execute("M2TWEOP.forkLevel = nil")
+    assert lua.eval("BRIDGE.fork_level()") == 0
+    refusal = lua.eval("BRIDGE.refusal()")
+    assert refusal == "EOP build is not the Parley fork (forkLevel 0, need 3): the bridge will not drive this game; install it with just install-eop-zip"
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    log = (Path(lua.root) / "parley_bridge.log").read_text()
+    assert refusal in log
+    assert lua.eval("BRIDGE.status") == refusal
+    # autoplay does nothing:
+    tick(lua)
+    assert lua.eval("BRIDGE.status") == refusal
+    assert calls(lua) == []
+    # order application does nothing:
+    start_turn(lua, "venice")
+    assert not (lua.root / f"turn-{TURN - 1:04d}" / "venice" / "results.json").exists()
+
+
+def test_setup_turns_eops_campaign_ai_off_and_says_so(lua):
+    # 11-11 14:21-14:30: turn 124 crashed 3 of 3 right after EOP's AI gave attack orders; off, it played on
+    control(lua, "", "autoplay=1\n")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert lua.eval("FAKE.eop_ai.enabled") is False
+    assert "EOP campaign AI: off (was on)" in (Path(lua.root) / "parley_bridge.log").read_text()
+
+
+def test_a_game_can_keep_eops_campaign_ai_even_after_a_load_turned_it_off(lua):
+    lua.execute("FAKE.eop_ai.enabled = false")
+    control(lua, "", "autoplay=1\neop_ai=1\n")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert lua.eval("FAKE.eop_ai.enabled") is True
+    assert "EOP campaign AI: on (was off)" in (Path(lua.root) / "parley_bridge.log").read_text()
+
+
+def test_setup_says_whether_the_fault_catcher_is_on(lua):
+    # the catcher needs LuaJIT's ffi and Win32; here (no ffi) it says so and the load carries on
+    control(lua, "", "autoplay=1\n")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    log = (Path(lua.root) / "parley_bridge.log").read_text()
+    assert "fault catcher: unavailable" in log
+    assert "bridge loaded campaign at turn" in log
+
+
+def test_overlay_text_passes_through_unchanged(lua):
+    # on our fork, ImGui passes text as "%s" (PR #2): text is passed unchanged (no "%" doubling)
+    note = "england: Rennes at 80% order, so all three near or above 80%. If any falls below 80% next"
+    assert lua.eval(f"BRIDGE.imgui_text({note!r})") == note
+    assert lua.eval("BRIDGE.imgui_text('80%.')") == "80%."
+    assert lua.eval("BRIDGE.imgui_text(nil)") == ""
+    assert lua.eval("BRIDGE.imgui_fixed") is None
+
+
+def test_the_overlay_only_passes_escaped_text_to_imgui():
+    src = (Path(__file__).parent.parent / "lua" / "luaPluginScript.lua").read_text()
+    calls = [ln.strip() for ln in src.splitlines() if "ImGui.Text" in ln and not ln.strip().startswith("--")]
+    assert calls and all("bridge.imgui_text(" in ln for ln in calls), calls
+
+
+def test_battle_sides_never_raises_and_names_an_empty_army(lua):
+    # live 11-13 turns 808/809: auto-resolve crashed on a battle side whose first army was null
+    assert lua.eval("BRIDGE.battle_sides()").startswith("unavailable")  # no M2TW.battle in the fake
+    lua.execute("""M2TW = M2TW or {}; M2TW.battle = { sidesNum = 2, sides = {
+        { isDefender = false, armiesNum = 1, armies = { { army = { numOfUnits = 5, faction = { name = 'france' },
+            leader = { xCoord = 3, yCoord = 4, characterRecord = { localizedDisplayName = 'Thomas' } } } } } },
+        { isDefender = true, armiesNum = 1, armies = { { army = nil } } } } }""")
+    got = lua.eval("BRIDGE.battle_sides()")
+    assert got == "sides=2 [1 att n=1 france:5u:Thomas@3,4] [2 def n=1 NIL]", got
+
+
+def test_fault_catcher_0_turns_it_off(lua):
+    control(lua, "", "autoplay=1\nfault_catcher=0\n")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert "fault catcher: off (fault_catcher=0)" in (Path(lua.root) / "parley_bridge.log").read_text()
+
+
+def test_no_eop_ai_config_is_no_problem(lua):
+    lua.execute("M2TWEOP.getEopAiConfig = nil")
+    control(lua, "", "autoplay=1\n")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert "EOP campaign AI: unavailable" in (Path(lua.root) / "parley_bridge.log").read_text()
+
+
+def test_an_unseated_factions_admiral_ages_as_the_game_has_it(lua):
+    (lua.root / "bridge.txt").write_text("game_id=g1\nfaction=milan\nautoplay=1\n")  # venice has no seat
+    lua.execute(OLD_ADMIRAL.replace("AGE", "66"))
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert admiral_age(lua) == 66
 
 
 def test_autoplay_setup_turns_on_autoresolve_and_prebattle_clicks_it(lua):
@@ -1947,10 +2536,69 @@ def test_autoplay_retries_when_the_turn_does_not_end(lua):
     tick(lua)
     tick(lua, 21)  # the turn is still TURN 20 s later (the author: stuck took too long at a minute)
     assert calls(lua) == END_TURN  # nothing open: no button pressed blind
-    assert list(lua.root.glob("popup-*-m*.req"))  # the turn loop is asked to reopen a minimized message
+    # the turn loop is never asked to click a minimized message open (deleted 11-21: no screen input)
+    assert not list(lua.root.glob("popup-*-m*.req"))
     tick(lua, 2)  # End Turn again on the next tick
     assert calls(lua) == END_TURN + END_TURN
     assert "stuck" in (lua.root / "parley_bridge.log").read_text()
+
+
+def _stuck_with_icons(lua, level, ys=(546, 499)):
+    lua.execute(f"M2TWEOP.forkLevel = {level}")
+    for y in ys:
+        lua.execute(f"FAKE.root_icon({y})")
+    autoplay(lua)
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    tick(lua)
+    tick(lua, 21)
+
+
+def test_a_stuck_turn_opens_a_minimized_message_by_its_element(lua):
+    # live: the turn loop clicked the icon stack hundreds of times (290 in the logs on 11-20); fork level 6's activate() runs the
+    # icon's own use function (execute() presses only buttons: on an icon it crashed the game)
+    _stuck_with_icons(lua, 6)
+    assert list(lua.eval("FAKE.activated").values()) == [546]  # the bottom icon first
+    assert not list(lua.root.glob("popup-*-m*.req"))  # no click asked for
+    assert "reopened minimized message 1 of 2 by its element" in (lua.root / "parley_bridge.log").read_text()
+    tick(lua, 2)
+    tick(lua, 21)  # stuck again: the next icon up
+    assert list(lua.eval("FAKE.activated").values()) == [546, 499]
+
+
+def test_qa_stuck_try_runs_the_stuck_turns_own_reopen(lua):
+    # popups.toml's stuck_turn_reopens_minimized_message drives the stuck path itself on the bench
+    control(lua)
+    lua.execute("M2TWEOP.forkLevel = 6")
+    for y in (546, 499):
+        lua.execute(f"FAKE.root_icon({y})")
+    assert lua.eval("BRIDGE.qa.stuck_try()") is not None
+    assert list(lua.eval("FAKE.activated").values())  # the top icon, by its element
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "stuck? try 1: reopened minimized message 1 of 2 by its element" in log
+    assert "qa: stuck_try ok" in log
+    assert not list(lua.root.glob("popup-*-m*.req"))
+
+
+def test_a_minimized_message_is_never_clicked_below_fork_level_6(lua):
+    # no activate() below fork level 6, and since 11-21 no click either (parley/xinput.py)
+    _stuck_with_icons(lua, 5)
+    assert list(lua.eval("FAKE.activated").values()) == []
+    assert not list(lua.root.glob("popup-*-m*.req"))
+
+
+def test_a_root_that_is_not_an_icon_is_never_activated(lua):
+    lua.execute("FAKE.root_icon(546).xSize = 300")  # a panel, not a 47x47 icon
+    _stuck_with_icons(lua, 6, ys=())
+    assert list(lua.eval("FAKE.activated").values()) == []
+    assert not list(lua.root.glob("popup-*-m*.req"))  # nothing to open by element, and no click
+
+
+def test_a_failing_activate_is_logged_and_never_falls_back_to_a_click(lua):
+    lua.execute("FAKE.root_icon(546).activate = function() error('boom') end")
+    _stuck_with_icons(lua, 6, ys=())
+    assert not list(lua.root.glob("popup-*-m*.req"))  # the click fallback was deleted 11-21
+    assert "opening a minimized message by its element failed" in (lua.root / "parley_bridge.log").read_text()
 
 
 def test_autoplay_keeps_asking_the_turn_loop_after_giving_up(lua):
@@ -1961,14 +2609,13 @@ def test_autoplay_keeps_asking_the_turn_loop_after_giving_up(lua):
     tick(lua)
     for _ in range(40):  # a stuck check every other tick here
         tick(lua, 21)
-    assert "still stuck after 15 tries" in (lua.root / "parley_bridge.log").read_text()
-    for r in lua.root.glob("popup-*-m*.req"):
-        r.unlink()
+    log_path = lua.root / "parley_bridge.log"
+    assert "still stuck after 15 tries" in log_path.read_text()
+    before = log_path.read_text().count("stuck? try")
     for _ in range(4):  # two stuck checks
         tick(lua, 21)
-    reqs = list(lua.root.glob("popup-*-m*.req"))
-    assert reqs  # still asking, about every 40 s
-    assert json.loads(reqs[0].read_text())["faction"] == "venice"  # so it can decide what it finds
+    assert log_path.read_text().count("stuck? try") > before  # still trying, about every 40 s
+    assert not list(lua.root.glob("popup-*-m*.req"))  # never by a click (deleted 11-21)
 
 
 GARRISON = """
@@ -2077,9 +2724,59 @@ def test_popup_acknowledged_after_a_moment(lua):
     assert presses(lua) == ["press close_tick_button"]
 
 
+def test_a_battle_panel_popup_is_resolved_by_the_scripted_click_never_execute(lua):
+    # execute() on the panel's auto-resolve hung the game (10-29); and every battle press goes through
+    # M.press_auto_resolve's ended-battle guard (the 00612ea6 crash, 11-15)
+    autoplay(lua)
+    opened(lua, "prebattle_scroll", ["prebattle_fight_button", "prebattle_auto_resolve_button",
+                                     "prebattle_withdraw_button"])
+    lua.execute("FAKE.open_scroll('prebattle_auto_resolve_button', {})")  # findable by name, as live
+    tick(lua, 1)
+    tick(lua, 5)
+    tick(lua, 1)
+    assert presses(lua) == []
+    assert "script select_ui_element prebattle_auto_resolve_button" in calls(lua)
+
+
+def test_a_closed_window_found_by_name_is_never_pressed(lua):
+    # live 11-15 turn 1143 (00c5db34, 2 of 2): post_battle_scroll's result was acknowledged, the stuck path
+    # found the scroll by name again and pressed its tick, and the game crashed. getUiElement finds a
+    # closed window; the game's own list of what is drawn (M.open_ui) doesn't
+    autoplay(lua)
+    lua.execute("FAKE.campaign.currentFaction = FAKE.byName.milan")
+    lua.execute("FAKE.open_scroll('prebattle_auto_resolve_button', {})")
+    lua.execute("BRIDGE.open_ui = function() return { { name = 'finance_scroll', children = {} } } end")
+    tick(lua)
+    tick(lua, 31)
+    tick(lua, 31)
+    assert "prebattle_auto_resolve_button" not in " ".join(calls(lua))
+    # on the list, it is pressed
+    lua.execute("BRIDGE.open_ui = function() return { { name = 'prebattle_scroll', "
+                "children = { 'prebattle_auto_resolve_button' } } } end; BRIDGE._open_at = nil")
+    tick(lua, 31)
+    tick(lua, 31)
+    assert "script select_ui_element prebattle_auto_resolve_button" in calls(lua)
+
+
+def test_on_screen_is_unknown_when_the_games_list_cant_be_read(lua):
+    lua.execute("BRIDGE.open_ui = function() return nil end; BRIDGE._open_at = nil")
+    assert lua.eval("BRIDGE.on_screen('post_battle_scroll')") is None
+
+
+def test_a_game_message_never_touches_an_open_battle_panel(lua):
+    # live 11-15 13:02:25: "game message 67 (prebattle_scroll -> auto-resolve)": K.MESSAGE_SCROLLS holds
+    # every K.ACK scroll, so a message's handling looked up the battle panel and pressed it
+    autoplay(lua)
+    opened(lua, "prebattle_scroll", ["prebattle_fight_button", "prebattle_auto_resolve_button",
+                                     "prebattle_withdraw_button"])
+    lua.execute("BRIDGE.on_message({ eventID = 67 })")
+    tick(lua, 5)
+    tick(lua, 1)
+    assert "prebattle_scroll ->" not in bridge_log(lua).split("game message 67")[-1].split("\n")[0]
+    assert presses(lua) == []
+
+
 @pytest.mark.parametrize("scroll, buttons, pressed", [
-    ("prebattle_scroll", ["prebattle_fight_button", "prebattle_auto_resolve_button", "prebattle_withdraw_button"],
-     "prebattle_auto_resolve_button"),
     ("siege_scroll", ["siege_assault_button", "siege_maintain_button", "siege_end_button"], "siege_maintain_button"),
 ])
 def test_decision_popups_get_a_sensible_default(lua, scroll, buttons, pressed):
@@ -2124,6 +2821,39 @@ def test_the_ruler_chooses_what_to_do_with_a_captured_city(lua):
                           "script simulate_mouse_click lclick_up"]
     assert not req.exists() and not req.with_suffix(".answer").exists()
     assert any("exterminate, your choice" in p for p in lua.eval("BRIDGE.take_popups()").values())
+
+
+def test_a_load_forgets_the_old_campaigns_popups(lua):
+    # review 11-05 (agy): loadGame keeps Lua state, and the QA runner deletes the old request files,
+    # so a popup left in the bridge's list would hold End Turn as "deciding" until its cap
+    autoplay(lua)
+    lua.execute("BRIDGE.on_message({ eventID = 77 })")
+    tick(lua, 5)
+    [req] = list(lua.root.glob("popup-*.req"))
+    req.with_suffix(".hold").write_text("")  # a decision
+    tick(lua, 5)
+    assert lua.eval("BRIDGE.deciding()")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert not lua.eval("BRIDGE.deciding()")
+    assert lua.eval("#BRIDGE.pending()") == 0
+
+
+def test_a_generic_decision_with_no_scroll_to_press_lets_end_turn_go_in_seconds(lua):
+    # bench 11-21 11:40: a message read captured while a marriage scroll was up came back as "a
+    # decision" after that offer was answered; with no scroll to press it on, it held End Turn 90 s
+    autoplay(lua)
+    lua.execute("BRIDGE.on_message({ eventID = 75 })")
+    tick(lua, 5)
+    [req] = list(lua.root.glob("popup-*.req"))
+    req.with_suffix(".hold").write_text("")
+    tick(lua, 2)
+    req.with_suffix(".answer").write_text("decline\n")
+    req.with_suffix(".done").write_text("")
+    tick(lua, 2)
+    assert lua.eval("BRIDGE.deciding()")  # waits a moment for its scroll
+    tick(lua, 12)
+    assert "a decision: its scroll never came up; decline not pressed" in bridge_log(lua)
+    assert not lua.eval("BRIDGE.deciding()")
 
 
 def test_a_generic_decision_nobody_answered_stays_on_screen(lua):
@@ -2182,6 +2912,24 @@ def test_stuck_checks_wait_while_the_ruler_chooses(lua):
     for _ in range(3):
         tick(lua, 50)  # an AI turn this long would count as stuck
     assert calls(lua) == [] and lua.eval("BRIDGE.deciding()")
+
+
+def test_stuck_checks_stop_waiting_for_a_decision_past_its_cap(lua):
+    # live 11-05 09:56 (QA bench): a battle's results scroll in the rebels' turn, the turn loop gone;
+    # "deciding" never ended, the watcher deferred to it silently every 30 s, and the game stood still
+    autoplay(lua, "autoplay_decision_hold=90\n")
+    lua.execute("FAKE.campaign.currentFaction = FAKE.byName.hre; "
+                "FAKE.open_scroll('ransom_prisoners_button', {})")
+    tick(lua, 1)
+    tick(lua, 3)
+    tick(lua, 50)
+    tick(lua, 50)  # 100 s deciding: within the cap the watcher still waits
+    assert lua.eval("BRIDGE.deciding()")
+    for _ in range(3):
+        tick(lua, 31)
+    log = bridge_log(lua)
+    assert "a decision still open after" in log and "treating the turn as stuck" in log
+    assert "hre's turn stuck? try 1" in log
 
 
 def test_besiege_with_assault_storms_and_its_siege_scroll_assaults(lua):
@@ -2259,9 +3007,8 @@ def test_siege_scroll_unnamed_children_maintain_disabled_falls_through_and_close
     assert lua.eval("FAKE.ui['siege_scroll']") is None
 
 
-def test_siege_scroll_closed_before_press_clears_pending_and_runs_ui_job(lua):
+def test_siege_scroll_closed_before_press_clears_pending(lua):
     autoplay(lua)
-    lua.execute("table.insert(BRIDGE.ui_jobs, { kind = 'retrain', settlement = 'Venice', step = 1 })")
     opened(lua, "siege_scroll", ["siege_maintain_button"])
     assert lua.eval("#BRIDGE.pending()") == 1
 
@@ -2273,7 +3020,6 @@ def test_siege_scroll_closed_before_press_clears_pending_and_runs_ui_job(lua):
     tick(lua, 1)
 
     assert lua.eval("#BRIDGE.pending()") == 0
-    assert "script select_settlement Venice" in calls(lua)
     log = (lua.root / "parley_bridge.log").read_text()
     assert "popup handled: a siege (closed)" in log
 
@@ -2607,6 +3353,48 @@ def test_stuck_turn_closes_the_spy_report(lua):
     assert "enemy_settlement_info_scroll's tick" in (lua.root / "parley_bridge.log").read_text()
 
 
+def test_the_qa_hold_never_stops_an_ai_turn_being_unstuck(lua):
+    # 11-05 07:33:53: the QA bench's hold, written during the AI turns, stopped the watcher and a
+    # screen held Denmark's turn for 9 min. The hold is for the player's turn only.
+    autoplay(lua)
+    (lua.root / "paused.txt").write_text("qa instant case: holding the turn\n")
+    lua.execute("FAKE.campaign.currentFaction = FAKE.byName.hre; " + SPY_REPORT)
+    tick(lua, 1)
+    tick(lua, 50)
+    assert presses(lua) == ["press @962"]
+
+
+def test_the_qa_hold_still_resolves_a_battle_its_case_started(lua):
+    # live 11-05 13:58:28 (siege besiege_assault_storms): on_pre_battle's one press didn't take and the
+    # paused tick never retried; the panel stood 150 s
+    autoplay(lua)
+    (lua.root / "paused.txt").write_text("qa instant case: holding the turn\n")
+    lua.execute("FAKE.open_scroll('prebattle_auto_resolve_button', {})")
+    tick(lua, 1)
+    tick(lua, 5)
+    assert "script select_ui_element prebattle_auto_resolve_button" in calls(lua)
+    assert "the battle panel is still open; pressing auto-resolve" in bridge_log(lua)
+    # then its results scroll is closed too (live 14:09:51: it stayed up and the siege state with it)
+    lua.execute("""
+        FAKE.ui['prebattle_auto_resolve_button'] = nil
+        local tick_part = { execute = function() table.insert(FAKE.calls, 'press results tick'); FAKE.ui['post_battle_scroll'] = nil end }
+        local row = { getSubElement = function(self, i) if i == 0 then return tick_part end end }
+        FAKE.ui['post_battle_scroll'] = { elementName = 'post_battle_scroll', subElementsNum = 4,
+            getSubElement = function(self, i) if i == 3 then return row end end }
+    """)
+    tick(lua, 5)
+    assert "qa hold: closed the battle's results" in bridge_log(lua)
+
+
+def test_a_usage_limit_pause_still_presses_nothing_on_an_ai_turn(lua):
+    autoplay(lua)
+    (lua.root / "paused.txt").write_text("france's seat hit its usage limit\n")
+    lua.execute("FAKE.campaign.currentFaction = FAKE.byName.hre; " + SPY_REPORT)
+    tick(lua, 1)
+    tick(lua, 50)
+    assert presses(lua) == []
+
+
 def test_spy_report_a_watcher_opened_is_left_alone(lua):
     autoplay(lua)
     lua.execute("FAKE.campaign.currentFaction = FAKE.byName.hre; " + SPY_REPORT)
@@ -2742,9 +3530,22 @@ def test_any_result_scroll_is_closed_by_its_button_found_by_shape(lua):
     assert presses(lua) == ["press @520"]
 
 
+def test_the_siege_layout_names_parts_at_any_depth(lua):
+    # W15: one level only, once a 4-deep walk hit siege_scroll's stale "null" part; fork level 2
+    # gives nil for a stale child, so the layout names every part (here the button under "null")
+    lua.execute("""
+        local maintain = { elementName = 'siege_maintain_button', subElementsNum = 0 }
+        local null = { elementName = 'null', subElementsNum = 2,
+                       getSubElement = function(self, i) if i == 0 then return maintain end end }
+        SIEGE = { elementName = 'siege_scroll', subElementsNum = 1, getSubElement = function() return null end }
+    """)
+    lua.execute("BRIDGE.record_layout('siege_scroll', SIEGE)")
+    text = (lua.root / "ui_scan-siege.txt").read_text()
+    assert text == "siege_scroll: #0 | named: siege_maintain_button\n", text
+
+
 def test_scan_records_where_unnamed_parts_sit(lua):
     autoplay(lua)
-    (lua.root / "ui_names.txt").write_text("some_scroll\n")
     lua.execute("FAKE.ui.some_scroll = { elementName = 'some_scroll', subElementsNum = 2, "
                 "getSubElement = function(self, i) return ({ { elementName = '', xPos = 10, yPos = 20, xSize = 30, ySize = 40 }, "
                 "{ elementName = 'ok_button', xPos = 1, yPos = 2, xSize = 3, ySize = 4 } })[i + 1] end }")
@@ -2775,16 +3576,18 @@ def test_diplomacy_screen_with_an_offer_is_left_to_the_offer_buttons(lua):
 
 # --- control file: Claude (or anyone) can reload the bridge inside the running game ----------
 
-def test_control_reload_restarts_lua_and_marks_the_turn(lua):
-    # EOP runs a requested restart only while its console is drawn, so the console opens first
+def test_control_reload_restarts_lua_and_leaves_the_console_shut(lua):
+    # reload restarts Lua without toggling the console (graphicsEvents.cpp drawOnEndScene runs every frame)
     autoplay(lua)
     lua.execute("EVENTS = {}; M2TWEOP.restartLua = function() table.insert(EVENTS, 'restart') end; "
                 "M2TWEOP.toggleConsole = function() table.insert(EVENTS, 'console') end")
     (lua.root / "control.txt").write_text("reload\n")
     tick(lua)
-    assert list(lua.eval("EVENTS").values()) == ["console", "restart"]
+    assert list(lua.eval("EVENTS").values()) == ["restart"]
     assert not (lua.root / "control.txt").exists()
     assert (lua.root / "reloaded.txt").read_text().strip() == f"turn={TURN}"
+    lua.execute(f"BRIDGE.setup('{lua.root}')")  # the reloaded bridge doesn't toggle it open
+    assert list(lua.eval("EVENTS").values()) == ["restart"]
 
 
 def test_reload_during_a_frozen_turn_lets_the_game_ai_go(lua):
@@ -2847,11 +3650,32 @@ def test_leftover_diplomacy_closer_gives_up(lua):
     assert len(tries) == 4
 
 
-def test_after_a_reload_the_console_is_closed_again(lua):
+def test_a_reload_never_toggles_the_console(lua):
+    # the fork's restartLua opens no console (W32): an old marker's console=1 is ignored
     lua.execute("TOGGLES = 0; M2TWEOP.toggleConsole = function() TOGGLES = TOGGLES + 1 end")
-    (lua.root / "reloaded.txt").write_text(f"turn={TURN}\n")
+    (lua.root / "reloaded.txt").write_text(f"turn={TURN} console=1\n")
     lua.execute(f"BRIDGE.setup('{lua.root}')")
-    assert lua.eval("TOGGLES") == 1
+    assert lua.eval("TOGGLES") == 0
+
+
+def test_the_main_menus_map_is_not_a_campaign(lua):
+    # W47: the menu's background map fires the load event at turn 0 with no human faction
+    control(lua, "", "autoplay=1\n")
+    lua.execute("FAKE.campaign.numberOfHumanFactions = 0; FAKE.campaign.turnNumber = 0")
+    (lua.root / "parley_bridge.log").unlink(missing_ok=True)
+    (lua.root / "heartbeat.txt").unlink(missing_ok=True)
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "main menu map loaded (no human faction): not a campaign" in log
+    assert "bridge loaded campaign" not in log
+    assert not (lua.root / "heartbeat.txt").exists()
+    tick(lua, 400)
+    assert calls(lua) == []
+    # then a real campaign loads
+    lua.execute("FAKE.campaign.numberOfHumanFactions = 1; FAKE.campaign.turnNumber = 0")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert "bridge loaded campaign at turn 0" in (lua.root / "parley_bridge.log").read_text()
+    assert lua.eval("BRIDGE.menu_map") is None
 
 
 def test_after_a_reload_orders_already_applied_are_not_applied_again(lua):
@@ -2868,7 +3692,6 @@ def test_after_a_reload_orders_already_applied_are_not_applied_again(lua):
 
 def test_control_scan_writes_what_is_open(lua):
     autoplay(lua)
-    (lua.root / "ui_names.txt").write_text("mystery_scroll\n")
     lua.execute("FAKE.open_scroll('mystery_scroll', {'ok_button'})")
     (lua.root / "control.txt").write_text("scan mission\n")
     tick(lua)
@@ -2971,7 +3794,6 @@ def test_a_papal_scroll_event_makes_no_ui_call(lua):
 def test_papal_scrolls_are_never_looked_up_while_they_are_up(lua):
     # not by the message sweep, the stuck-turn check, its UI scan, or the result's own handling
     autoplay(lua)
-    (lua.root / "ui_names.txt").write_text("papal_election_scroll\npapal_election_results_scroll\nend_turn\n")
     lua.execute("FAKE.open_scroll('papal_election_scroll', {'vote_button', 'close_tick_button'}); "
                 "FAKE.open_scroll('papal_election_results_scroll', {'close_tick_button'}); "
                 "FAKE.open_scroll('end_turn', {})")
@@ -2989,7 +3811,8 @@ def test_papal_scrolls_are_never_looked_up_while_they_are_up(lua):
     assert papal_lookups(lua) == []
     assert not any(p in ("press vote_button", "press close_tick_button") for p in presses(lua))
     scans = list(lua.root.glob("ui_scan-*.txt"))
-    assert scans and "papal" not in scans[0].read_text()  # the scan ran, without them
+    # the scan ran; it names the papal scroll on screen but never looks inside it
+    assert scans and "papal_election_results_scroll: ?" in scans[0].read_text()
 
 
 def reqs_of(lua):
@@ -3166,6 +3989,183 @@ def test_the_vote_is_asked_once_though_the_event_fires_twice(lua):
     assert [r["kind"] for r in reqs] == ["vote"]
 
 
+def test_ui_class_identified_by_vtable_hex(lua):
+    assert lua.eval("BRIDGE.ui_class({})") is None
+    lua.execute("M2TWEOP.forkLevel = 5")
+    assert lua.eval("BRIDGE.ui_class(nil)") is None
+    assert lua.eval("BRIDGE.ui_class({})") is None
+    assert lua.eval("BRIDGE.ui_class({ readBytes = function() return '9c3e3901' end })") == "VOTE_BUTTON"
+    assert lua.eval("BRIDGE.ui_class({ readBytes = function() return 'dc493901' end })") == "UNDECIDED_VOTE_BUTTON"
+    assert lua.eval("BRIDGE.ui_class({ readBytes = function() return '1c463901' end })") == "DECIDED_VOTE_BUTTON"
+    assert lua.eval("BRIDGE.ui_class({ readBytes = function() return 'dc4b3901' end })") == "PAPAL_ELECTION_SCROLL"
+    assert lua.eval("BRIDGE.ui_class({ readBytes = function() return 'ec5d3601' end })") == "SCROLL_CLOSE_GADGET"
+    assert lua.eval("BRIDGE.ui_class({ readBytes = function() return 'unknown' end })") is None
+    assert lua.eval("BRIDGE.ui_class({ readBytes = function() error('fail') end })") is None
+
+
+def test_the_rulers_vote_is_pressed_by_element(lua):
+    # (a) Papal vote scroll open with candidate buttons: bridge presses chosen candidate's button by element
+    autoplay(lua)
+    lua.execute("""
+        M2TWEOP.forkLevel = 5
+        local function btn(name, y)
+            return { elementName = name, yPos = y, subElementsNum = 0,
+                     readBytes = function(self, offset, len) return "9c3e3901" end,
+                     execute = function() FAKE.calls[#FAKE.calls + 1] = "press " .. name; FAKE.ui.papal_election_scroll = nil end }
+        end
+        local subs = { btn('candidate_1', 100), btn('candidate_2', 200), btn('candidate_3', 300) }
+        FAKE.ui.papal_election_scroll = {
+            elementName = 'papal_election_scroll', subElementsNum = #subs,
+            readBytes = function(self, offset, len) return "dc4b3901" end,
+            getSubElement = function(self, i) return subs[i + 1] end,
+        }
+    """)
+    open_papal(lua, "papal_election_scroll")
+    tick(lua, 5)
+    [req_path] = list(lua.root.glob("popup-*.req"))
+    req = json.loads(req_path.read_text())
+    assert req["kind"] == "vote" and req.get("by_element") is True
+    req_path.with_suffix(".answer").write_text("2\n")
+    req_path.with_suffix(".done").write_text("")
+    tick(lua, 2)
+    assert "press candidate_2" in calls(lua)
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "popup: a papal election vote: pressed candidate_2 on papal_election_scroll by its element" in log
+
+
+def test_vote_scroll_ignores_labels_and_presses_lower_button(lua):
+    # A scroll whose sub-elements include a label (no class) and two VOTE_BUTTONs:
+    # only the buttons count, and pick 2 presses the lower one.
+    autoplay(lua)
+    lua.execute("""
+        M2TWEOP.forkLevel = 5
+        local label = {
+            elementName = 'label_title', yPos = 50, subElementsNum = 0,
+            execute = function() FAKE.calls[#FAKE.calls + 1] = "press label_title" end,
+        }
+        local function btn(name, y)
+            return { elementName = name, yPos = y, subElementsNum = 0,
+                     readBytes = function(self, offset, len) return "9c3e3901" end,
+                     execute = function() FAKE.calls[#FAKE.calls + 1] = "press " .. name; FAKE.ui.papal_election_scroll = nil end }
+        end
+        local b_upper = btn('candidate_upper', 100)
+        local b_lower = btn('candidate_lower', 250)
+        local subs = { label, b_lower, b_upper }
+        FAKE.ui.papal_election_scroll = {
+            elementName = 'papal_election_scroll', subElementsNum = #subs,
+            readBytes = function(self, offset, len) return "dc4b3901" end,
+            getSubElement = function(self, i) return subs[i + 1] end,
+        }
+    """)
+    open_papal(lua, "papal_election_scroll")
+    tick(lua, 5)
+    [req_path] = list(lua.root.glob("popup-*.req"))
+    req = json.loads(req_path.read_text())
+    assert req["kind"] == "vote" and req.get("by_element") is True
+    req_path.with_suffix(".answer").write_text("2\n")
+    req_path.with_suffix(".done").write_text("")
+    tick(lua, 2)
+    assert "press candidate_lower" in calls(lua)
+    assert "press label_title" not in calls(lua)
+    assert "press candidate_upper" not in calls(lua)
+
+
+def test_vote_at_fork_level_4_writes_click_request_without_element_press(lua):
+    # Fork level 4: below level 5, no element press, the click request is written.
+    autoplay(lua)
+    lua.execute("""
+        M2TWEOP.forkLevel = 4
+        local function btn(name, y)
+            return { elementName = name, yPos = y, subElementsNum = 0,
+                     readBytes = function(self, offset, len) return "9c3e3901" end,
+                     execute = function() FAKE.calls[#FAKE.calls + 1] = "press " .. name; FAKE.ui.papal_election_scroll = nil end }
+        end
+        local subs = { btn('candidate_1', 100), btn('candidate_2', 200) }
+        FAKE.ui.papal_election_scroll = {
+            elementName = 'papal_election_scroll', subElementsNum = #subs,
+            readBytes = function(self, offset, len) return "dc4b3901" end,
+            getSubElement = function(self, i) return subs[i + 1] end,
+        }
+    """)
+    open_papal(lua, "papal_election_scroll")
+    tick(lua, 5)
+    reqs = [json.loads(r.read_text()) for r in lua.root.glob("popup-*.req")]
+    assert len(reqs) == 1
+    req = reqs[0]
+    assert req["kind"] == "vote"
+    assert not req.get("by_element")
+    assert not any("press" in c for c in calls(lua))
+
+
+def test_vote_buttons_finds_candidates_nested_inside_panel(lua):
+    # Live layout: candidates sit deeper inside container #2
+    autoplay(lua)
+    lua.execute("""
+        M2TWEOP.forkLevel = 5
+        local function btn(name, y)
+            return { elementName = name, yPos = y, subElementsNum = 0,
+                     readBytes = function(self, offset, len) return "9c3e3901" end,
+                     execute = function() FAKE.calls[#FAKE.calls + 1] = "press " .. name; FAKE.ui.papal_election_scroll = nil end }
+        end
+        local panel = {
+            elementName = '', subElementsNum = 2,
+            getSubElement = function(self, i)
+                return ({ btn('cand_1', 100), btn('cand_2', 200) })[i + 1]
+            end,
+        }
+        local subs = {
+            { elementName = '', subElementsNum = 0 },
+            { elementName = '', subElementsNum = 0 },
+            panel,
+        }
+        FAKE.ui.papal_election_scroll = {
+            elementName = 'papal_election_scroll', subElementsNum = #subs,
+            readBytes = function(self, offset, len) return "dc4b3901" end,
+            getSubElement = function(self, i) return subs[i + 1] end,
+        }
+    """)
+    open_papal(lua, "papal_election_scroll")
+    tick(lua, 5)
+    [req_path] = list(lua.root.glob("popup-*.req"))
+    req = json.loads(req_path.read_text())
+    assert req["kind"] == "vote" and req.get("by_element") is True
+    req_path.with_suffix(".answer").write_text("1\n")
+    req_path.with_suffix(".done").write_text("")
+    tick(lua, 2)
+    assert "press cand_1" in calls(lua)
+
+
+def test_the_papal_notice_is_acknowledged_by_element(lua):
+    # (b) Papal notice (message 202) is acknowledged by its element, no click request
+    autoplay(lua)
+    lua.execute("FAKE.open_scroll('event_scroll', {'close_tick_button'})")
+    lua.execute("BRIDGE.on_message({ eventID = 202 })")
+    tick(lua, 16)
+    assert "press close_tick_button" in calls(lua)
+    reqs = [json.loads(r.read_text()) for r in lua.root.glob("popup-*.req")]
+    assert not any(r.get("press_check") for r in reqs)
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "popup: papal notice: pressed close_tick_button on event_scroll by its element" in log
+
+
+def test_the_papal_notice_falls_back_to_press_check_when_element_not_found(lua):
+    # (c) Fallback: when notice element isn't found, press_check is requested
+    autoplay(lua)
+    lua.execute("BRIDGE.on_message({ eventID = 202 })")
+    tick(lua, 16)
+    reqs = [json.loads(r.read_text()) for r in lua.root.glob("popup-*.req")]
+    assert len(reqs) == 1 and reqs[0].get("press_check") is True
+
+
+def test_the_vote_falls_back_when_candidate_buttons_not_found(lua):
+    # (c) Fallback: when candidate buttons aren't found on the vote scroll, by_element is not set
+    autoplay(lua)
+    open_papal(lua, "papal_election_scroll")
+    tick(lua, 5)
+    reqs = [json.loads(r.read_text()) for r in lua.root.glob("popup-*.req")]
+    assert len(reqs) == 1 and not reqs[0].get("by_element")
+
+
 def test_a_papal_result_is_left_to_close_by_itself(lua):
     autoplay(lua)
     lua.execute("FAKE.open_scroll('papal_election_results_scroll', {'close_tick_button'})")
@@ -3197,7 +4197,8 @@ def test_a_message_presses_whichever_game_popup_is_open(lua):
 
 def test_stuck_turn_writes_a_scan_of_open_ui_once(lua):
     autoplay(lua)
-    (lua.root / "ui_names.txt").write_text("end_turn\nsuitable_prince_panel\nnot_open_thing\n")
+    lua.execute("FAKE.ui.not_open_thing = { elementName = 'not_open_thing', subElementsNum = 0 }; "
+                "FAKE.closed = { not_open_thing = true }")
     lua.execute("FAKE.open_scroll('suitable_prince_panel', {'yes_button', 'no_button'}); "
                 "FAKE.open_scroll('end_turn', {})")
     write_orders(lua, TURN - 1, "venice", [])
@@ -3209,8 +4210,8 @@ def test_stuck_turn_writes_a_scan_of_open_ui_once(lua):
     scans = list(lua.root.glob("ui_scan-*.txt"))
     assert len(scans) == 1  # once per stuck turn
     text = scans[0].read_text()
-    assert "suitable_prince_panel: yes_button, no_button" in text and "end_turn" in text
-    assert "not_open_thing" not in text
+    assert "suitable_prince_panel: yes_button, no_button" in text
+    assert "not_open_thing" not in text and "end_turn" not in text  # closed, and the HUD
     assert "press yes_button" not in presses(lua)  # unknown elements are only logged
 
 
@@ -3261,6 +4262,19 @@ def test_a_marriage_offer_asks_for_a_decision_with_the_suitor(lua):
     assert "script clear_messages " not in calls(lua)
 
 
+@pytest.mark.parametrize("is_male, female", [("0", True), ("false", True), ("1", None), ("true", None), ("nil", None)])
+def test_a_marriage_offer_says_when_the_person_offered_is_a_woman(lua, is_male, female):
+    # one event for two scrolls: a suitor for a princess, a wife for one of the ruler's men
+    autoplay(lua)
+    lua.execute(f"""
+        BRIDGE.on_offered_for_marriage({{ character = {{ fullName = 'Udeline', age = 24, isMale = {is_male} }},
+                                          faction = FAKE.byName.venice }})
+    """)
+    tick(lua, 5)
+    [r] = [json.loads(p.read_text()) for p in lua.root.glob("popup-*.req")]
+    assert r["suitor"].get("female") == female
+
+
 def test_an_ai_factions_offer_is_not_the_players_popup(lua):
     # live: onOfferedForAdoption fired for the Moors, and their ruler answered England's scroll
     autoplay(lua)
@@ -3299,6 +4313,180 @@ def offer_marriage(lua):
         local c = { fullName = 'Jacob', age = 30, getTraits = function() return nil end }
         BRIDGE.on_offered_for_marriage({ character = c, faction = FAKE.byName.venice })
     """)
+
+
+def test_the_rulers_answer_to_an_offer_is_pressed_by_element(lua):
+    # W03 W21: no click and no Escape; the bridge presses the check or the X it finds on screen
+    for answer in ("accept", "decline"):
+        lua.execute("FAKE.reset()")
+        autoplay(lua)
+        offer_marriage(lua)
+        lua.execute("FAKE.open_offer()")
+        tick(lua, 5)
+        [req] = list(lua.root.glob("popup-*.req"))
+        req.with_suffix(".answer").write_text(answer + "\n")
+        req.with_suffix(".done").write_text("")
+        tick(lua, 2)
+        assert f"press {answer}" in calls(lua)
+        assert not req.with_suffix(".answer").exists()
+        log = (lua.root / "parley_bridge.log").read_text()
+        assert f"popup: a marriage offer: pressed {answer} on unnamed by its element" in log
+        for f in lua.root.glob("popup-*"):
+            f.unlink()
+
+
+def test_stacked_offers_each_answer_lands_on_its_own_scroll(lua):
+    # W30, live 11-15: two offers stack; one shows, the next comes up when it closes. The second
+    # request's answer, ready first, waits for its own scroll instead of landing on the first's
+    autoplay(lua)
+    offer_marriage(lua)
+    lua.execute("FAKE.open_offer('offer1')")
+    tick(lua, 5)  # the first request binds offer1
+    lua.execute("""
+        local c = { fullName = 'Hugh', age = 25, getTraits = function() return nil end }
+        BRIDGE.on_offered_for_marriage({ character = c, faction = FAKE.byName.venice })
+        FAKE.open_offer('offer2'); FAKE.closed = { offer2 = true }
+    """)
+    tick(lua, 5)
+    reqs = sorted(lua.root.glob("popup-*.req"))
+    assert len(reqs) == 2
+    first, second = reqs
+    second.with_suffix(".answer").write_text("decline\n")
+    second.with_suffix(".done").write_text("")
+    tick(lua, 2)
+    assert not any(c.startswith("press") for c in calls(lua))  # offer1 is up: not its scroll
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "its scroll isn't on screen yet; decline waits for it" in log
+    first.with_suffix(".answer").write_text("accept\n")
+    first.with_suffix(".done").write_text("")
+    tick(lua, 2)
+    assert [c for c in calls(lua) if c.startswith("press")] == ["press accept"]  # offer1 closes
+    lua.execute("FAKE.closed = {}")  # offer2 comes up
+    tick(lua, 2)
+    assert [c for c in calls(lua) if c.startswith("press")] == ["press accept", "press decline"]
+
+
+def test_a_stuck_turns_decision_on_screen_is_answered_and_pressed(lua):
+    # live 11-15 turn 1242: a message with a check and an X held the turn; nobody pressed the
+    # ruler's answer once answers became the bridge's (#645). Now it's queued as a decision
+    autoplay(lua)
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    tick(lua)
+    lua.execute("FAKE.open_offer()")
+    tick(lua, 61)
+    tick(lua, 61)
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "a decision is open on screen (unnamed); the ruler answers it" in log
+    reqs = [r for r in lua.root.glob("popup-*.req") if "-m" not in r.name]
+    assert len(reqs) == 1 and json.loads(reqs[0].read_text())["kind"] == "read"
+    reqs[0].with_suffix(".answer").write_text("decline\n")
+    reqs[0].with_suffix(".done").write_text("")
+    tick(lua, 2)
+    assert "press decline" in calls(lua)
+
+
+def test_an_answer_is_not_pressed_when_the_scroll_is_gone(lua):
+    autoplay(lua)
+    offer_marriage(lua)
+    tick(lua, 5)
+    [req] = list(lua.root.glob("popup-*.req"))
+    req.with_suffix(".answer").write_text("accept\n")
+    req.with_suffix(".done").write_text("")
+    tick(lua, 2)
+    tick(lua, 61)
+    assert not any(c.startswith("press") for c in calls(lua))
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "popup: a marriage offer: its scroll never came up; accept not pressed" in log
+
+
+def _offer_with_icons(lua, level, ys=(546, 499), kind="marriage", open_scroll=False):
+    lua.execute(f"M2TWEOP.forkLevel = {level}")
+    for y in ys:
+        lua.execute(f"FAKE.root_icon({y})")
+    autoplay(lua)
+    if kind == "marriage":
+        offer_marriage(lua)
+    elif kind == "adoption":
+        lua.execute("""
+            local c = { fullName = 'Godwine', age = 22, getTraits = function() return nil end }
+            BRIDGE.on_offered_for_adoption({ character = c, faction = FAKE.byName.venice })
+        """)
+    if open_scroll:
+        lua.execute("FAKE.open_offer()")
+    tick(lua, 5)
+
+
+def test_a_waiting_offer_opens_a_minimized_message_by_its_element(lua):
+    _offer_with_icons(lua, 6)
+    assert list(lua.eval("FAKE.activated").values()) == [546]  # bottom icon first
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "offer" in log and "by its element" in log
+    assert "reopened minimized message 1 of 2 by its element" in log
+    tick(lua, 5)  # next wait step: the next icon up
+    assert list(lua.eval("FAKE.activated").values()) == [546, 499]
+    tick(lua, 5)  # cycling back to first icon
+    assert list(lua.eval("FAKE.activated").values()) == [546, 499, 546]
+
+
+def test_an_offer_minimized_after_its_scroll_was_bound_is_reopened_by_element(lua):
+    # live 11-20 13:22: the offer's scroll was up (bound), the game minimized it, and the turn loop
+    # clicked the icon stack: a bound scroll no longer open counts as gone for the reopen
+    _offer_with_icons(lua, 6, open_scroll=True)
+    assert list(lua.eval("FAKE.activated").values()) == []  # its scroll is open: nothing to reopen
+    lua.execute("FAKE.closed = { offer = true }")  # minimized (FAKE.open_offer's key)
+    tick(lua, 5)
+    assert list(lua.eval("FAKE.activated").values()) == [546]
+
+
+def test_a_waiting_offer_opens_icons_no_faster_than_the_look_pace(lua):
+    # handle_popups runs every tick: without pacing a held offer would open a message every frame
+    _offer_with_icons(lua, 6)
+    assert list(lua.eval("FAKE.activated").values()) == [546]
+    for _ in range(4):
+        tick(lua, 1)  # 4 s more: still inside K.OFFER_REOPEN_EVERY
+    assert list(lua.eval("FAKE.activated").values()) == [546]
+    tick(lua, 1)
+    assert list(lua.eval("FAKE.activated").values()) == [546, 499]
+
+
+def test_an_adoption_offer_opens_a_minimized_message_by_its_element(lua):
+    _offer_with_icons(lua, 6, kind="adoption")
+    assert list(lua.eval("FAKE.activated").values()) == [546]
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "offer" in log and "by its element" in log
+
+
+def test_an_open_offers_scroll_activates_no_icon(lua):
+    _offer_with_icons(lua, 6, open_scroll=True)
+    assert list(lua.eval("FAKE.activated").values()) == []
+
+
+def test_an_offer_below_fork_level_6_activates_no_icon(lua):
+    _offer_with_icons(lua, 5)
+    assert list(lua.eval("FAKE.activated").values()) == []
+    assert list(lua.root.glob("popup-*.req"))
+
+
+def test_an_offer_root_that_is_not_an_icon_is_never_activated(lua):
+    lua.execute("FAKE.root_icon(546).xSize = 300")
+    _offer_with_icons(lua, 6, ys=())
+    assert list(lua.eval("FAKE.activated").values()) == []
+
+
+def test_an_offer_failing_activate_does_not_crash(lua):
+    lua.execute("FAKE.root_icon(546).activate = function() error('boom') end")
+    _offer_with_icons(lua, 6, ys=())
+    assert list(lua.root.glob("popup-*.req"))
+
+
+def test_choice_buttons_are_found_by_shape(lua):
+    lua.execute("FAKE.open_offer(); FAKE.open_scroll('finance_scroll', {'finance_ok_button'})")
+    assert lua.eval("BRIDGE.open_choice().name") == "unnamed"
+    assert lua.eval("BRIDGE.open_choice().accept.xPos") == 466
+    assert lua.eval("BRIDGE.open_choice().decline.xPos") == 516
+    lua.execute("FAKE.ui.offer = nil")
+    assert lua.eval("BRIDGE.open_choice()") is None
 
 
 def test_end_turn_waits_until_the_ruler_has_answered_an_offer(lua):
@@ -3349,6 +4537,26 @@ def test_end_turn_hold_has_its_own_cap(lua):
     assert "ending it anyway" in (lua.root / "parley_bridge.log").read_text()
 
 
+def test_the_bench_config_sets_a_short_decision_hold(lua):
+    # the author 11-05: on the QA bench a stall costs ~2 min; the QA game publishes autoplay_decision_hold=90
+    autoplay(lua, "autoplay_decision_hold=12\n")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    offer_marriage(lua)
+    for _ in range(3):
+        tick(lua, 5)
+    assert calls(lua) == []  # held for 10 s so far (the hold starts at the first held tick)
+    tick(lua, 10)
+    assert calls(lua) == END_TURN  # past the configured 12 s, not the bridge's 570
+
+
+def test_the_ai_stuck_check_is_thirty_seconds():
+    # the author 11-05: an AI turn sitting still is checked after 30 s
+    import re
+    lua_src = (Path(__file__).resolve().parents[1] / "lua" / "parley_bridge.lua").read_text()
+    assert re.search(r"^K\.AI_STUCK_AFTER = 30\b", lua_src, re.M)
+
+
 def test_end_turn_hold_for_offers_can_be_switched_off(lua):
     autoplay(lua, "autoplay_hold_decisions=0\n")
     write_orders(lua, TURN - 1, "venice", [])
@@ -3356,6 +4564,20 @@ def test_end_turn_hold_for_offers_can_be_switched_off(lua):
     offer_marriage(lua)
     tick(lua, 5)
     assert calls(lua) == END_TURN
+
+
+def test_end_turn_hold_for_diplomacy_only_lets_a_marriage_offer_pass(lua):
+    # live 11-05 09:37 and 09:39 (QA diplomacy, ai_offer_on_its_turn): marriage offers for bench
+    # generals held End Turn a minute each and the case timed out after its offer was accepted
+    autoplay(lua, "autoplay_hold_decisions=diplomacy\n")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    offer_marriage(lua)
+    assert lua.eval("BRIDGE.decision_waiting(true)") is None
+    assert lua.eval("BRIDGE.decision_waiting()") == "a marriage offer"
+    tick(lua, 5)
+    assert calls(lua) == END_TURN
+    assert "holding End Turn" not in (lua.root / "parley_bridge.log").read_text()
 
 
 def test_an_ai_factions_offer_doesnt_hold_end_turn(lua):
@@ -3368,6 +4590,42 @@ def test_an_ai_factions_offer_doesnt_hold_end_turn(lua):
     """)
     tick(lua, 5)
     assert calls(lua) == END_TURN
+
+
+def test_end_turn_waits_until_a_game_message_is_read(lua):
+    autoplay(lua, "autoplay_hold_reads=1\n")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    lua.execute("BRIDGE.on_message({ eventID = 91 })")
+    tick(lua, 5)
+    assert calls(lua) == []
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "holding End Turn until the turn loop reads a message" in log
+    [req] = list(lua.root.glob("popup-*.req"))
+    req.with_suffix(".done").write_text("")
+    tick(lua, 2)
+    assert calls(lua) == ["script clear_messages "] + END_TURN
+
+
+def test_end_turn_hold_for_reads_gives_up_after_read_hold(lua):
+    autoplay(lua, "autoplay_hold_reads=1\n")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    lua.execute("BRIDGE.on_message({ eventID = 91 })")
+    tick(lua, 5)
+    assert calls(lua) == []
+    tick(lua, 35)
+    assert calls(lua) == ["script clear_messages "] + END_TURN
+
+
+def test_end_turn_hold_for_reads_is_off_by_default(lua):
+    autoplay(lua)
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    lua.execute("BRIDGE.on_message({ eventID = 91 })")
+    tick(lua, 5)
+    assert calls(lua) == END_TURN
+    assert "holding End Turn until the turn loop reads a message" not in (lua.root / "parley_bridge.log").read_text()
 
 
 def test_agent_mission_outcomes_reach_the_rulers_report(lua):
@@ -3498,6 +4756,34 @@ def test_merge_units_reports_refusal_when_nothing_can_combine(lua):
     assert "nothing to merge in Doge Enrico: no two worn units of one type that can combine" in r["reason"]
 
 
+def test_troops_carry_what_merge_units_groups_by(lua):
+    # live 11-13/14: Captains Foucher and Gerbert had Pike Militia 64/75 and 67/75; the report
+    # showed a pair, the bridge (type, armour and weapon level) refused merge_units 20 times
+    control(lua)
+    lua.execute("""
+        local st = FAKE.byName.venice.stacks[1]
+        local units = {}
+        local function unit(n, armour, extra)
+            local u = { eduEntry = { eduType = 'Pike Militia' }, soldierCountStratMap = n,
+                        soldierCountStratMapMax = 75, exp = 0, armourLVL = armour, weaponLVL = 0 }
+            for k, v in pairs(extra or {}) do u[k] = v end
+            units[#units + 1] = u
+        end
+        unit(64, 1)
+        unit(67, 0)
+        unit(50, 0, { retrainingSettlement = {} })
+        st.getUnit = function(self, i) return units[i + 1] end
+        st.numOfUnits = #units
+    """)
+    (doge,) = [a for a in report_of(lua).armies if a.id == "Doge Enrico"]
+    assert [(u.armour, u.weapon, u.held) for u in doge.troops] == [(1, 0, False), (0, 0, False), (0, 0, True)]
+    assert [u.merge_group() for u in doge.troops] == ["Pike Militia (armour 1)", "Pike Militia", None]
+    write_orders(lua, TURN - 1, "venice", [{"type": "merge_units", "army": "Doge Enrico"}])
+    start_turn(lua, "venice")
+    [r] = json.loads((turn_dir(lua, TURN - 1, "venice") / "results.json").read_text())
+    assert not r["ok"] and "nothing to merge" in r["reason"]  # the bridge agrees: no pair
+
+
 def test_disband_releases_the_weakest_of_a_type_never_a_bodyguard(lua):
     # Scratch, live: "Antwerp's surplus militia is the first thing to cut if a disband order appears"
     lua.execute("""
@@ -3524,6 +4810,24 @@ def test_disband_releases_the_weakest_of_a_type_never_a_bodyguard(lua):
     left = lua.eval("(function() local t = {} for _, u in ipairs(FAKE.units) do "
                     "t[#t + 1] = u.eduEntry.eduType .. ' ' .. u.soldierCountStratMap end return table.concat(t, ', ') end)()")
     assert left == "Town Militia 60, Town Militia 55, Peasant Archers 40"
+
+
+def test_disbanding_the_unit_its_commander_rides_says_why_not(lua):
+    # live 11-10: England's fleet is one cog its admiral rides on; "'Admiral Richard' has no 'cog' to
+    # release" told the ruler nothing, and it ordered the same disband 22 times
+    lua.execute("""
+        local st = FAKE.byName.venice.stacks[1]
+        local units = { { eduEntry = { eduType = 'cog' }, soldierCountStratMap = 25, character = {},
+                          kill = function() error('the admiral ship was released') end } }
+        st.getUnit = function(self, i) return units[i + 1] end
+        st.numOfUnits = 1
+    """)
+    write_orders(lua, TURN - 1, "venice", [{"type": "disband", "army": "Doge Enrico", "unit": "cog"},
+                                           {"type": "disband", "army": "Doge Enrico", "unit": "galley"}])
+    start_turn(lua, "venice")
+    r = results(lua)
+    assert r[0]["reason"] == "the cog in 'Doge Enrico' carries its commander; it can't be released while he leads it"
+    assert r[1]["reason"] == "'Doge Enrico' has no 'galley' to release"
 
 
 def test_merge_units_stops_when_the_game_ignores_the_write(lua):
@@ -3651,21 +4955,18 @@ def test_report_lists_land_crossings_near_you(lua):
     assert "joining region10 and region11" in build_prompt(r_old, persona="p")
 
 
-def test_land_crossings_on_eop_master_come_from_the_connection_list(lua):
-    # EOP master has no tile.isLandConnection: stratMap.landConnectionsNum + getLandConnection(i)
+def test_sea_crossings_come_from_tile_is_sea_crossing(lua):
+    # our fork restored tile.isLandConnection and tile.isSeaCrossing (PR #3)
     lua.execute("""
         local base = FAKE.stratMap.getTile
         FAKE.stratMap.getTile = function(x, y)
             local t = base(x, y)
             t.regionID = x < 125 and 10 or 11
+            t.isSeaCrossing = (y == 95 and (x == 124 or x == 125)) and 1 or 0
             t.isLand = (y == 95 and (x == 124 or x == 125)) and 0 or 1
             return t
         end
         FAKE.stratMap.mapWidth, FAKE.stratMap.mapHeight = 140, 100
-        FAKE.stratMap.landConnectionsNum = 2
-        FAKE.stratMap.getLandConnection = function(self, i)
-            return ({ [0] = { xCoord = 124, yCoord = 95 }, [1] = { xCoord = 125, yCoord = 95 } })[i]
-        end
     """)
     r = report_of(lua)
     [c] = r.crossings
@@ -3674,9 +4975,6 @@ def test_land_crossings_on_eop_master_come_from_the_connection_list(lua):
     p = build_prompt(r, persona="p")
     assert "LAND CROSSINGS NEAR YOU (an army walks across the water here, no ships needed: move_army onto the land tile on the far side)" in p
     assert "joining region10 (124,94) and region11 (125,94)" in p
-    # old reports without shores continue to work
-    r_old = r.model_copy(update={"crossings": [Crossing(x=125, y=95, regions=["region10", "region11"], distance=10)]})
-    assert "joining region10 and region11" in build_prompt(r_old, persona="p")
 
 
 def test_report_gives_settlement_tiles_ports_training_and_income_items(lua):
@@ -3837,20 +5135,97 @@ def frozen_milan(lua):
     start_turn(lua, "milan")
 
 
+def test_a_faction_whose_envoy_parleys_at_its_turn_start_stays_awake_that_turn(lua):
+    # 11-05 phase 2: Egypt's courted envoy parleyed and Egypt was frozen the same second; no offer came
+    lua.execute("BRIDGE.qa.court_due = function(fac) return fac.name == 'milan' end")
+    frozen_milan(lua)
+    assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 0
+    assert "milan: game AI left awake this turn for its envoy's parley" in (lua.root / "parley_bridge.log").read_text()
+    lua.execute("BRIDGE.qa.court_due = function() return false end")
+    start_turn(lua, "milan")  # next turn, no parley: frozen again
+    assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 1
+
+
 def frame(lua, seconds):
     lua.execute(f"FAKE.now = FAKE.now + {seconds}; BRIDGE.on_frame()")
+
+
+def test_a_control_request_is_answered_within_frames_not_on_the_2s_tick(lua):
+    # 11-05: a bench reload's 7 control round trips cost 2 s each on the tick (14 of ~22 s)
+    lua.execute("BRIDGE.clock = function() return FAKE.now end")
+    frame(lua, 0)  # the tick runs once; the next one is 2 s of game clock away
+    (lua.root / "control.txt").write_text("lua return 41 + 1\n")
+    for _ in range(5):
+        frame(lua, 0)  # the clock stands still: no tick
+    assert "control: lua -> 42" in (lua.root / "parley_bridge.log").read_text()
+    assert not (lua.root / "control.txt").exists()
 
 
 def test_a_frozen_seats_turn_that_runs_too_long_unfreezes_its_ai(lua):
     # live, turn 20: a frozen AI never answered its own siege and the turn never ended
     frozen_milan(lua)
-    frame(lua, 2)  # M.FROZEN_TURN_LIMIT is 3 s (11-05: a released AI ends its turn at once)
+    frame(lua, 0)  # M.FROZEN_TURN_LIMIT is 1 s (11-05: a released AI ends its turn at once)
     assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 1
-    frame(lua, 5)
+    frame(lua, 2)  # a seat frozen by name waits a second of rest first (11-21): the next tick
+    frame(lua, 2)
     assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 0
     assert "milan: turn still running" in (lua.root / "parley_bridge.log").read_text()
     start_turn(lua, "milan")  # its next turn: frozen again
     assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 1
+
+
+def wait(lua, seconds):
+    lua.execute(f"FAKE.now = FAKE.now + {seconds}; BRIDGE.release_frozen(FAKE.now)")
+
+
+def _milan_moves(lua):
+    return lua.eval("""(function()
+        local st = FAKE.byName.milan:getStack(0)
+        local c = st.leader
+        return string.format('%s/%s', tostring(c.movePoints), tostring(st:getUnit(0).movePoints))
+    end)()""")
+
+
+def test_a_frozen_seat_is_let_go_with_no_moves_left_for_its_game_ai(lua):
+    # live 11-21 10:04-10:07: Captain Evrart, ordered into Arhus, spent 67-78 of 80 points a turn
+    # going elsewhere once France's released AI woke
+    frozen_milan(lua)
+    wait(lua, 2)
+    assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 1  # at rest for under a second
+    wait(lua, 1)
+    assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 0
+    assert _milan_moves(lua) == "0/0"
+    assert "milan: movers at rest after 3s; spent the moves of" in bridge_log(lua)
+
+
+def test_a_frozen_seat_waits_while_its_rulers_army_still_moves(lua):
+    frozen_milan(lua)
+    for step in range(4):  # the army steps a tile every second
+        lua.execute(f"FAKE.byName.milan:getStack(0).leader.xCoord = {130 + step}")
+        wait(lua, 2 if step == 0 else 1)
+        assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 1, step
+    wait(lua, 1)
+    assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 0
+
+
+def test_a_frozen_seat_that_never_rests_is_let_go_at_the_limit(lua):
+    frozen_milan(lua)
+    for step in range(12):
+        lua.execute(f"FAKE.byName.milan:getStack(0).leader.xCoord = {130 + step}")
+        wait(lua, 1)
+    assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 0
+    assert _milan_moves(lua) == "0/0"
+
+
+def test_the_quiet_worlds_frozen_ai_keeps_its_moves(lua):
+    # freeze=* (the QA bench) freezes every AI faction; only a seat frozen by name is the ruler's
+    (lua.root / "bridge.txt").write_text("game_id=g1\nfaction=venice\nfreeze=*\n")
+    lua.execute("BRIDGE.clock = function() return FAKE.now end; FAKE.byName.milan.isPlayerControlled = 0")
+    start_turn(lua, "milan")
+    before = _milan_moves(lua)
+    frame(lua, 2)
+    assert lua.eval("FAKE.byName.milan.freezeFactionAI") == 0
+    assert _milan_moves(lua) == before
 
 
 def test_a_frozen_seats_turn_that_ends_in_time_stays_frozen(lua):
@@ -3901,30 +5276,41 @@ def test_qa_report_writes_the_factions_report_for_the_turn_before(lua):
     assert "qa: report failed: " in bridge_log(lua)
 
 
-def test_building_queue_on_eop_master_never_reads_past_its_end(lua):
-    # master's getBuildingInQueue(i) is head+i: i = n was an empty slot whose name read crashed
-    # the game (live, scratch2); item 1 can't be reached, items 2..n are i = 1..n-1
+def test_building_queue_reads_items_stopping_at_nil(lua):
+    # our fork (PR #4): 1-based, nil outside 1..n; stops if getBuildingInQueue returns nil
     control(lua)
     lua.execute("""
-        FAKE.stratMap.landConnectionsNum = 0
         local q = FAKE.settlements.Venice.buildingsQueue
-        q.numBuildingsInQueue = 3
-        local items = { [1] = "market", [2] = "farms" }   -- head+1, head+2
+        q.numBuildingsInQueue = 4
+        local items = { [1] = "wooden_wall", [2] = "market" }
         q.getBuildingInQueue = function(self, pos)
-            if pos >= 3 then error("read past the queue's end") end
-            if pos <= 0 then return nil end
+            if not items[pos] then return nil end
             return { getQueueBuildingName = function() return items[pos] end }
         end
     """)
     venice = report_of(lua).settlements[0]
-    assert venice.queue[0].startswith("(the building under construction")
-    assert venice.queue[1:] == ["market", "farms"]
+    assert venice.queue == ["wooden_wall", "market"]
 
 
-def test_eop_master_reports_treaties_and_turns_in_stance(lua):
-    # campaign:getFactionDiplomacy(a, b) is master only (types/campaign.h:675): nil outside 0..30
+def test_building_queue_reads_every_item(lua):
+    # our fork's fix (author/M2TWEOP-library PR #4, upstream #88): 1-based, reads 1..n
+    control(lua)
     lua.execute("""
-        FAKE.stratMap.landConnectionsNum = 0
+        local q = FAKE.settlements.Venice.buildingsQueue
+        q.numBuildingsInQueue = 3
+        local items = { "wooden_wall", "market", "farms" }
+        q.getBuildingInQueue = function(self, pos)
+            if pos < 1 or pos > 3 then return nil end
+            return { getQueueBuildingName = function() return items[pos] end }
+        end
+    """)
+    venice = report_of(lua).settlements[0]
+    assert venice.queue == ["wooden_wall", "market", "farms"]
+
+
+def test_report_includes_treaties_and_turns_in_stance(lua):
+    # campaign:getFactionDiplomacy(a, b) is supported on our fork: nil outside 0..30
+    lua.execute("""
         local v, m = FAKE.byName.venice.factionID, FAKE.byName.milan.factionID
         local d = { [v] = { [m] = { hasTradeRights = true, hasMilitaryAccess = false,
                                     isProtectorate = false, numTurnsState = 7 } },
@@ -3935,11 +5321,10 @@ def test_eop_master_reports_treaties_and_turns_in_stance(lua):
     assert milan.treaties == ["trade rights", "protectorate"] and milan.turns_in_stance == 7
 
 
-def test_eop_master_reports_the_recruitment_queue_inside_its_count(lua):
+def test_report_includes_recruitment_queue_inside_its_count(lua):
     # getUnitInQueue(i) is 0-based with no bounds check (types/settlement.h:743)
     control(lua)
     lua.execute("""
-        FAKE.stratMap.landConnectionsNum = 0
         local s = FAKE.settlements.Venice
         s.unitInQueueCount = 2
         local q = { [0] = { recruitType = 0, eduEntry = { eduType = "Peasants" }, recruitTime = 2, turnsTrained = 1 },
@@ -3950,6 +5335,22 @@ def test_eop_master_reports_the_recruitment_queue_inside_its_count(lua):
         end
     """)
     assert report_of(lua).settlements[0].recruit_queue == ["Peasants (1 turn left)", "an agent (1 turn left)"]
+
+
+def test_log_opens_file_in_binary_append_mode(lua):
+    # W48: log() opens parley_bridge.log with "ab" so Wine writes \n
+    lua.execute("""
+        LOG_MODES = {}
+        local real_open = io.open
+        io.open = function(path, mode)
+            if tostring(path):match("parley_bridge%.log$") then
+                table.insert(LOG_MODES, mode)
+            end
+            return real_open(path, mode)
+        end
+    """)
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert "ab" in list(lua.eval("LOG_MODES").values())
 
 
 @pytest.mark.parametrize("order", [
@@ -4065,6 +5466,26 @@ def test_repair_order_refusals(lua):
     start_turn(lua, "venice")
     res = results(lua)[0]
     assert not res["ok"] and "not yours to command" in res["reason"]
+
+
+def test_a_build_the_game_says_yes_to_but_never_queues_is_refused(lua):
+    # a guard, not seen live: a yes from addBuildingToQueue that leaves the queue as it was must not
+    # come back done (the queue's length is checked; the treasury moves only when a build starts)
+    control(lua)
+    lua.execute("FAKE.settlements.Venice.constructionOpts = { { 'market', 1200, 3, 1, nil, 'ignored' } }")
+    write_orders(lua, TURN - 1, "venice", [{"type": "build", "settlement": "Venice", "building": "market"}])
+    start_turn(lua, "venice")
+    res = results(lua)[0]
+    assert not res["ok"], res
+    assert res["reason"] == "the game didn't queue 'market' in Venice (its queue still holds 1); order it again next turn"
+    # a build the game does queue is still done
+    control(lua)
+    lua.execute(f"FAKE.reset(); BRIDGE.setup('{lua.root}'); "
+                "FAKE.settlements.Venice.constructionOpts = { { 'market', 1200, 3, 1 } }")
+    (turn_dir(lua, TURN - 1, "venice") / "results.json").unlink(missing_ok=True)
+    write_orders(lua, TURN - 1, "venice", [{"type": "build", "settlement": "Venice", "building": "market"}])
+    start_turn(lua, "venice")
+    assert results(lua)[0]["ok"]
 
 
 def test_playtest_funds_below_target_topped_up_and_logged(lua):
@@ -4466,6 +5887,68 @@ def test_qa_load_calls_eop_loadgame_with_path(lua, tmp_path, monkeypatch):
     assert "qa: load ok: mods/parley/saves/parley_keep_g1.sav" in bridge_log(lua)
 
 
+def test_qa_load_during_an_ai_turn_waits_for_the_players_turn(lua, tmp_path, monkeypatch):
+    # 11-05 07:17:43: a load 2 s after the player's End Turn, France's turn running, crashed the game
+    _game_dir_with_save(tmp_path, monkeypatch, "mods/parley/saves/parley_bench.sav")
+    lua.execute("FAKE.player_turn = FAKE.campaign.currentFaction; FAKE.campaign.currentFaction = FAKE.byName.hre")
+    res = lua.eval("BRIDGE.qa.load('mods/parley/saves/parley_bench.sav')")
+    assert res == "deferred: mods/parley/saves/parley_bench.sav"
+    assert not any(c.startswith("loadGame") for c in calls(lua))
+    assert "qa: load deferred: hre's turn is running" in bridge_log(lua)
+    assert "qa: load ok" not in bridge_log(lua)
+    tick(lua, 1)  # still the AI's turn: nothing
+    assert not any(c.startswith("loadGame") for c in calls(lua))
+    lua.execute("FAKE.campaign.currentFaction = FAKE.player_turn")
+    tick(lua, 1)
+    assert "loadGame mods/parley/saves/parley_bench.sav" in calls(lua)
+    assert "qa: load ok: mods/parley/saves/parley_bench.sav" in bridge_log(lua)
+
+
+def test_a_load_now_drops_a_load_still_waiting(lua, tmp_path, monkeypatch):
+    # live 11-21 11:35: the restore loaded the real campaign at once; the bench load a failed case
+    # had left waiting since 11:31:58 fired 8 s later and the bench world ran as the campaign
+    _game_dir_with_save(tmp_path, monkeypatch, "mods/parley/saves/parley_bench.sav")
+    (tmp_path / "game" / "mods/parley/saves/parley_keep_g1.sav").write_bytes(b"save")
+    lua.execute("FAKE.player_turn = FAKE.campaign.currentFaction; FAKE.campaign.currentFaction = FAKE.byName.hre")
+    assert lua.eval("BRIDGE.qa.load('mods/parley/saves/parley_bench.sav')").startswith("deferred")
+    lua.execute("FAKE.campaign.currentFaction = FAKE.player_turn")
+    assert lua.eval("BRIDGE.qa.load('mods/parley/saves/parley_keep_g1.sav')") == "mods/parley/saves/parley_keep_g1.sav"
+    tick(lua, 1)
+    tick(lua, 1)
+    loads = [c for c in calls(lua) if c.startswith("loadGame")]
+    assert loads == ["loadGame mods/parley/saves/parley_keep_g1.sav"], loads
+    assert "qa: load: drops the waiting load of mods/parley/saves/parley_bench.sav" in bridge_log(lua)
+
+
+def test_a_waiting_load_stops_the_wait_for_a_capture(lua):
+    # bench 11-21 12:28-12:31: a bench load deferred to the player's turn sat behind the rebels'
+    # battle results, each held for a screenshot no turn loop was taking; the reload timed out
+    autoplay(lua)
+    lua.execute("BRIDGE.on_message({ eventID = 40 })")
+    tick(lua, 5)
+    [r] = reqs_of(lua)
+    lua.execute("FAKE.campaign.currentFaction = FAKE.byName.hre;"
+                " BRIDGE.pending_load = 'mods/parley/saves/parley_bench.sav'")
+    tick(lua, 1)
+    assert not (lua.root / f"{r['id']}.req").exists()
+    assert "a load is waiting (mods/parley/saves/parley_bench.sav); not waiting on its capture" in bridge_log(lua)
+
+
+def test_end_turn_waits_for_this_turns_agent_missions_up_to_a_cap(lua):
+    # 11-05 07:11:39: autoplay ended the turn 2 s after a sabotage order; the mission never reported
+    lua.execute("BRIDGE.mission_ordered('venice'); BRIDGE.mission_ordered('venice')")
+    now = lua.eval("BRIDGE.clock()")
+    assert lua.eval(f"BRIDGE.mission_hold('venice', {now})") is True
+    lua.execute("BRIDGE.mission_reported('venice')")
+    assert lua.eval(f"BRIDGE.mission_hold('venice', {now})") is True  # one still to come
+    lua.execute("BRIDGE.mission_reported('venice')")
+    assert lua.eval(f"BRIDGE.mission_hold('venice', {now})") is False
+    lua.execute("BRIDGE.mission_ordered('milan')")
+    assert lua.eval(f"BRIDGE.mission_hold('milan', {now} + 21)") is False  # the cap: ends anyway
+    assert "milan: 1 mission(s) not reported after 20s" in bridge_log(lua)
+    assert lua.eval(f"BRIDGE.mission_hold('milan', {now} + 22)") is False
+
+
 def test_qa_load_refuses_a_missing_save_and_never_calls_eop(lua, tmp_path, monkeypatch):
     # live 10-31: EOP's loadGame on a missing save froze the game behind a modal ERROR box
     _game_dir_with_save(tmp_path, monkeypatch, "mods/parley/saves/parley_keep_scratch.restored-1.sav")
@@ -4487,6 +5970,59 @@ def test_every_campaign_load_is_logged_for_the_qa_restore(lua):
     assert f"bridge loaded campaign at turn {TURN}" in bridge_log(lua)
 
 
+def test_a_load_writes_the_heartbeat_of_the_turn_it_loaded(lua):
+    # live 11-10 14:01: a turn-5 save loaded over heartbeat turn=271; no turn folder, no report
+    control(lua)
+    (lua.root / "heartbeat.txt").write_text("turn=271\n")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert (lua.root / "heartbeat.txt").read_text().strip() == f"turn={TURN}"
+
+
+def test_a_load_with_no_report_for_the_turn_before_writes_it(lua):
+    # live 11-14 06:16: run 11 loaded at turn 5 into empty folders; England had nothing to answer
+    # and End Turn waited its 720 s. A report already there, or orders already settled, is kept;
+    # under QA the runner writes its own.
+    autoplay(lua)
+    report = turn_dir(lua, TURN - 1, "venice") / "state.json"
+    import shutil
+    shutil.rmtree(report.parent, ignore_errors=True)
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    tick(lua)  # the turn loop hasn't made the folder yet: nothing written, still due
+    assert not report.exists() and lua.eval("BRIDGE.load_reports ~= nil")
+    report.parent.mkdir(parents=True)
+    tick(lua)
+    assert StateReport.model_validate_json(report.read_bytes()).faction == "venice"
+    assert f"venice: no report for turn {TURN - 1} at the load; wrote it now" in bridge_log(lua)
+    assert lua.eval("BRIDGE.load_reports == nil")
+    report.write_text("kept")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    tick(lua)
+    assert report.read_text() == "kept"
+    report.unlink()
+    (lua.root / "qa.lock").write_text("")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    tick(lua)
+    assert not report.exists()
+
+
+def test_a_load_under_the_qa_lock_writes_the_report_once_the_lock_goes(lua):
+    # live 11-22 08:00:50: the bench restored the live campaign to turn 3492 while it held qa.lock;
+    # no report was written for France and End Turn waited its 720 s. Held past the minute, it still waits
+    autoplay(lua)
+    lua.execute("FAKE.now = 1000; BRIDGE.clock = function() return FAKE.now end")
+    report = turn_dir(lua, TURN - 1, "venice") / "state.json"
+    report.unlink(missing_ok=True)
+    (lua.root / "qa.lock").write_text("")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    tick(lua)
+    lua.execute("FAKE.now = 1500")
+    tick(lua)
+    assert not report.exists() and lua.eval("BRIDGE.load_reports ~= nil")
+    (lua.root / "qa.lock").unlink()
+    tick(lua)
+    assert StateReport.model_validate_json(report.read_bytes()).faction == "venice"
+
+
 # --- QA field suite helpers: spawn_army, leader, free_tile, sea_town, town, tire ------------
 
 def test_qa_spawn_army_returns_the_armys_report_id(lua):
@@ -4497,6 +6033,259 @@ def test_qa_spawn_army_returns_the_armys_report_id(lua):
     assert "spawnArmy venice random_name 7 110 70 20" in calls(lua)
     assert "qa: spawn_army ok: Edwin" in bridge_log(lua)
     assert [(a.id, a.x, a.y, a.units) for a in report_of(lua).armies if a.id == "Edwin"] == [("Edwin", 110, 70, 1)]
+
+
+def test_qa_spawn_draws_a_name_nobody_else_has(lua):
+    # live 11-05 (the test laptop): the first spawn after a bench load came back "Fraunce (of Leeds)" and
+    # the game renamed him by the next turn start; the case's order then named nobody ("unknown
+    # army 'Fraunce of Leeds'", "'Admiral Fraunce' is not one of your fleets")
+    lua.execute("""
+        FAKE.random_name = 'Doge Enrico'
+        local f = FAKE.byName.venice
+        local spawn = f.spawnArmy
+        f.spawnArmy = function(...)
+            local st = spawn(...)
+            FAKE.random_name = 'Bruno'  -- what the game's next draw gives
+            return st
+        end
+    """)
+    assert lua.eval("BRIDGE.qa.spawn_army('venice', 110, 70)") == "Bruno"
+    assert "giveRandomName" in " ".join(calls(lua))
+
+
+def test_a_spawned_admiral_gets_his_ship_as_bodyguard_once(lua):
+    # live 11-05 (the test laptop): EOP's spawnArmy leaves an admiral without his ship as bodyguard, and the
+    # game replaced him at each turn change (Nicholas, then Morris); orders naming the fleet found none
+    lua.execute("""
+        SHIP = { name = 'ship' }
+        ADM = { setBodyguardUnit = function(self, u) self.bodyguards = u end }
+        FLEET = { leader = ADM, getUnit = function(_, i) return i == 0 and SHIP or nil end }
+    """)
+    assert lua.eval("BRIDGE.bind_admiral(FLEET)") is True
+    assert lua.eval("ADM.bodyguards == SHIP") is True
+    assert lua.eval("BRIDGE.bind_admiral(FLEET)") is False  # never twice: only for one without
+    assert lua.eval("BRIDGE.bind_admiral({})") is False
+def test_the_bench_turns_marriage_offers_off_and_a_real_load_turns_them_back_on(lua):
+    # live 11-05 11:57:51, 12:15:05 (the test laptop): a marriage offer answered under a pending End Turn
+    # crashed the game; the limit lives in game memory, so a real campaign loaded after must get it back
+    lua.execute("DB = { familyTree = { maxAgeForMarriageMale = 50, minAdoptionAge = 20, maxAdoptionAge = 30 } }; "
+                "M2TWEOP.getCampaignDb = function() return DB end")
+    # England's single men get wives (a married man draws no offer); the married and boys don't
+    lua.execute("""
+        WED = {}
+        local function man(name, age, spouse)
+            return { fullName = name, isMale = 1, isAlive = true, age = age, spouse = spouse, isFamily = 1,
+                     marryWife = function(self, n, a) WED[#WED + 1] = self.fullName; self.spouse = {}; return {} end }
+        end
+        local eng = FAKE.byName.england or FAKE.factions[1]
+        eng.named = { man('Loefwine', 55), man('Rufus', 28, { fullName = 'Edith' }), man('Boy', 12) }
+        eng.numOfNamedCharacters = 3
+        eng.getNamedCharacter = function(self, i) return self.named[i + 1] end
+        FAKE.campaign.getFaction = function(self, name) if name == 'england' then return eng end end
+    """)
+    lua.eval("BRIDGE.qa.quiet()")
+    assert list(lua.eval("WED").values()) == ["Loefwine"]
+    assert "england's single men married on the bench: 1" in bridge_log(lua)
+    assert lua.eval("DB.familyTree.maxAgeForMarriageMale") == 0
+    assert (lua.root / "marriage_age.txt").read_text().strip() == "50"
+    lua.eval("BRIDGE.qa.quiet()")  # again on the next bench load: the original stays saved
+    assert (lua.root / "marriage_age.txt").read_text().strip() == "50"
+    lua.execute(f"BRIDGE.setup('{lua.root}')")  # a load under a config that isn't the bench's
+    assert lua.eval("DB.familyTree.maxAgeForMarriageMale") == 50
+    assert not (lua.root / "marriage_age.txt").exists()
+    assert "marriage offers back on (maxAgeForMarriageMale -> 50)" in bridge_log(lua)
+
+
+def test_marry_singles_weds_only_grown_unmarried_family_men(lua):
+    # the bench's quiet step (M.bench_marriages_off) marries England's single men so no offer opens
+    lua.execute("""
+        WED = {}
+        local function man(name, age, spouse)
+            return { fullName = name, isMale = 1, isAlive = true, age = age, spouse = spouse, isFamily = 1,
+                     marryWife = function(self, n, a) WED[#WED + 1] = self.fullName; self.spouse = {}; return {} end }
+        end
+        ENG = { name = 'england', named = { man('Loefwine', 55), man('Rufus', 28, { fullName = 'Edith' }), man('Boy', 12) } }
+        -- an agent isn't family: the game frees his record at his death, and a wife's pointer to it
+        -- crashed the game at her own death (live 11-13, the 00eff4db crash)
+        local assassin = man('Michell Higgines', 30); assassin.isFamily = 0
+        ENG.named[4] = assassin
+        ENG.numOfNamedCharacters = 4
+        ENG.getNamedCharacter = function(self, i) return self.named[i + 1] end
+    """)
+    lua.execute("BRIDGE.marry_singles(ENG)")
+    assert list(lua.eval("WED").values()) == ["Loefwine"]
+    assert lua.eval("BRIDGE.last_wed.family_after") == "1"
+    lua.execute("ENG.named[3].age = 16")
+    lua.execute("BRIDGE.marry_singles(ENG)")
+    assert list(lua.eval("WED").values()) == ["Loefwine", "Boy"]
+
+
+def test_a_case_can_turn_family_offers_back_on_until_the_next_load(lua):
+    # the marriage-click crash's repro (live 11-05 20:00) needs offers on the bench; the quiet step
+    # re-marries England's men at every player turn start, so a switch holds it off until a load
+    lua.execute("""
+        DB = { familyTree = { maxAgeForMarriageMale = 50, minAdoptionAge = 20, maxAdoptionAge = 30 } }
+        M2TWEOP.getCampaignDb = function() return DB end
+        WED = {}
+        local eng = FAKE.byName.england or FAKE.factions[1]
+        eng.named = { { fullName = 'Single', isMale = 1, isAlive = true, age = 30,
+                        marryWife = function(self) WED[#WED + 1] = self.fullName; self.spouse = {}; return {} end } }
+        eng.numOfNamedCharacters = 1
+        eng.getNamedCharacter = function(self, i) return self.named[i + 1] end
+        FAKE.campaign.getFaction = function(self, name) if name == 'england' then return eng end end
+    """)
+    assert lua.eval("BRIDGE.qa.marriage_offers_on()") == "on"
+    assert (lua.root / "marriages_on.txt").exists()
+    lua.eval("BRIDGE.qa.quiet()")
+    assert list(lua.eval("WED").values()) == []  # nobody married while the switch is on
+    assert lua.eval("DB.familyTree.maxAgeForMarriageMale") == 50
+    lua.execute(f"BRIDGE.setup('{lua.root}')")  # the next load clears it
+    assert not (lua.root / "marriages_on.txt").exists()
+
+
+def _family(lua):
+    lua.execute("""
+        ASKED = {}
+        local function person(name, male, spouse)
+            return { fullName = name, isMale = male, isAlive = true, age = 30, spouse = spouse,
+                     createMessageMarriageProposal = function(self)
+                         ASKED[#ASKED + 1] = self.fullName
+                         return { fullName = 'Offered for ' .. self.fullName } end }
+        end
+        local eng = FAKE.byName.england or FAKE.factions[1]
+        eng.named = { person('Wed', 1, {}), person('Wedded', 0, {}), person('Single', 1), person('Daughter', 0) }
+        eng.numOfNamedCharacters = 4
+        eng.getNamedCharacter = function(self, i) return self.named[i + 1] end
+        FAKE.campaign.getFaction = function(self, name) if name == 'england' then return eng end end
+    """)
+
+
+@pytest.mark.parametrize("kind, person", [("wife", "Single"), ("suitor", "Daughter")])
+def test_a_case_can_force_each_kind_of_marriage_offer(lua, kind, person):
+    # 11-06: EOP createMessageMarriageProposal: a wife for a son, a husband for a daughter
+    _family(lua)
+    assert lua.eval(f"BRIDGE.qa.force_offer('england', '{kind}')") == f"Offered for {person}"
+    assert list(lua.eval("ASKED").values()) == [person]
+
+
+def test_forcing_an_offer_with_nobody_free_asks_nothing(lua):
+    _family(lua)
+    lua.execute("""
+        local eng = FAKE.byName.england or FAKE.factions[1]
+        eng.named = { eng.named[1], eng.named[2] }
+        eng.numOfNamedCharacters = 2
+    """)
+    assert lua.eval("BRIDGE.qa.force_offer('england', 'wife')") is None
+    assert list(lua.eval("ASKED").values()) == []
+    assert "qa: force_offer failed: " in (lua.root / "parley_bridge.log").read_text()
+    assert "nobody unmarried for a wife offer" in (lua.root / "parley_bridge.log").read_text()
+
+
+def test_a_wife_offer_says_so_in_the_log(lua):
+    autoplay(lua)
+    lua.execute("""
+        BRIDGE.on_offered_for_marriage({ character = { fullName = 'Udeline', age = 24, isMale = 0 },
+                                         faction = FAKE.byName.venice })
+        BRIDGE.on_offered_for_marriage({ character = { fullName = 'Francis', age = 20, isMale = 1 },
+                                         faction = FAKE.byName.venice })
+    """)
+    text = (lua.root / "parley_bridge.log").read_text()
+    assert "marriage offer: Udeline for venice (a wife)" in text
+    assert "marriage offer: Francis for venice\n" in text.replace("\r\n", "\n")
+
+
+def test_a_wife_offer_naming_our_own_man_is_marked(lua):
+    # live 11-10 17:10: the event's character was England's Perkin Tyler, a family man, not the woman
+    autoplay(lua)
+    lua.execute("""
+        BRIDGE.on_offered_for_marriage({ character = { fullName = 'Perkin Tyler', age = 16, isMale = 1, isFamily = 1 },
+                                         faction = FAKE.byName.venice })
+    """)
+    assert "marriage offer: Perkin Tyler for venice (a wife for him)" in bridge_log(lua)
+    [p] = [p for p in lua.eval("BRIDGE.pending()").values() if p["message"] == "offer"]
+    assert p["offer"]["suitor"]["son"] is True
+
+
+def test_marriages_on_before_setup_is_false_not_an_error():
+    # a fresh bridge, no M.setup yet (no turn root): spawn and the quiet step ask it
+    from lupa.luajit21 import LuaRuntime
+    rt = LuaRuntime(unpack_returned_tuples=True)
+    root = Path(__file__).parent.parent
+    rt.execute(f"package.path = '{root}/tests/lua/?.lua;{root}/lua/?.lua;{root}/lua/vendor/?.lua;' .. package.path")
+    rt.execute("FAKE = require('fake_game'); FAKE.reset(); BRIDGE = require('parley_bridge')")
+    assert rt.eval("BRIDGE.marriages_on()") is False
+
+
+def test_the_bench_turns_adoption_offers_off_and_a_real_load_turns_them_back_on(lua):
+    # the game offers to adopt only a man between minAdoptionAge and maxAdoptionAge (EOP campaignDb)
+    lua.execute("DB = { familyTree = { maxAgeForMarriageMale = 50, minAdoptionAge = 20, maxAdoptionAge = 30 } }; "
+                "M2TWEOP.getCampaignDb = function() return DB end")
+    lua.eval("BRIDGE.qa.quiet()")
+    assert lua.eval("DB.familyTree.maxAdoptionAge") == 0
+    assert (lua.root / "adoption_age.txt").read_text().strip() == "30"
+    assert "qa: adoption offers off on the bench (maxAdoptionAge 30 -> 0)" in bridge_log(lua)
+    lua.eval("BRIDGE.qa.quiet()")
+    assert (lua.root / "adoption_age.txt").read_text().strip() == "30"
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert lua.eval("DB.familyTree.maxAdoptionAge") == 30
+    assert not (lua.root / "adoption_age.txt").exists()
+    assert "adoption offers back on (maxAdoptionAge -> 30)" in bridge_log(lua)
+
+
+def test_the_bench_turns_suitor_offers_off_and_a_real_load_turns_them_back_on(lua):
+    # live 11-14 06:50: the noclick bench's turn 6 drew a suitor for England's princess ("marriage
+    # offer: Nicholas Went"); no Lua call answers it and the refused click hung the turn
+    lua.execute("DB = { familyTree = { maxAgeForMarriageMale = 50, maxAgeForMarriageForFemale = 35, "
+                "minAdoptionAge = 20, maxAdoptionAge = 30 } }; M2TWEOP.getCampaignDb = function() return DB end")
+    lua.eval("BRIDGE.qa.quiet()")
+    assert lua.eval("DB.familyTree.maxAgeForMarriageForFemale") == 0
+    assert (lua.root / "suitor_age.txt").read_text().strip() == "35"
+    assert "qa: suitor offers off on the bench (maxAgeForMarriageForFemale 35 -> 0)" in bridge_log(lua)
+    lua.eval("BRIDGE.qa.quiet()")
+    assert (lua.root / "suitor_age.txt").read_text().strip() == "35"  # the first value is kept
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    assert lua.eval("DB.familyTree.maxAgeForMarriageForFemale") == 35
+    assert not (lua.root / "suitor_age.txt").exists()
+    assert "suitor offers back on (maxAgeForMarriageForFemale -> 35)" in bridge_log(lua)
+
+
+def test_a_spawned_general_is_married_so_the_game_offers_him_no_wife(lua):
+    # live 11-05 13:03:39 (the test laptop): a general spawned that turn drew a marriage offer at the next
+    # turn start, before the quiet step married him; clicks on those scrolls preceded crashes
+    lua.execute("""
+        WED = {}
+        local f = FAKE.byName.venice
+        local spawn = f.spawnArmy
+        f.spawnArmy = function(...)
+            local st = spawn(...)
+            local r = st.leader.characterRecord
+            r.isFamily = 1  -- the 11-05 one drew an offer, which only family men do
+            r.marryWife = function(self) WED[#WED + 1] = self.fullName; self.spouse = {}; return {} end
+            return st
+        end
+    """)
+    assert lua.eval("BRIDGE.qa.spawn_army('venice', 110, 70)") == "Edwin"
+    assert list(lua.eval("WED").values()) == ["Edwin"]
+
+
+def test_a_spawned_general_stays_single_while_a_case_wants_family_offers(lua):
+    # family/marriage_offer_answered (#470) spawns the groom; with offers on he must keep no wife
+    lua.execute("""
+        WED = {}
+        local f = FAKE.byName.venice
+        local spawn = f.spawnArmy
+        f.spawnArmy = function(...)
+            local st = spawn(...)
+            local r = st.leader.characterRecord
+            r.isFamily = 1  -- the 11-05 one drew an offer, which only family men do
+            r.marryWife = function(self) WED[#WED + 1] = self.fullName; self.spouse = {}; return {} end
+            return st
+        end
+        M2TWEOP.getCampaignDb = function() return { familyTree = {} } end
+    """)
+    assert lua.eval("BRIDGE.qa.marriage_offers_on()") == "on"
+    assert lua.eval("BRIDGE.qa.spawn_army('venice', 110, 70)") == "Edwin"
+    assert list(lua.eval("WED").values()) == []
 
 
 def test_qa_spawn_army_returns_the_numbered_id_when_the_name_is_taken(lua):
@@ -4755,7 +6544,7 @@ def _entry_script(tmp_path, monkeypatch, extra=""):
     rt = LuaRuntime(unpack_returned_tuples=True)
     rt.execute(f"package.path = '{ROOT}/tests/lua/?.lua;{ROOT}/lua/vendor/?.lua;' .. package.path")
     rt.execute("FAKE = require('fake_game'); FAKE.reset(); "
-               "M2TWEOP = { unlockGameConsoleCommands = function() end }")
+               "M2TWEOP.unlockGameConsoleCommands = function() end")
     rt.execute(f"dofile('{ROOT}/lua/luaPluginScript.lua')")
     rt.execute("onCampaignMapLoaded()")
     # the bridge as the entry script holds it: count what reaches it
@@ -4900,3 +6689,299 @@ def test_hands_off_entry_script_votes_from_the_frame(tmp_path, monkeypatch):
     rt.execute("FAKE.now = FAKE.now + 4; draw(nil)")  # (K.POPUP_DELAY)
     assert [json.loads(p.read_text())["kind"] for p in root.glob("popup-*.req")] == ["vote"]
     assert "phase=vote" in (root / "papal_window.txt").read_text()
+
+
+def test_stuck_turn_with_papal_election_results_scroll_closes_by_gadget(lua):
+    # strat_ui holds papal_election_results_scroll whose part 0 has readBytes returning "ec5d3601" and an activate method
+    autoplay(lua)
+    lua.execute("M2TWEOP.forkLevel = 6")
+    lua.execute("ACTIVATED = false; LOOKED = {}; "
+                "local gadget = { readBytes = function(self, off, len) return 'ec5d3601' end, "
+                "                 activate = function(self) ACTIVATED = true end }; "
+                "local scroll = { elementName = 'papal_election_results_scroll', subElementsNum = 1, "
+                "                 getSubElement = function(self, i) return gadget end }; "
+                "local strat = { subElementsNum = 1, getSubElement = function(self, i) return scroll end }; "
+                "gameSTDUI = { getUiElement = function(n) LOOKED[#LOOKED + 1] = n; "
+                "if n == 'strat_ui' then return strat end end }")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    tick(lua)
+    tick(lua, 21)
+    assert lua.eval("ACTIVATED") is True
+    assert not any(json.loads(p.read_text()).get("kind") == "escape" for p in lua.root.glob("*.req"))
+    assert list(lua.root.glob("popup-*-e*.req")) == []
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "closed papal_election_results_scroll by its close gadget" in log
+    assert not any("papal" in n for n in lua.eval("LOOKED").values())
+
+
+def test_stuck_turn_with_papal_election_results_scroll_rejects_wrong_vtable(lua):
+    # part 0's readBytes returns another vtable: assert activate NOT called and no escape request written
+    autoplay(lua)
+    lua.execute("M2TWEOP.forkLevel = 6")
+    lua.execute("ACTIVATED = false; LOOKED = {}; "
+                "local gadget = { readBytes = function(self, off, len) return '00000000' end, "
+                "                 activate = function(self) ACTIVATED = true end }; "
+                "local scroll = { elementName = 'papal_election_results_scroll', subElementsNum = 1, "
+                "                 getSubElement = function(self, i) return gadget end }; "
+                "local strat = { subElementsNum = 1, getSubElement = function(self, i) return scroll end }; "
+                "gameSTDUI = { getUiElement = function(n) LOOKED[#LOOKED + 1] = n; "
+                "if n == 'strat_ui' then return strat end end }")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    tick(lua)
+    tick(lua, 21)
+    assert lua.eval("ACTIVATED") is False
+    assert not any(json.loads(p.read_text()).get("kind") == "escape" for p in lua.root.glob("*.req"))
+    assert list(lua.root.glob("popup-*-e*.req")) == []
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "papal_election_results_scroll open but cannot be closed" in log
+
+
+def test_papal_election_results_scroll_closes_after_3s_by_gadget(lua):
+    autoplay(lua)
+    lua.execute("M2TWEOP.forkLevel = 6")
+    lua.execute("ACTIVATED = 0; LOOKED = {}; "
+                "local gadget = { readBytes = function(self, off, len) return 'ec5d3601' end, "
+                "                 activate = function(self) ACTIVATED = ACTIVATED + 1 end }; "
+                "local scroll = { elementName = 'papal_election_results_scroll', subElementsNum = 1, "
+                "                 getSubElement = function(self, i) return gadget end }; "
+                "local strat = { subElementsNum = 1, getSubElement = function(self, i) return scroll end }; "
+                "gameSTDUI = { getUiElement = function(n) LOOKED[#LOOKED + 1] = n; "
+                "if n == 'strat_ui' then return strat end end }")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    open_papal(lua, "papal_election_results_scroll")
+    tick(lua, 3)
+    tick(lua, 1)
+    assert lua.eval("ACTIVATED") == 1
+    assert not any(json.loads(p.read_text()).get("kind") == "escape" for p in lua.root.glob("*.req"))
+    assert list(lua.root.glob("popup-*-e*.req")) == []
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "popup: papal results: closed papal_election_results_scroll by its close gadget" in log
+
+
+def test_papal_election_results_scroll_before_3s_not_closed(lua):
+    autoplay(lua)
+    lua.execute("M2TWEOP.forkLevel = 6")
+    lua.execute("ACTIVATED = 0; LOOKED = {}; "
+                "local gadget = { readBytes = function(self, off, len) return 'ec5d3601' end, "
+                "                 activate = function(self) ACTIVATED = ACTIVATED + 1 end }; "
+                "local scroll = { elementName = 'papal_election_results_scroll', subElementsNum = 1, "
+                "                 getSubElement = function(self, i) return gadget end }; "
+                "local strat = { subElementsNum = 1, getSubElement = function(self, i) return scroll end }; "
+                "gameSTDUI = { getUiElement = function(n) LOOKED[#LOOKED + 1] = n; "
+                "if n == 'strat_ui' then return strat end end }")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    open_papal(lua, "papal_election_results_scroll")
+    tick(lua, 2)
+    assert lua.eval("ACTIVATED") == 0
+    assert not any(json.loads(p.read_text()).get("kind") == "escape" for p in lua.root.glob("*.req"))
+    assert list(lua.root.glob("popup-*-e*.req")) == []
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "closed papal_election_results_scroll by its close gadget" not in log
+
+
+def test_papal_election_results_scroll_wrong_class_not_closed_logged_once(lua):
+    autoplay(lua)
+    lua.execute("M2TWEOP.forkLevel = 6")
+    lua.execute("ACTIVATED = 0; LOOKED = {}; "
+                "local gadget = { readBytes = function(self, off, len) return '00000000' end, "
+                "                 activate = function(self) ACTIVATED = ACTIVATED + 1 end }; "
+                "local scroll = { elementName = 'papal_election_results_scroll', subElementsNum = 1, "
+                "                 getSubElement = function(self, i) return gadget end }; "
+                "local strat = { subElementsNum = 1, getSubElement = function(self, i) return scroll end }; "
+                "gameSTDUI = { getUiElement = function(n) LOOKED[#LOOKED + 1] = n; "
+                "if n == 'strat_ui' then return strat end end }")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    open_papal(lua, "papal_election_results_scroll")
+    tick(lua, 3)
+    tick(lua, 1)
+    tick(lua, 1)
+    assert lua.eval("ACTIVATED") == 0
+    assert not any(json.loads(p.read_text()).get("kind") == "escape" for p in lua.root.glob("*.req"))
+    assert list(lua.root.glob("popup-*-e*.req")) == []
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert log.count("popup: papal results: part 0 is nil, not closed") == 1
+    assert "closed papal_election_results_scroll by its close gadget" not in log
+
+
+def test_papal_election_results_scroll_in_open_ui_closes_by_gadget(lua):
+    autoplay(lua)
+    lua.execute("M2TWEOP.forkLevel = 6")
+    lua.execute("ACTIVATED = 0; LOOKED = {}; "
+                "local gadget = { readBytes = function(self, off, len) return 'ec5d3601' end, "
+                "                 activate = function(self) ACTIVATED = ACTIVATED + 1 end }; "
+                "local scroll = { elementName = 'papal_election_results_scroll', subElementsNum = 1, "
+                "                 getSubElement = function(self, i) return gadget end }; "
+                "local strat = { subElementsNum = 0, getSubElement = function(self, i) return nil end }; "
+                "gameSTDUI = { getUiElement = function(n) LOOKED[#LOOKED + 1] = n; "
+                "if n == 'strat_ui' then return strat end end, "
+                "getOpenUiElements = function() return { scroll } end }")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    open_papal(lua, "papal_election_results_scroll")
+    tick(lua, 3)
+    tick(lua, 1)
+    assert lua.eval("ACTIVATED") == 1
+    assert not any(json.loads(p.read_text()).get("kind") == "escape" for p in lua.root.glob("*.req"))
+    assert list(lua.root.glob("popup-*-e*.req")) == []
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "popup: papal results: closed papal_election_results_scroll by its close gadget" in log
+
+
+def test_unnamed_papal_results_scroll_is_found_by_its_class(lua):
+    # live 11-22 07:29: the open-UI list showed the results scroll as "unnamed"; its vtable names it
+    autoplay(lua)
+    lua.execute("M2TWEOP.forkLevel = 6")
+    lua.execute("ACTIVATED = 0; "
+                "local gadget = { readBytes = function(self, off, len) return 'ec5d3601' end, "
+                "                 activate = function(self) ACTIVATED = ACTIVATED + 1 end }; "
+                "local scroll = { elementName = 'unnamed', subElementsNum = 6, "
+                "                 readBytes = function(self, off, len) return 'dc4d3901' end, "
+                "                 getSubElement = function(self, i) if i == 0 then return gadget end end }; "
+                "local strat = { subElementsNum = 0, getSubElement = function(self, i) return nil end }; "
+                "gameSTDUI = { getUiElement = function(n) if n == 'strat_ui' then return strat end end, "
+                "getOpenUiElements = function() return { scroll } end }")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    open_papal(lua, "papal_election_results_scroll")
+    tick(lua, 3)
+    tick(lua, 1)
+    assert lua.eval("ACTIVATED") == 1
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "popup: papal results: closed papal_election_results_scroll by its close gadget" in log
+
+
+def test_papal_election_results_scroll_found_nowhere_logs_once(lua):
+    autoplay(lua)
+    lua.execute("M2TWEOP.forkLevel = 6")
+    lua.execute("ACTIVATED = 0; LOOKED = {}; "
+                "local strat = { subElementsNum = 0, getSubElement = function(self, i) return nil end }; "
+                "gameSTDUI = { getUiElement = function(n) LOOKED[#LOOKED + 1] = n; "
+                "if n == 'strat_ui' then return strat end end, "
+                "getOpenUiElements = function() return {} end }")
+    write_orders(lua, TURN - 1, "venice", [])
+    start_turn(lua, "venice")
+    open_papal(lua, "papal_election_results_scroll")
+    tick(lua, 3)
+    tick(lua, 1)
+    tick(lua, 1)
+    assert lua.eval("ACTIVATED") == 0
+    assert not any(json.loads(p.read_text()).get("kind") == "escape" for p in lua.root.glob("*.req"))
+    assert list(lua.root.glob("popup-*-e*.req")) == []
+    log = (lua.root / "parley_bridge.log").read_text()
+    assert "popup: papal results: scroll not found" in log
+    assert log.count("popup: papal results: scroll not found") == 1
+    assert "closed papal_election_results_scroll by its close gadget" not in log
+
+
+ENDED_BATTLE = """M2TW = M2TW or {}; M2TW.battle = { sidesNum = 2, sides = {
+    { isDefender = false, armiesNum = 1, armies = { { army = { numOfUnits = 10, faction = { name = 'england' } } } } },
+    { isDefender = true, armiesNum = 1, armies = { { army = nil } } } } }"""
+LIVE_BATTLE = ENDED_BATTLE.replace("{ army = nil }", "{ army = { numOfUnits = 12, faction = { name = 'slave' } } }")
+
+
+def test_nothing_is_pressed_on_a_battle_with_an_emptied_side(lua):
+    # live 11-15 turn 1141 (20 crashes in a row): the game emptied the defender's side under the open panel
+    # (cause: two queued attacks on one army, now held off in handlers.attack); auto-resolve then crashed
+    # at medieval2.exe 00612ea6 (sides[i].armies[0].army -> +0x100) and Withdraw faulted at 0070fca3
+    control(lua, "", "autoplay=1\n")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    lua.execute(ENDED_BATTLE)
+    lua.execute("BRIDGE.on_pre_battle()")
+    assert calls(lua) == []
+    assert "auto-resolve not pressed: the battle has a side with no army (side 2 has no army)" in bridge_log(lua)
+
+
+def test_watch_buttons_does_not_press_auto_resolve_again_once_the_battle_ended(lua):
+    autoplay(lua)
+    lua.execute("FAKE.campaign.currentFaction = FAKE.byName.hre")
+    lua.execute(ENDED_BATTLE)
+    lua.execute("FAKE.open_scroll('prebattle_auto_resolve_button', {})")
+    tick(lua, 1)
+    tick(lua, 50)
+    assert "select_ui_element prebattle_auto_resolve_button" not in " ".join(calls(lua))
+    lua.execute(LIVE_BATTLE)  # a real battle, both sides with an army, is still pressed
+    lua.execute("FAKE.ui['prebattle_auto_resolve_button'] = nil")
+    tick(lua, 1)
+    lua.execute("FAKE.open_scroll('prebattle_auto_resolve_button', {})")
+    tick(lua, 1)
+    tick(lua, 50)
+    assert "script select_ui_element prebattle_auto_resolve_button" in calls(lua)
+
+
+def test_a_stuck_turn_presses_nothing_on_a_battle_with_an_emptied_side(lua):
+    # live 11-15 12:45 turn 1141: a stuck turn stands (and is reported) rather than crash
+    autoplay(lua)
+    lua.execute("FAKE.campaign.currentFaction = FAKE.byName.milan")
+    lua.execute(ENDED_BATTLE)
+    lua.execute("FAKE.open_scroll('prebattle_auto_resolve_button', {})")
+    tick(lua)
+    tick(lua, 31)
+    assert "stuck? try 1" in bridge_log(lua)
+    assert "prebattle_" not in " ".join(calls(lua))
+
+
+def test_the_qa_hold_does_not_press_auto_resolve_on_an_ended_battle(lua):
+    autoplay(lua)
+    (lua.root / "paused.txt").write_text("qa instant case: holding the turn\n")
+    lua.execute(ENDED_BATTLE)
+    lua.execute("FAKE.open_scroll('prebattle_auto_resolve_button', {})")
+    tick(lua, 1)
+    tick(lua, 5)
+    assert "prebattle_" not in " ".join(calls(lua))
+    assert "qa hold: the battle panel is still open" in bridge_log(lua)  # the hold path did run
+
+
+BESIDE_LEWES = ("local st = FAKE.byName.venice.stacks[1]; st.leader.xCoord, st.leader.yCoord = 121, 89; "
+                "if st.xCoord then st.xCoord, st.yCoord = 121, 89 end; "
+                "FAKE.add_fleet(FAKE.byName.venice, 'Admiral Lewes', 121, 90)")
+
+
+def _doge_on_lewes_tile(lua, aboard):
+    lua.execute(f"""
+        local st = FAKE.byName.venice.stacks[1]
+        st.leader.xCoord, st.leader.yCoord = 121, 90
+        if st.xCoord then st.xCoord, st.yCoord = 121, 90 end
+        st.shipArmy = {'FAKE.byName.venice.stacks[#FAKE.byName.venice.stacks]' if aboard else 'nil'}
+    """)
+
+
+def test_an_army_left_on_the_sea_but_not_aboard_is_put_back_ashore(lua):
+    # live 11-21 08:59-09:08: Captain Jacob's board split left him on Admiral Jasper's sea tile
+    # (108,142) with no shipArmy, the fleet carrying nothing; every later board did nothing
+    control(lua)
+    lua.execute(BESIDE_LEWES)
+    write_orders(lua, TURN - 1, "venice", [{"type": "board", "who": "Doge Enrico", "fleet": "Admiral Lewes"}])
+    start_turn(lua, "venice")
+    assert results(lua)[0]["ok"], results(lua)
+    _doge_on_lewes_tile(lua, aboard=False)
+    unmade = _next_turn_moves_not_made(lua)
+    assert ("stood on the sea at (121,90) but not aboard Admiral Lewes; put back ashore at (121,89)"
+            in bridge_log(lua)), bridge_log(lua)[-1500:]
+    assert [(m.id, m.order_type) for m in unmade] == [("Doge Enrico", "board")], unmade
+
+
+def test_an_army_that_boarded_is_not_put_back_ashore(lua):
+    control(lua)
+    lua.execute(BESIDE_LEWES)
+    write_orders(lua, TURN - 1, "venice", [{"type": "board", "who": "Doge Enrico", "fleet": "Admiral Lewes"}])
+    start_turn(lua, "venice")
+    _doge_on_lewes_tile(lua, aboard=True)
+    unmade = _next_turn_moves_not_made(lua)
+    assert "stood on the sea" not in bridge_log(lua)
+    assert unmade == [], unmade
+
+
+def test_bridge_writes_bridge_loaded_build_equal_to_parley_build(lua):
+    build_stamp = "c0ffee123456"
+    (lua.root / "parley_build.txt").write_text(f"{build_stamp}\n")
+    lua.execute(f"BRIDGE.setup('{lua.root}')")
+    loaded_file = lua.root / "bridge_loaded_build.txt"
+    assert loaded_file.exists()
+    assert loaded_file.read_text() == (lua.root / "parley_build.txt").read_text()
+    assert f"bridge build {build_stamp} loaded" in bridge_log(lua)
+

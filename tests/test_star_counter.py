@@ -53,6 +53,12 @@ def _popups(tmp_path, seat=None, rec=None, **kwargs):
     return p, rec
 
 
+def _answered(root, rid):
+    """The turn loop's answer for the bridge to press by element: `.answer` first, then `.done`."""
+    assert (root / f"{rid}.done").exists()
+    return (root / f"{rid}.answer").read_text()
+
+
 def test_fixture_counts():
     cases = [
         ("popup-2-1655907-stats.png", {"command": 1, "chivalry_or_dread": 4, "loyalty": 9, "piety": 3}),
@@ -95,8 +101,7 @@ def test_steward_uses_counted_stars(tmp_path):
     p.poll()
 
     assert seat.prompts == []
-    assert rec.clicks == ["accept"] and rec.at == [CHOICE["accept"]]
-    assert (tmp_path / "popup-22-1.done").exists()
+    assert _answered(tmp_path, "popup-22-1") == "accept\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "your steward decided by rule" in msg
     assert "You accepted it" in msg
@@ -112,8 +117,7 @@ def test_steward_escalates_when_count_stars_returns_none(tmp_path):
     p.poll()
 
     assert len(seat.prompts) == 1
-    assert rec.clicks == ["accept"]
-    assert (tmp_path / "popup-22-2.done").exists()
+    assert _answered(tmp_path, "popup-22-2") == "accept\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "your steward decided by rule" not in msg
 
