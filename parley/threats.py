@@ -57,7 +57,7 @@ def _enemy_lines(report: StateReport) -> tuple[list[str], set[str]]:
 def _batch(option, gap: int) -> tuple[int, int, int]:
     """(units, men, florins) of `option` that cover `gap` men."""
     men = units.info(option.unit)["men"]
-    n = min(-(-gap // men), QUEUE_MAX)
+    n = min(-(-gap // men), QUEUE_MAX, QUEUE_MAX if option.available is None else option.available)
     return n, n * men, n * option.cost
 
 

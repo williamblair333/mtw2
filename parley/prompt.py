@@ -8,7 +8,7 @@ from parley.audit import refusal_key
 from parley.control import AREAS, PRESETS
 from parley.protocol import Army, StateReport
 from parley.steward import tax_warning
-from parley.threats import threats_block
+from parley.threats import QUEUE_MAX, threats_block
 from parley.units import free_slots, free_slots_left, is_free
 from parley.units import info as unit_info
 
@@ -276,7 +276,9 @@ def _unit_prices_table(settlements) -> tuple[list[str], dict[str, tuple[int, int
         return [], {}
 
     table_prices: dict[str, tuple[int, int, int | None]] = {}
-    lines = ["UNIT PRICES (florins/turns, upkeep a turn). free-slot: no upkeep while its town has free-upkeep slots left"]
+    few = any(u.available is not None and u.available < QUEUE_MAX for s in settlements for u in s.can_recruit)
+    lines = ["UNIT PRICES (florins/turns, upkeep a turn). free-slot: no upkeep while its town has free-upkeep slots left"
+             + (". In a town's can recruit list, ×N after a unit: its pool there holds only N this turn" if few else "")]
     for name in sorted(unit_prices.keys()):
         best_price = Counter(unit_prices[name]).most_common(1)[0][0]
         table_prices[name] = best_price
@@ -397,13 +399,15 @@ def _settlement(s, areas: tuple[str, ...], garrison: list | None = None,
         # free upkeep is the unit type's (free-slot in UNIT PRICES) and the town's slots left (header)
         entries = []
         for u in s.can_recruit:
+            # a pool smaller than the queue is a limit the ruler must see (live 11-24, Dijon)
+            few = f" ×{u.available}" if u.available is not None and u.available < QUEUE_MAX else ""
             tbl = (table_prices or {}).get(u.unit)
             if tbl is not None and (u.cost, u.turns, u.upkeep) == tbl:
-                entries.append(u.unit)
+                entries.append(u.unit + few)
             else:
                 upk_str = f", upkeep {u.upkeep}" if u.upkeep is not None else ""
                 free_str = ", free-slot" if is_free(u.unit) else ""
-                entries.append(f"{u.unit} {u.cost}/{u.turns}{upk_str}{free_str}")
+                entries.append(f"{u.unit}{few} {u.cost}/{u.turns}{upk_str}{free_str}")
         line += "\n  can recruit: " + (_same_as(s.id, entries, None if bases is None else
                                                   bases.setdefault("recruit", []), "; ") or "nothing")
         # what "retrain" would refill here: worn garrison units whose type the pool still offers

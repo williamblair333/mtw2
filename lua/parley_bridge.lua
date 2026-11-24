@@ -1267,7 +1267,8 @@ local function add_management(view, s, areas, counts)
             view.can_recruit = {}
             for _, o in ipairs(recruitment_options(s)) do
                 view.can_recruit[#view.can_recruit + 1] = { unit = o.name, cost = o.cost, turns = o.turns,
-                                                            upkeep = o.upkeep }
+                                                            upkeep = o.upkeep,
+                                                            available = math.floor(o.pool.availablePool) }
             end
         end)
         if counts then pcall(function() view.can_recruit_agents = agent_options(s, counts) end) end

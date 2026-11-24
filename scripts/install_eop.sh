@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Install M2TWEOP (pinned) as its own mod folder, mods/parley, so the vanilla
 # game and M2EX stay untouched. EOP needs the 32-bit Steam medieval2.exe (1.52).
-#   default            the last release, 3.3.1
-#   EOP_BUILD=master   EOP's CI build of master commit b525628, the build we test on (treaties,
+#   default (fork)     our fork's build, the one we test on: upstream master b525628 plus the crash
+#                      fixes and the Lua bindings the bridge uses to answer game scrolls without
+#                      clicks (forkLevel 6). A public GitHub release; no login needed.
+#   EOP_BUILD=3.3.1    EOP's last release: no fork fixes, so scrolls need clicks and known crashes stay
+#   EOP_BUILD=master   EOP's CI build of master commit b525628 (treaties,
 #                      recruitment queue, land links). A GitHub Actions artifact: gh must be logged
 #                      in, and GitHub deletes it on 2027-01-17. Its M2TWEOPLibrary.dll is the one
 #                      the game ran in testing (sha256 b13acf7f...).
@@ -17,7 +20,15 @@ MOD="$GAME/mods/parley"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-case "${EOP_BUILD:-3.3.1}" in
+case "${EOP_BUILD:-fork}" in
+    fork)
+        TAG="fork parley-fork6"
+        ASSET="M2TWEOP.zip"
+        SHA256="fd7d7e11adb61fbf3713f976cac3abc6793a14a44b6978b9d98a1accb4101196"
+        curl -fsSL -o "$work/$ASSET" \
+            "https://github.com/williamblair333/M2TWEOP-library/releases/download/parley-fork6/$ASSET" \
+            || { echo "can't download our EOP fork build (network?)" >&2; exit 1; }
+        ;;
     3.3.1)
         TAG="M2TWEOP-3.3.1"
         ASSET="M2TWEOP-3.3.1.zip"
@@ -40,7 +51,7 @@ case "${EOP_BUILD:-3.3.1}" in
         SHA256="${EOP_SHA256:?EOP_BUILD=zip needs EOP_SHA256=<sha256 of the zip>}"
         cp "$EOP_ZIP" "$work/$ASSET"
         ;;
-    *) echo "EOP_BUILD must be 3.3.1, master or zip, not '$EOP_BUILD'" >&2; exit 2 ;;
+    *) echo "EOP_BUILD must be fork, 3.3.1, master or zip, not '$EOP_BUILD'" >&2; exit 2 ;;
 esac
 echo "$SHA256  $work/$ASSET" | sha256sum -c -
 
