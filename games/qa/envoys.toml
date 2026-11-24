@@ -81,10 +81,11 @@ expect = [
 name = "recruit_merchant"
 kind = "instant"
 isolation = "shared"
-phase2 = "needs a later save: on the bench save (England, turn 5) no town can train a merchant (live 10-31: agent_town said none; England's merchants are at their limit, 1 of 1, recruit_merchant_limit_refused)"
+# on the bench save no town trains a merchant and the limit is full (live 10-31: agent_town said none,
+# 1 of 1), so the setup builds a level that trains them and raises the limit (M.qa.merchant_town)
 setup = [
     'return M.qa.funds("england", 50000)',
-    { lua = 'return M.qa.agent_town("england", "merchant")', bind = "town", require = '^(?!none$)' },
+    { lua = 'return M.qa.merchant_town("england")', bind = "town" },
     { lua = 'return M.qa.money("england")', bind = "before" },
 ]
 act = ['return M.qa.order("england", { type = "recruit_agent", settlement = "$town", agent = "merchant" })']
@@ -140,10 +141,11 @@ expect = [
     { lua = 'return M.qa.dist("$envoy", $to_x, $to_y)', below = "$start", within = 15 },
 ]
 
-# 6. into a foreign town (live 10-29: 15 such moves came back "done" with nobody moved): refused,
-# naming the agent orders that act on a town from the next tile; he stays put
+# 6. into a foreign town (live 10-29: 15 such moves came back "done" with nobody moved; live 11-23:
+# 6 refused): he stops on the free land beside it nearest himself, and the note names the orders
+# that act on a town from there
 [[cases]]
-name = "move_agent_into_foreign_town_refused"
+name = "move_agent_into_foreign_town_stops_beside"
 kind = "instant"
 isolation = "shared"
 setup = [
@@ -154,8 +156,7 @@ setup = [
 ]
 act = ['return M.qa.order("england", { type = "move_agent", agent = "$envoy", x = $hostile_at_x, y = $hostile_at_y })']
 expect = [
-    { lua = 'return M.qa.last("move_agent")', match = "^move_agent refused: \\($hostile_at_x,$hostile_at_y\\) is .+, \\w+'s settlement: an agent can't walk in; act on it from outside with the agent's own order \\(spy, assassinate, sabotage, bribe\\)" },
-    { lua = 'return M.qa.where("$envoy")', equals = "$at" },
+    { lua = 'return M.qa.last("move_agent")', match = "^move_agent ok: \\($hostile_at_x,$hostile_at_y\\) is .+, \\w+'s settlement: an agent can't walk in; stopping beside it at \\(\\d+,\\d+\\) \\(spy, assassinate, sabotage or bribe act on it from there\\)$" },
 ]
 
 # 7. across the sea: refused with the board order to copy (a fleet of England's is spawned off

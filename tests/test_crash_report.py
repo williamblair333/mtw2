@@ -125,6 +125,180 @@ def test_a_report_holds_the_logs_screenshot_save_and_where_the_game_was(tmp_path
     assert "Report problems" not in md
 
 
+def test_a_report_lists_the_orders_applied_at_the_turns_start(tmp_path, env):
+    # 11-05 16:44: the orders before the crash (a spy moved into Dijon) were dug out by hand
+    now = dt.datetime.now().replace(microsecond=0)
+    values = _game(tmp_path, now)
+    env(values)
+    d = Path(values["PARLEY_TURN_ROOT"]) / "papal-noA" / "turn-0049" / "england"
+    d.mkdir(parents=True)
+    order = {"type": "move_agent", "agent": "Walter Wolman", "x": 121, "y": 122}
+    (d / "orders.json").write_text(json.dumps({"protocol": 1, "orders": [order]}))
+    out = cr.write("crash dialog up on 2 polls (44 330x110)", now=now)
+    md = (out / "report.md").read_text()
+    section = md.split("## Orders applied at this turn's start")[1].split("##")[0]
+    assert '- england: {"type":"move_agent","agent":"Walter Wolman","x":121,"y":122}' in section
+    assert (out / "orders-england.json").exists()
+    assert json.loads((out / "meta.json").read_text())["problems"] == []
+
+
+def test_a_report_keeps_the_games_own_log(tmp_path, env):
+    # 11-10: system.log.txt placed the rebels'-turn crash ("Faction turn start: slave" its last line);
+    # the relaunch rewrites it, so the 10:21 crash's copy was lost before anyone read it
+    now = dt.datetime.now().replace(microsecond=0)
+    values = _game(tmp_path, now)
+    env(values)
+    glog = Path(values["PARLEY_TURN_ROOT"]).parent / "mods" / "parley" / "logs"
+    glog.mkdir(parents=True)
+    lines = [f"08:57:{i % 60:02d}.000 [M2TWEOP.core] [always] line {i}" for i in range(399)]
+    lines.append("08:57:59.217 [M2TWEOP.core] [always] Faction turn start: slave")
+    (glog / "system.log.txt").write_text("\r\n".join(lines) + "\r\n")
+    out = cr.write("crash dialog up on 2 polls (44 313x82)", now=now)
+    kept = (out / "system.log.txt").read_text().splitlines()
+    assert len(kept) == 300 and kept[-1].endswith("Faction turn start: slave")
+    meta = json.loads((out / "meta.json").read_text())
+    assert meta["last_game_line"].endswith("Faction turn start: slave")
+    assert meta["problems"] == []
+
+
+def _proton_lines(n_before: int, n_after: int, av: bool = True) -> list[str]:
+    seh = "trace:seh:dispatch_exception"
+    lines = [f"13300.{i:03d}:0190:0194:{seh} code=e24c4a02 (unknown) flags=1 addr=7BC3B858" for i in range(n_before)]
+    if av:
+        lines += [
+            "13343.447:0190:0194:warn:seh:dispatch_exception backtrace: --- Exception 0xc0000005.",
+            f"13343.447:0190:0194:{seh} code=c0000005 (EXCEPTION_ACCESS_VIOLATION) flags=0 addr=00000000",
+            f"13343.447:0190:0194:{seh} eip=00000000 esp=0301b750 ebp=00000000 eflags=00010246",
+        ]
+    lines += [f"13343.5{i:02d}:0118:011c:trace:unwind:RtlGrowFunctionTable 03D38690, {i}" for i in range(n_after)]
+    return lines
+
+
+def test_a_report_keeps_protons_log_around_the_fault(tmp_path, env):
+    # 11-11: PROTON_LOG=1 (in the launch options) writes ~/steam-4700.log with the SEH trace: the only place
+    # the crash's own fault shows (eip=0 two seconds into the rebels' turn). Each launch rewrites it.
+    now = dt.datetime.now().replace(microsecond=0)
+    values = _game(tmp_path, now)
+    env(values)
+    (tmp_path / "steam-4700.log").write_text("\n".join(_proton_lines(5000, 500)) + "\n")
+    out = cr.write("crash dialog up on 2 polls (44 313x82)", now=now)
+    kept = (out / "proton.log").read_text().splitlines()
+    i = next(n for n, ln in enumerate(kept) if "EXCEPTION_ACCESS_VIOLATION" in ln)
+    assert i == cr.PROTON_BEFORE and len(kept) == cr.PROTON_BEFORE + cr.PROTON_AFTER
+    meta = json.loads((out / "meta.json").read_text())
+    assert "EXCEPTION_ACCESS_VIOLATION" in meta["fault"] and "eip=00000000" in meta["fault"]
+    assert meta["problems"] == []
+    assert "eip=00000000" in (out / "report.md").read_text()
+
+
+def test_no_fault_in_protons_log_keeps_its_tail(tmp_path, env):
+    now = dt.datetime.now().replace(microsecond=0)
+    values = _game(tmp_path, now)
+    env(values)
+    (tmp_path / "steam-4700.log").write_text("\n".join(_proton_lines(3000, 0, av=False)) + "\n")
+    out = cr.write("crash dialog up on 2 polls (44 313x82)", now=now)
+    assert len((out / "proton.log").read_text().splitlines()) == cr.PROTON_TAIL
+    meta = json.loads((out / "meta.json").read_text())
+    assert meta["fault"] is None and meta["problems"] == []
+
+
+def test_no_proton_log_is_no_problem(tmp_path, env):
+    now = dt.datetime.now().replace(microsecond=0)
+    env(_game(tmp_path, now))
+    out = cr.write("crash dialog up on 2 polls (44 313x82)", now=now)
+    assert not (out / "proton.log").exists()
+    assert json.loads((out / "meta.json").read_text())["problems"] == []
+
+
+def test_a_crt_invalid_parameter_is_the_fault_too(tmp_path, env):
+    # 11-13 turn 705: msvcrt's _invalid_parameter raised c0000417 and the report said "none found"
+    now = dt.datetime.now().replace(microsecond=0)
+    env(_game(tmp_path, now))
+    seh = "trace:seh:dispatch_exception"
+    lines = [f"8858.{i:03d}:0190:0194:{seh} code=e24c4a02 (unknown) flags=1 addr=7BC3B858" for i in range(50)]
+    lines += ["8858.211:0190:0194:err:msvcrt:_invalid_parameter (null):0 (null): (null) 0",
+              f"8858.211:0190:0194:{seh} code=c0000417 (unknown) flags=1 addr=7BC3B858",
+              f"8858.211:0190:0194:{seh} eip=7bc3b858 esp=0302a974 ebp=0302a9cc eflags=00000246"]
+    (tmp_path / "steam-4700.log").write_text("\n".join(lines) + "\n")
+    (tmp_path / "game" / "parley_turns" / "fault.bin").write_bytes(
+        _fault_bin(2, 0x7BC3B858, 0x7BC3B858, [0x00A98F1A], code=0xC0000417))
+    out = cr.write("crash dialog up on 2 polls (44 313x82)", now=now)
+    meta = json.loads((out / "meta.json").read_text())
+    assert "code=c0000417" in meta["fault"] and "eip=7bc3b858" in meta["fault"]
+    assert meta["stack"]["matches_proton"] is True
+    assert "code c0000417 (CRT invalid parameter)" in (out / "fault-stack.txt").read_text()
+
+
+def _fault_bin(count: int, addr: int, eip: int, stack: list[int], code: int = 0xC0000005) -> bytes:
+    import struct
+    data = bytearray(0x4000)
+    struct.pack_into("<IIII", data, 0, count, addr, len(stack), code)
+    ctx = [0] * 51
+    ctx[46], ctx[49] = eip, 0x0301B6D4
+    struct.pack_into("<51I", data, 0x10, *ctx)
+    for i, v in enumerate(stack):
+        struct.pack_into("<I", data, 0xDC + 4 * i, v)
+    mods = "00400000 00f00000 medieval2.exe\n76640000 00a00000 M2TWEOPLibrary.dll\n"
+    data[0x1200:0x1200 + len(mods)] = mods.encode()
+    return bytes(data)
+
+
+def test_a_report_names_the_callers_from_the_bridges_fault_dump(tmp_path, env):
+    # 11-11 turn 272 and 11-13 turn 640: eip=00eff4db, a ref-count copy with 1373 callers; Proton's
+    # log has no stack, the bridge's catcher (fault.bin) does
+    now = dt.datetime.now().replace(microsecond=0)
+    values = _game(tmp_path, now)
+    env(values)
+    root = tmp_path / "game" / "parley_turns"
+    (root / "fault.bin").write_bytes(
+        _fault_bin(7, 0x00EFF4DB, 0x00EFF4DB, [0x12345678, 0x00A98F1A, 0, 0x766FEF65]))
+    out = cr.write("crash dialog up on 2 polls (44 313x82)", now=now)
+    meta = json.loads((out / "meta.json").read_text())
+    assert meta["problems"] == []
+    assert meta["stack"]["address"] == "00eff4db"
+    assert meta["stack"]["matches_proton"] is None  # no Proton log here
+    assert meta["stack"]["frames"] == ["[esp+004] 00a98f1a medieval2.exe+0x698f1a",
+                                       "[esp+00c] 766fef65 M2TWEOPLibrary.dll+0xbef65"]
+    text = (out / "fault-stack.txt").read_text()
+    assert ("errors caught this process: 7; the last: code c0000005 (access violation) at 00eff4db"
+            " (medieval2.exe+0xaff4db)") in text
+    assert "eip=00eff4db eflags=00000000 esp=0301b6d4" in text
+    assert (out / "fault.bin").exists()
+    assert "medieval2.exe+0x698f1a; M2TWEOPLibrary.dll+0xbef65" in (out / "report.md").read_text()
+
+
+def test_a_fault_dump_from_an_earlier_av_says_so(tmp_path, env):
+    now = dt.datetime.now().replace(microsecond=0)
+    env(_game(tmp_path, now))
+    (tmp_path / "steam-4700.log").write_text("\n".join(_proton_lines(5000, 500)) + "\n")  # eip=00000000
+    (tmp_path / "game" / "parley_turns" / "fault.bin").write_bytes(_fault_bin(1, 0x764F269D, 0x764F269D, []))
+    out = cr.write("crash dialog up on 2 polls (44 313x82)", now=now)
+    meta = json.loads((out / "meta.json").read_text())
+    assert meta["stack"]["matches_proton"] is False
+    assert "NOT Proton's eip" in (out / "report.md").read_text()
+
+
+def test_an_empty_fault_dump_caught_nothing(tmp_path, env):
+    now = dt.datetime.now().replace(microsecond=0)
+    env(_game(tmp_path, now))
+    (tmp_path / "game" / "parley_turns" / "fault.bin").write_bytes(bytes(0x4000))
+    out = cr.write("crash dialog up on 2 polls (44 313x82)", now=now)
+    meta = json.loads((out / "meta.json").read_text())
+    assert meta["stack"] == {"address": None, "frames": []} and meta["problems"] == []
+    assert "no error exception caught" in (out / "report.md").read_text()
+
+
+def test_the_bridges_fault_stub_is_the_generators():
+    import re
+    gen_spec = importlib.util.spec_from_file_location("stub", SCRIPT.parent / "fault_catcher_stub.py")
+    gen = importlib.util.module_from_spec(gen_spec)
+    gen_spec.loader.exec_module(gen)
+    lua = (SCRIPT.parent.parent / "lua" / "parley_bridge.lua").read_text()
+    table = re.search(r"M\.FAULT_STUB = \{([^}]*)\}", lua).group(1)
+    assert [int(x) for x in re.findall(r"\d+", table)] == list(gen.stub())
+    assert gen.stub().count(bytes.fromhex("44332211")) == 1
+
+
 def test_no_game_window_means_no_picture_never_the_desktop(tmp_path, env):
     now = dt.datetime.now().replace(microsecond=0)
     e = _game(tmp_path, now)

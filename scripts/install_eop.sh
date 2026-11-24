@@ -6,6 +6,8 @@
 #                      recruitment queue, land links). A GitHub Actions artifact: gh must be logged
 #                      in, and GitHub deletes it on 2027-01-17. Its M2TWEOPLibrary.dll is the one
 #                      the game ran in testing (sha256 b13acf7f...).
+#   EOP_BUILD=zip      a zip already here, e.g. our fork's Gitea build: EOP_ZIP=<path>
+#                      EOP_SHA256=<sha256>. Then `just install-bridge` (the zip's eopScripts replace it).
 set -euo pipefail
 
 GAME="${MTW2_GAME_DIR:-$HOME/.steam/steam/steamapps/common/Medieval II Total War}"
@@ -30,15 +32,26 @@ case "${EOP_BUILD:-3.3.1}" in
             -n M2TWEOP-latest-build-b525628d3d59f7b07a02bc1a2e615101aa29b516 -D "$work" \
             || { echo "can't download EOP's master build (gh logged in? GitHub deletes it on 2027-01-17)" >&2; exit 1; }
         ;;
-    *) echo "EOP_BUILD must be 3.3.1 or master, not '$EOP_BUILD'" >&2; exit 2 ;;
+    zip)
+        # our fork's build (author/M2TWEOP-library, a build-<sha> pre-release on Gitea, fetched where
+        # the Gitea token is and copied here): EOP_ZIP=<path> EOP_SHA256=<its sha256>, both required
+        TAG="zip ${EOP_ZIP:?EOP_BUILD=zip needs EOP_ZIP=<path to M2TWEOP.zip>}"
+        ASSET="M2TWEOP.zip"
+        SHA256="${EOP_SHA256:?EOP_BUILD=zip needs EOP_SHA256=<sha256 of the zip>}"
+        cp "$EOP_ZIP" "$work/$ASSET"
+        ;;
+    *) echo "EOP_BUILD must be 3.3.1, master or zip, not '$EOP_BUILD'" >&2; exit 2 ;;
 esac
 echo "$SHA256  $work/$ASSET" | sha256sum -c -
 
 mkdir -p "$MOD/logs"
 unzip -q -o "$work/$ASSET" -d "$MOD"
-# master names its launcher M2TWEOP_GUI.exe; the Steam launch option (docs/WRITEUP.md §4.3) runs
-# "M2TWEOP GUI.exe", 3.3.1's name, so both builds launch the same way
-if [ -f "$MOD/M2TWEOP_GUI.exe" ]; then cp -f "$MOD/M2TWEOP_GUI.exe" "$MOD/M2TWEOP GUI.exe"; fi
+# Parley's launcher settings, after every unzip: our fork's zip ships no eopData/config (fork #10),
+# and an older zip's default (modCfgFile "", useVanillaCfg true) started the game without
+# parley.cfg (live 11-15, W53). Other keys are kept. The fork names its launcher "M2TWEOP GUI.exe"
+# (fork #10), the name the Steam launch option runs (docs/WRITEUP.md §4.3).
+repo=$(cd "$(dirname "$0")/.." && pwd)
+(cd "$repo" && python3 -m parley.relaunch ui-cfg "$MOD")
 cat > "$MOD/parley.cfg" <<EOF
 [features]
 mod = mods/parley
@@ -81,10 +94,4 @@ if [ -n "$vanilla" ] && [ -d "$vanilla/data" ]; then
     cp -r "$vanilla/data" "$MOD/"
     echo "vanilla campaign and base map copied into $MOD/data"
 fi
-# No launcher at start-up: the mod runs without a "Run mod" click (scripts/relaunch_game.sh sets it
-# again before each relaunch). Both files: the installed launcher reads config/uiCfg.json, the docs
-# name uiCfg.json. One the release doesn't ship is written by the launcher on its first run.
-repo=$(cd "$(dirname "$0")/.." && pwd)
-(cd "$repo" && python3 -m parley.relaunch hide-launcher "$MOD") \
-    || echo "hideLauncher not set: no uiCfg.json yet; scripts/relaunch_game.sh sets it once the launcher has written one" >&2
 echo "EOP $TAG installed in $MOD"

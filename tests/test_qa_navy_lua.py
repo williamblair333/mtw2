@@ -161,8 +161,8 @@ def _suite_for_venice() -> Suite:
 def test_the_navy_suite_is_instant_but_three_grouped_turn_cases_and_names_its_unforceables():
     suite = _suite_for_venice()
     kinds = [c.kind for c in suite.cases]
-    assert kinds.count("turn") == 3
-    assert kinds[-3:] == ["turn", "turn", "turn"]  # grouped, last
+    assert kinds.count("turn") == 4  # the 4th: fleet_merge_survives_a_round (11-14)
+    assert kinds[-4:] == ["turn", "turn", "turn", "turn"]  # grouped, last
     # live 10-31: the instant blockade crashed the game in a held turn; never instant again, and the
     # turn case checks the game lived past the order
     blockade = next(c for c in suite.cases if c.name == "blockade_port")
@@ -170,7 +170,7 @@ def test_the_navy_suite_is_instant_but_three_grouped_turn_cases_and_names_its_un
     assert suite.cases[0].name == "across_sea_board_first"  # while its fleet is the nearest
     names = {c.name for c in suite.cases}
     assert {"board_next_fleet", "board_far_fleet_walks", "land_on_coast", "land_onto_sea_refused",
-            "land_onto_foreign_town_refused", "blockade_port", "fleet_sails", "fleet_onto_land_refused",
+            "land_onto_foreign_town_refused", "blockade_port", "fleet_sails", "fleet_onto_shore_sails_to_sea",
             "crossing_in_one_turn", "crossing_over_turns", "report_fleet_carrying", "recruit_ship"} <= names
     text = _navy_text()
     assert "What can't be forced" in text and "Unproven live" in text

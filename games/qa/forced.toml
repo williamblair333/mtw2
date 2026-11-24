@@ -1,0 +1,194 @@
+# Events forced at will (games/forced_events.toml). A helper's "ok" line proves only that the call ran:
+# the first version of these cases passed in 0.1 s and reloaded before the game could react (11-06). Each
+# expect here is the game's own reaction.
+name = "forced"
+faction = "england"
+
+[[cases]]
+name = "forced_plague"
+max_turns = 1
+setup = [
+    'return M.qa.force_disaster("plague", $garrison_town_x, $garrison_town_y)',
+]
+expect = [
+    { log = 'struck by a disaster: plague' },
+]
+
+# Each raises its own game message within a second (probed one at a time 11-06). Storm, riot, fire, famine,
+# locusts, volcano and horde showed nothing on a town's tile: see games/forced_events.toml.
+[[cases]]
+name = "forced_flood"
+max_turns = 1
+setup = [
+    'return M.qa.force_disaster("flood", $garrison_town_x, $garrison_town_y)',
+]
+expect = [
+    { log = 'popup message 44' },
+]
+
+[[cases]]
+name = "forced_earthquake"
+max_turns = 1
+setup = [
+    'return M.qa.force_disaster("earthquake", $garrison_town_x, $garrison_town_y)',
+]
+expect = [
+    { log = 'popup message 42' },
+]
+
+[[cases]]
+name = "forced_leader_death"
+max_turns = 1
+setup = [
+    'return M.qa.force_leader_death("england")',
+]
+expect = [
+    { log = 'character event: england: [^\n]+ lost his father to a natural death' },
+]
+
+# A third faction declares war on the ruler's ally: message 114 a second after, seen 11-06.
+[[cases]]
+name = "forced_war_on_ally"
+max_turns = 1
+setup = [
+    { lua = 'return M.qa.rival("england", 1, true)', bind = "ally" },
+    { lua = 'return M.qa.rival("england", 2, true)', bind = "enemy" },
+    'return M.qa.stance("england", "$ally", "alliance")',
+    'return M.qa.stance("$enemy", "$ally", "war")',
+]
+expect = [
+    { log = 'popup message 114' },
+]
+
+[[cases]]
+name = "forced_battle_result"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.rival("england", 1, true)', bind = "them" },
+    'return M.qa.stance("england", "$them", "war")',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "mine" },
+    { lua = 'return M.qa.free_tile($at_x, $at_y, 1, 1)', bind = "beside" },
+    { lua = 'return M.qa.spawn_army("$them", $beside_x, $beside_y)', bind = "theirs" },
+    'return M.qa.force_attack("england", "$mine", "$them", "$theirs")',
+]
+expect = [
+    { log = 'popup handled: a battle.s result' },
+]
+
+# Peasants attack a general's stack and lose: the game asks for their ransom. Seen 11-06.
+[[cases]]
+name = "forced_own_men_captured"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.rival("england", 1, true)', bind = "them" },
+    'return M.qa.stance("england", "$them", "war")',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y, nil, "Peasants")', bind = "mine" },
+    { lua = 'return M.qa.free_tile($at_x, $at_y, 1, 1)', bind = "beside" },
+    { lua = 'return M.qa.spawn_army("$them", $beside_x, $beside_y)', bind = "theirs" },
+    'return M.qa.force_attack("england", "$mine", "$them", "$theirs")',
+]
+expect = [
+    { log = 'your men captured, their ransom asked of you' },
+]
+
+# An empty town falls to the siege at once, and the game asks. Seen 11-06 on Bruges.
+[[cases]]
+name = "forced_town_captured"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    'return M.qa.force_empty_town("$hostile")',
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "next" },
+    { lua = 'return M.qa.spawn_army("england", $next_x, $next_y)', bind = "army" },
+    'return M.qa.order("england", { type = "besiege", army = "$army", settlement = "$hostile" })',
+]
+expect = [
+    { log = 'a captured settlement, the ruler chooses: occupy, sack, exterminate' },
+]
+
+[[cases]]
+name = "forced_spy_report"
+max_turns = 1
+setup = [
+    { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
+    { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
+    { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "next" },
+    { lua = 'return M.qa.spawn_agent("england", "spy", $next_x, $next_y, "QA Spy")', bind = "spy" },
+    'return M.qa.skill("$spy", "GoodSpy", 5)',
+    'return M.qa.order("england", { type = "spy", agent = "$spy", target = "$hostile" })',
+]
+expect = [
+    { log = 'closed the spy report after england.s mission' },
+]
+
+[[cases]]
+name = "forced_jihad"
+max_turns = 1
+setup = [
+    'return M.qa.force_jihad("$garrison_town")',
+]
+expect = [
+    { log = 'qa: force_jihad ok: [^\n]+\n(?:[^\n]*\n){0,3}?[^\n]*popup message 180' },
+]
+
+[[cases]]
+name = "forced_crusade"
+max_turns = 2
+setup = [
+    'return M.qa.force_crusade("$garrison_town")',
+]
+expect = [
+    # raised 1 s after the call (11-06); ids don't name their event (decision-inventory X2), so timing is the proof
+    { log = 'qa: force_crusade ok: [^\n]+\n(?:[^\n]*\n){0,3}?[^\n]*popup message 179' },
+]
+
+[[cases]]
+name = "forced_ai_attack"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.rival("england", 1, true)', bind = "rival" },
+    'return M.qa.stance("england", "$rival", "war")',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "groom" },
+    { lua = 'return M.qa.free_tile($at_x, $at_y, 1, 1)', bind = "at2" },
+    'return M.qa.force_ai_attack("$rival", $at2_x, $at2_y, "england", "$groom")',
+]
+expect = [
+    # not "auto-resolve all battles on", the bridge's line at every load
+    { log = '^(?!.*(?:auto-resolve all battles|force_ai_attack|control: lua)).*(?i:prebattle|battle)' },
+]
+
+[[cases]]
+name = "forced_ai_siege"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.rival("england", 1, true)', bind = "rival" },
+    'return M.qa.stance("england", "$rival", "war")',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    'return M.qa.force_ai_siege("$rival", $at_x, $at_y, "$garrison_town")',
+]
+expect = [
+    # raised 1 s after the call (11-06), then 71 and 1; on 11-14 it came 8 s later, after the turn
+    # ended, as "popup handled: game message 39 (clear_messages)", 7 lines on
+    { log = 'qa: force_ai_siege ok: [^\n]+\n(?:[^\n]*\n){0,15}?[^\n]*(?:popup message|game message) 39\b' },
+]
+
+# Last: it ends the campaign, and the runner relaunches past the defeat screen (a load can't run behind it).
+# One town left, no garrison, a rival's siege: "Victory Conditions Failed". Seen 11-06.
+[[cases]]
+name = "forced_campaign_lost"
+max_turns = 2
+setup = [
+    { lua = 'return M.qa.rival("england", 1, true)', bind = "them" },
+    'return M.qa.stance("england", "$them", "war")',
+    'return M.qa.force_lose_towns("england", "$garrison_town")',
+    'return M.qa.force_empty_town("$garrison_town")',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    'return M.qa.force_ai_siege("$them", $at_x, $at_y, "$garrison_town")',
+]
+expect = [
+    { log = 'campaign over: end_campaign_scroll on screen' },
+]

@@ -41,8 +41,10 @@ function draw(pDevice)
                 ImGui.SetNextWindowSize(480, 110, ImGuiCond.Always)
             end)
             if ImGui.Begin("Parley") then
-                ImGui.Text(bridge.status)
-                if bridge.plan then (ImGui.TextWrapped or ImGui.Text)(bridge.plan) end
+                -- Our EOP fork passes the text as "%s" (author/M2TWEOP-library PR #2);
+                -- bridge.imgui_text converts nil to "" and stringifies
+                ImGui.Text(bridge.imgui_text(bridge.status))
+                if bridge.plan then (ImGui.TextWrapped or ImGui.Text)(bridge.imgui_text(bridge.plan)) end
             end
             ImGui.End()
         end)  -- the first failure turns the window off for good

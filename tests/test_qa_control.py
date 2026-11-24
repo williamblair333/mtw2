@@ -7,6 +7,13 @@ import pytest
 from parley.qa.control import Control, ControlTimeout
 
 
+def test_control_polls_for_its_answer_every_tenth_of_a_second():
+    # the author 11-05 step 5: a bench reload's readiness check makes ~12 calls; at 0.5 s each one waited
+    # up to half a second after the bridge had answered
+    from parley.qa import control
+    assert control.POLL_INTERVAL == 0.1
+
+
 def test_run_lua_appends_line_and_returns_logged_result(tmp_path: Path):
     control_file = tmp_path / "control.txt"
     log_file = tmp_path / "parley_bridge.log"

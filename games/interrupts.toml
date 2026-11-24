@@ -23,7 +23,7 @@ proof = ["parley/qa/runner.py::_quiet_world\\(ctrl, log_path, bench\\.rel\\)",
          "lua/parley_bridge.lua::quiet = function\\(max_age\\)",
          "lua/parley_bridge.lua::cfg\\.freeze\\[\"\\*\"\\] and fac\\.isPlayerControlled == 1 and M\\.qa then M\\.qa\\.quiet\\(\\)",
          "tests/test_qa_quiet_pope.py::def test_the_players_turn_start_keeps_him_young_in_the_quiet_world"]
-bench = "instant/quiet_world_held"
+bench = "quiet/quiet_world_held"
 note = "unproven live: that the game's old-age death roll reads characterRecord.age; the first bench load logs 'qa: quiet ok: pope=... age=a->b'"
 
 [events.papal_missions]
@@ -37,7 +37,11 @@ what = "a crusade or jihad is called or joined, with its prompts"
 
 [events.ai_diplomacy_offers]
 what = "an AI faction offers alliance, trade, ceasefire or demands tribute"
-note = "freeze=* may stop these (freezeFactionAI); prove it with a forced case before claiming it"
+held_by = "freeze=* freezes every AI faction's campaign AI on the bench (runner quiet world)"
+proof = ["lua/parley_bridge.lua::fac\\.freezeFactionAI = want",
+         "parley/orchestrator.py::freeze=\\*"]
+bench = "diplomacy/frozen_rival_offers_nothing"
+note = "evidence of absence, one run (11-06 05:36): two AI rounds with denmark's envoy beside London and denmark's own turn in each, no offer. The freeze covers only the first second of a faction's turn (M.release_frozen), so a rarer offer isn't ruled out; a courted envoy does offer (ai_offer_on_its_turn)"
 
 [events.ai_attacks_sieges]
 what = "an AI army attacks, besieges, or blocks a case's target"
@@ -45,9 +49,24 @@ held_by = "freeze=* freezes every AI faction's campaign AI on the bench (runner 
 proof = ["lua/parley_bridge.lua::fac\\.freezeFactionAI = want",
          "parley/orchestrator.py::freeze=\\*"]
 
-[events.marriage_adoption]
-what = "a marriage, adoption or man-of-the-hour offer opens a scroll"
-note = "the steward answers family offers by rule, but only in suites with steward = true. Seen on the bench 10-31 12:13 and 12:33: the same offer (Fraunce of_Leeds for england) at the first End Turn, and the QA loop never answered it ('didn't capture it in time'), so End Turn stayed held"
+# Split 11-05 from one "marriage_adoption" event: marriage offers are held, adoption and man-of-the-hour
+# offers are not.
+[events.princess_suitor_offer]
+what = "a man is offered as a suitor for England's princess and his scroll opens (not a wife for one of England's men: marriage_offer)"
+note = "not held: seen on the bench 11-06 05:35 (Anthony Longe for Cecilia, diplomacy/frozen_rival_offers_nothing, turn 6). It held End Turn about 40 s; its decline click did not crash the game. The bridge logs both kinds as 'marriage offer'"
+
+[events.marriage_offer]
+what = "a marriage offer for one of England's men opens a scroll"
+held_by = "M.qa.quiet calls M.bench_marriages_off after every bench load: England's single adult men get wives (the game offers a wife only to an unmarried man) and maxAgeForMarriageMale goes to 0; a real load puts the limit back"
+proof = ["lua/parley_bridge.lua::function M\\.bench_marriages_off\\(\\)",
+         "lua/parley_bridge.lua::M\\.bench_marriages_off\\(\\)\\n\\s+return run\\(\"quiet\"",
+         "tests/test_lua_bridge.py::def test_the_bench_turns_marriage_offers_off_and_a_real_load_turns_them_back_on"]
+bench = "quiet/quiet_world_held"
+note = "seen on the bench 10-31 12:13 and 12:33 (Fraunce of_Leeds for england) and 11-05 11:57, 12:15 (a crash after the answer); none in the 11-05 full pass, where every bench load logged 'england's single men married on the bench'"
+
+[events.adoption_man_of_hour]
+what = "an adoption or man-of-the-hour offer opens a scroll"
+note = "the steward answers family offers by rule, but only in suites with steward = true. 11-05 (#447): the bench sets familyTree.maxAdoptionAge to 0 (quiet/quiet_world_held reads it back), which should stop adoption offers; whether the man-of-the-hour offer after a battle obeys the same limit is unproven, so this stays open until a battle on the bench shows none"
 
 # Split 11-01 from one "rebellion" event: the town half is held, the general half is not.
 [events.rebellion]
@@ -55,7 +74,7 @@ what = "a settlement revolts"
 held_by = "M.qa.quiet sets every seated faction's town turmoil and rebel-faction chance to 0, read back (after every bench load, refused if it doesn't stick, and at each player turn start under freeze=*)"
 proof = ["lua/parley_bridge.lua::s\\.turmoil, s\\.rebelFactionChance = 0, 0",
          "tests/test_qa_quiet_pope.py::def test_quiet_calms_and_cures_the_seated_factions_towns"]
-bench = "instant/quiet_world_held"
+bench = "quiet/quiet_world_held"
 note = "inferred: turmoil 0 each round keeps public order from falling into revolt (public order itself is get-only); live 11-01 the write stuck on scratch (england 4 towns, france 7)"
 
 [events.general_defects]
@@ -68,7 +87,7 @@ held_by = "M.qa.quiet keeps each seated faction's leader and heir at 45 or young
 proof = ["lua/parley_bridge.lua::fac\\.leader and keep_young\\(fac\\.leader",
          "lua/parley_bridge.lua::fac\\.heir and keep_young\\(fac\\.heir",
          "tests/test_qa_quiet_pope.py::def test_quiet_keeps_the_seated_factions_leader_and_heir_young"]
-bench = "instant/quiet_world_held"
+bench = "quiet/quiet_world_held"
 note = "unproven: the old-age death roll reading characterRecord.age (as for the Pope)"
 
 # Split 11-01 from one "plague_disaster" event: town plague is held, the other disasters are not.
@@ -77,7 +96,7 @@ what = "plague strikes a seated faction's town and opens a scroll"
 held_by = "M.qa.quiet clears plagued and plagueDuration on every seated faction's town, read back (after every bench load and at each player turn start under freeze=*)"
 proof = ["lua/parley_bridge.lua::s\\.plagued, s\\.plagueDuration = false, 0",
          "tests/test_qa_quiet_pope.py::def test_quiet_calms_and_cures_the_seated_factions_towns"]
-bench = "instant/quiet_world_held"
+bench = "quiet/quiet_world_held"
 note = "a plague carried by a character (10-31 12:13: 'Captain Draganos was struck by a disaster: plague') is not cleared"
 
 [events.disaster]

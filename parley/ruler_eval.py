@@ -14,7 +14,9 @@ import sys
 import time
 from typing import Any, Callable
 
-from parley.control import AREAS
+from collections import Counter
+
+from parley.control import AREAS, ORDER_AREA
 from parley.protocol import StateReport
 from parley.seats import make_seat
 from parley.validate import validate_orders
@@ -76,6 +78,9 @@ def evaluate(
                         "rejected": len(rejected),
                         "malformed": len(orders.malformed),
                         "has_note": bool(orders.note and orders.note.strip()),
+                        # what the kept orders were about, by control area (parley/control.py): not
+                        # how good they were, but a ruler that only sets taxes shows here
+                        "mix": dict(Counter(ORDER_AREA.get(o.type, "other") for o in kept.orders)),
                     }
                 except Exception as ex:
                     took = time.monotonic() - start
@@ -110,7 +115,11 @@ def evaluate(
         median_sec = round(float(statistics.median(durations)), 2) if durations else 0.0
         max_sec = round(float(max(durations)), 2) if durations else 0.0
 
+        mix: Counter = Counter()
+        for r in spec_runs:
+            mix.update(r.get("mix", {}))
         specs_summary[spec] = {
+            "mix": dict(mix),
             "runs": n_runs,
             "answered": answered,
             "kept": kept,
@@ -141,6 +150,12 @@ def format_table(result: dict) -> str:
             f"{med_s} | {max_s} |"
         )
 
+    lines += ["", "Kept orders by area:", "",
+              "| spec | " + " | ".join(AREAS) + " |", "|---|" + "---|" * len(AREAS)]
+    for spec, s in result.get("specs", {}).items():
+        mix = s.get("mix", {})
+        lines.append(f"| {spec} | " + " | ".join(str(mix.get(a, 0)) for a in AREAS) + " |")
+
     failed = [r for r in result.get("runs", []) if not r.get("ok")]
     if failed:
         lines.append("")
@@ -155,10 +170,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=float, default=300.0, help="Per-turn timeout in seconds (default: 300)")
     parser.add_argument("--out", type=Path, default=Path("runs/ruler-eval"), help="Output directory (default: runs/ruler-eval)")
     parser.add_argument("--scenario", action="append", default=[], dest="scenario", help="Scenario folder (repeatable)")
+    parser.add_argument("--set", type=Path, default=None, dest="scenario_set",
+                        help="A folder of scenarios: each subfolder with a state.json (games/ruler_eval)")
     parser.add_argument("specs", nargs="*", help="Seat specs to evaluate")
     args = parser.parse_args(argv)
 
     scenarios = [Path(s) for s in args.scenario]
+    if args.scenario_set is not None:
+        scenarios += sorted(p.parent for p in Path(args.scenario_set).glob("*/state.json"))
     result = evaluate(scenarios, args.specs, timeout=args.timeout)
     table = format_table(result)
 

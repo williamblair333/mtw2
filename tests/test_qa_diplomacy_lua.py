@@ -161,8 +161,14 @@ def test_the_turn_cases_name_only_what_setup_binds_or_the_runner_finds():
     for case in suite.cases:
         assert _required_placeholders(case) - case.binds <= live, case.name
     turn = {c.name: c for c in suite.cases if c.kind == "turn"}
-    assert set(turn) == {"orders_next_report", "ai_offer_on_its_turn"}
+    assert set(turn) == {"orders_next_report", "ai_offer_on_its_turn", "two_offers_on_their_turns",
+                         "frozen_rival_offers_nothing"}
+    # never courted: the rival's AI stays frozen, and an offer anywhere fails the case
+    frozen = turn["frozen_rival_offers_nothing"]
+    assert not any("court(" in str(s) for s in frozen.setup) and not frozen.chance
     assert turn["ai_offer_on_its_turn"].choice == "accept" and turn["ai_offer_on_its_turn"].chance
+    two = turn["two_offers_on_their_turns"]
+    assert two.choice == ["decline", "accept"] and two.chance
     types = [o["type"] for o in turn["orders_next_report"].orders[1]]
     assert types == ["set_stance", "set_stance", "set_stance", "send_gold", "cede_settlement", "say"]
 
@@ -185,6 +191,25 @@ def test_the_script_seat_says_its_messages_and_answers_choices(tmp_path):
     assert seat.chat("what do you think of France?", timeout=1) == ""
     plan.write_text(json.dumps({"5": []}))
     assert ScriptSeat(str(plan)).chat("The game asks you to decide x", timeout=1) == ""
+
+
+def test_a_list_of_choices_answers_each_asked_choice_in_turn(tmp_path):
+    # two offers in one case (#297 on the AI's turn): decline the first, accept the second, and any
+    # later one gets the last answer; a question that isn't a choice doesn't use one up
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"choice": ["decline", "accept"]}))
+    seat = ScriptSeat(str(plan))
+    ask = "You rule england. The game asks you to decide an AI's offer NOW"
+    assert seat.chat("what do you think of France?", timeout=1) == ""
+    assert seat.chat(ask, timeout=1).startswith("DECLINE")
+    assert seat.chat(ask, timeout=1).startswith("ACCEPT")
+    assert seat.chat(ask, timeout=1).startswith("ACCEPT")
+
+
+def test_a_case_takes_a_list_of_choices():
+    from parley.qa.cases import Case
+    c = Case.model_validate({"name": "x", "choice": ["decline", "accept"], "expect": [{"log": "a"}]})
+    assert c.choice == ["decline", "accept"]
 
 
 def test_case_results_number_the_orders_without_the_say_entries(tmp_path):

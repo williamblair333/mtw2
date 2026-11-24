@@ -35,13 +35,29 @@ class TurnDir:
 
     def pending(self, game_id: str = "*") -> list[Path]:
         """Faction dirs whose state.json has no answer yet, or is newer than its answer
-        (the game rewrote the report after a save was reloaded)."""
-        found = []
+        (the game rewrote the report after a save was reloaded); per game and faction, only the one
+        the game wrote last. The bridge applies orders for the turn that just ended, so an older
+        report's answer is never used: live 11-05 14:42 the loop answered three stale reports (turns
+        6-8, left by a relaunch on a bench autosave) first, and both rulers of the real turn 75 ran out
+        of time. Last written, not highest turn: after an earlier save is loaded, the rewritten turn-74
+        report is the live one, beside an answered turn 75 (review 11-05, agy)."""
+        newest: dict[tuple[str, str], tuple[float, str, Path]] = {}
         for state in self.root.glob(f"{game_id}/turn-*/*/state.json"):
-            orders = state.parent / "orders.json"
             try:
-                if not orders.exists() or state.stat().st_mtime > orders.stat().st_mtime:
-                    found.append(state.parent)
+                mtime = state.stat().st_mtime
+            except FileNotFoundError:
+                continue
+            key = (state.parent.parent.parent.name, state.parent.name)
+            mark = (mtime, state.parent.parent.name, state.parent)
+            if key not in newest or mark[:2] > newest[key][:2]:
+                newest[key] = mark
+        newest = {k: v[2] for k, v in newest.items()}
+        found = []
+        for d in newest.values():
+            orders = d / "orders.json"
+            try:
+                if not orders.exists() or (d / "state.json").stat().st_mtime > orders.stat().st_mtime:
+                    found.append(d)
             except FileNotFoundError:
                 continue
         return sorted(found, key=lambda d: (d.parent.name, d.name))

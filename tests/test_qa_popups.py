@@ -19,9 +19,22 @@ from tests.test_qa_instant_lua import TickingControl
 ROOT = Path(__file__).parent.parent
 FIX = ROOT / "tests" / "fixtures" / "qa_popups"
 VOTE_LOG = (FIX / "vote-election-2026-10-31-0450.log").read_text(encoding="utf-8")
+# the bench pass with every click refused (tc, 11-20 08:28): the vote pressed by its element (#659)
+VOTE_LOG_NOCLICK = (FIX / "vote-election-2026-11-20-0828.log").read_text(encoding="utf-8")
 NO_VOTE_LOG = (FIX / "no-vote-election-2026-10-31-0539.log").read_text(encoding="utf-8")
 CRASH_LOG = (FIX / "crash-2026-10-31-0529.log").read_text(encoding="utf-8")
 TURN = 3
+
+
+def test_a_wine_written_log_is_judged_like_any_other(tmp_path):
+    # the bridge runs under Wine and its Lua writes \r\n; live 11-05 10:54 (the test laptop) the overview case
+    # stayed "pending" with every line it wanted already in the log
+    from parley.qa.runner import _read_log_since
+    log = tmp_path / "parley_bridge.log"
+    log.write_bytes(b"2026-11-05 10:53:31 qa: press ok: faction_button\r\n"
+                    b"2026-11-05 10:54:08 autoplay: ending turn 5\r\n"
+                    b"2026-11-05 10:54:26 qa: quiet ok: pope=Gregory\r\n")
+    assert check(_case("faction_overview_closed"), _read_log_since(log, 0), None, None, 1).outcome == "pass"
 
 
 def _suite(faction: str = "england") -> Suite:
@@ -38,12 +51,16 @@ def _case(name: str, faction: str = "england") -> Case:
 
 def test_the_popups_suite_loads_with_popup_cases_on_turns_and_the_scene_instant():
     suite = _suite()
+    assert suite.hold_reads is True
     kinds = {c.name: c.kind for c in suite.cases}
     assert kinds == {
         "papal_scene": "instant",
         "event_scroll_closed": "turn",
+        "minimized_message_reopened_by_element": "instant",
+        "stuck_turn_reopens_minimized_message": "instant",
         "faction_overview_closed": "turn",
         "papal_election_vote": "turn",
+        "papal_results_turn_goes_on": "turn",
         "papal_election_no_vote": "turn",
     }
     # a crash ends the run: the case built to reproduce one goes last
@@ -65,10 +82,17 @@ def test_both_election_cases_check_the_game_lived_on():
 # --- the turn cases' expects on live elections ----------------------------------------------------
 
 
-def test_the_vote_case_passes_on_the_live_vote_election():
-    v = check(_case("papal_election_vote"), VOTE_LOG, state=None, results=None, turns_used=1)
+def test_the_vote_case_passes_on_the_no_click_vote_election():
+    v = check(_case("papal_election_vote"), VOTE_LOG_NOCLICK, state=None, results=None, turns_used=1)
     assert v.outcome == "pass", v.evidence
-    assert "alive 30 s after 04:51:12" in v.evidence
+    assert "alive 30 s after 08:27:25" in v.evidence
+
+
+def test_the_vote_case_no_longer_passes_on_a_clicked_vote():
+    # 10-31 the vote was a screen click: the case now asks for the by-element press, so a run that
+    # clicked doesn't pass it
+    v = check(_case("papal_election_vote"), VOTE_LOG, state=None, results=None, turns_used=1)
+    assert v.outcome != "pass", v.evidence
 
 
 def test_the_vote_case_does_not_pass_on_an_election_england_had_no_vote_in():
@@ -84,9 +108,41 @@ def test_the_no_vote_case_passes_on_the_live_results_only_election():
 
 def test_the_no_vote_case_fails_on_the_0529_bench_crash():
     # 05:29:44 the check was asked for; the next lines are the relaunched game's (05:30:31)
-    v = check(_case("papal_election_no_vote"), CRASH_LOG, state=None, results=None, turns_used=2)
+    v = check(_case("papal_election_no_vote"), CRASH_LOG, state=None, results=None, turns_used=3)
     assert v.outcome == "fail"
     assert "acknowledged with its check" in v.evidence
+
+
+# the bench path (11-05 13:48, the test laptop): England's cardinal killed, then the Pope; no 202 came, only
+# the result. Lines as the bridge logged them (papal-trace and governors lines left out)
+BENCH_NO_NOTICE_LOG = """\
+2026-11-05 13:48:14 qa: drop_cardinals ok: 1 killed: Aston; the college counts 1 now
+2026-11-05 13:48:14 qa: kill_pope ok: Gregory
+2026-11-05 13:48:15 popup message 201
+2026-11-05 13:48:18 popup message 210
+2026-11-05 13:48:45 popup handled: game message 201 (clear_messages)
+2026-11-05 13:48:51 popup handled: game message 210 (clear_messages)
+2026-11-05 13:48:51 autoplay: ending turn 5
+2026-11-05 13:49:10 popup message 40
+2026-11-05 13:49:11 popup message 203
+2026-11-05 13:49:12 popup message 15
+2026-11-05 13:49:19 popup handled: game message 203 (clear_messages)
+2026-11-05 13:49:21 popup handled: game message 15 (clear_messages)
+2026-11-05 13:49:21 autoplay: ending turn 6
+2026-11-05 13:49:47 autoplay: ending turn 7
+2026-11-05 13:50:05 qa: england's single men married on the bench: 1
+"""
+
+
+def test_the_no_vote_case_passes_when_the_game_sends_no_notice():
+    v = check(_case("papal_election_no_vote"), BENCH_NO_NOTICE_LOG, state=None, results=None, turns_used=2)
+    assert v.outcome == "pass", v.evidence
+
+
+def test_the_no_vote_case_does_not_pass_on_the_vote_election():
+    # England voted: the 202 came between the death and the result, and its check path differs
+    v = check(_case("papal_election_no_vote"), VOTE_LOG, state=None, results=None, turns_used=1)
+    assert v.outcome != "pass", v.evidence
 
 
 def test_the_event_case_needs_the_events_own_message_handled_before_the_turn_ends():
@@ -104,14 +160,15 @@ def test_the_event_case_needs_the_events_own_message_handled_before_the_turn_end
         "2026-10-31 10:01:01 popup message 31\n"
         "2026-10-31 10:01:09 popup handled: game message 31 (clear_messages)\n"
     )
-    assert check(case, late, None, None, 1).outcome == "fail"
+    assert check(case, late, None, None, 1).outcome == "pending"  # a second turn may still show it
+    assert check(case, late, None, None, 2).outcome == "fail"
     # another message handled is not this one
     other = (
         "2026-10-31 10:00:00 qa: event ok: first_wheelbarrow\n"
         "2026-10-31 10:00:01 popup message 31\n"
         "2026-10-31 10:00:09 popup handled: game message 312 (clear_messages)\n"
     )
-    assert check(case, other, None, None, 1).outcome == "fail"
+    assert check(case, other, None, None, 2).outcome == "fail"
 
 
 def test_the_overview_case_needs_the_stuck_close_after_the_press():
@@ -123,7 +180,16 @@ def test_the_overview_case_needs_the_stuck_close_after_the_press():
     v = check(case, log, None, None, 1)
     assert v.outcome == "pass", v.evidence
     assert "\n" not in v.evidence  # a match over lines is shown as its first and last
-    assert check(case, log.split("\n", 1)[1], None, None, 1).outcome == "fail"
+    assert check(case, log.split("\n", 1)[1], None, None, 2).outcome == "fail"
+    # live 11-05 09:53: the overview held nothing; the turn ended and the next one started
+    played = (
+        "2026-11-05 09:53:11 qa: press ok: faction_button\n"
+        "2026-11-05 09:53:15 autoplay: ending turn 5\n"
+        "2026-11-05 09:53:33 qa: quiet ok: pope=Gregory\n"
+    )
+    assert check(case, played, None, None, 1).outcome == "pass"
+    # ending the turn alone is not enough: the next turn must start
+    assert check(case, played.rsplit("\n", 2)[0] + "\n", None, None, 2).outcome == "fail"
 
 
 # --- the alive check ---------------------------------------------------------------------------------
@@ -199,6 +265,7 @@ def game(tmp_path):
     for turn in (TURN - 1, TURN):
         (root / "g1" / f"turn-{turn:04d}" / "venice").mkdir(parents=True)
     (root / "bridge.txt").write_text("game_id=g1\nfaction=venice\nautoplay=1\nautoplay_wait=60\n")
+    (root / "qa.lock").write_text("")  # a QA run holds it (the bridge then writes no load-time report)
     rt.execute(f"BRIDGE = require('parley_bridge'); BRIDGE.setup('{root}'); "
                "BRIDGE.clock = function() return FAKE.now end")
     rt.execute("FAKE.add_college('Pope Gregory', { { 'Cardinal Ottone', 'milan' }, { 'Cardinal Hugo', 'hre' } })")
@@ -252,9 +319,9 @@ def test_give_cardinal_fails_with_nobody_to_give(game):
 
 def test_drop_cardinals_kills_the_factions_own(game):
     rt, root = game
-    assert _qa(rt, "drop_cardinals('milan')") == "1 killed: Cardinal Ottone; the college counts 0 now"
+    assert _qa(rt, "drop_cardinals('milan')") == "1 killed: Cardinal Ottone; the college lists 0 of milan's now"
     assert "kill Cardinal Ottone" in _calls(rt)
-    assert _qa(rt, "drop_cardinals('venice')") == "0 killed: -; the college counts 0 now"
+    assert _qa(rt, "drop_cardinals('venice')") == "0 killed: -; the college lists 0 of venice's now"
 
 
 def test_kill_pope_kills_him_once(game):

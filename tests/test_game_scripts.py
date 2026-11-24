@@ -1,11 +1,14 @@
-"""relaunch_game.sh --clicks (the old clicking fallback) and crash_watch.sh, run against fake
-xdotool/wmctrl/pgrep (no game, no X). The default no-click relaunch: tests/test_relaunch.py."""
+"""crash_watch.sh and the refusal of relaunch_game.sh --clicks (its clicking path deleted 11-21), run
+against fake xdotool/wmctrl/pgrep (no game, no X). The no-click relaunch, Steam's start included
+(its scope, nobody logged in, the URL from environment.d): tests/test_relaunch.py."""
 
 import os
 import re
 import subprocess
 import time
 from pathlib import Path
+
+import pytest
 
 SCRIPTS = Path(__file__).parent.parent / "scripts"
 
@@ -42,29 +45,16 @@ fi
 }
 
 
-def test_relaunch_clicks_inside_the_cleared_windows(tmp_path):
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    for name, body in FAKES.items():
-        fake = bin_dir / name
-        fake.write_text("#!/usr/bin/env bash\n" + body)
-        fake.chmod(0o755)
+def test_relaunch_clicks_is_refused_and_touches_nothing(tmp_path):
+    # the clicking path (Run mod, Continue Campaign) was deleted 11-21: no screen input, ever
+    bin_dir = _fake_bin(tmp_path, FAKES)
     log = tmp_path / "calls.log"
     log.touch()
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "LOG": str(log), "HOME": str(tmp_path), "DISPLAY": ":99"}
-    out = subprocess.run(
-        ["bash", str(SCRIPTS / "relaunch_game.sh"), "--clicks"],
-        env=env, capture_output=True, text=True, timeout=30,
-    )
-    assert out.returncode == 0, out.stderr
-    calls = log.read_text().splitlines()
-    assert "wmctrl -i -c 0x02" in calls  # Special Offers closed
-    assert "wmctrl -i -r 0x01 -e 0,1950,300,-1,-1" in calls  # Steam moved off the launcher
-    assert not any("0x03" in c for c in calls)  # the Steam window clear of both is left alone
-    clicks = [c for c in calls if c.startswith("xdotool mousemove")]
-    # Run mod in the real 538x351 launcher, not the stub; Continue Campaign in the game window
-    assert clicks == ["xdotool mousemove 956 534 click 1", "xdotool mousemove 376 361 click 1"]
-    assert calls.index("xdotool windowraise 22") < calls.index(clicks[0])
+    out = subprocess.run(["bash", str(SCRIPTS / "relaunch_game.sh"), "--clicks"],
+                         env=env, capture_output=True, text=True, timeout=30)
+    assert out.returncode == 3 and "X input refused" in out.stderr
+    assert log.read_text() == ""
 
 
 def test_scripts_parse_and_match_game_processes_by_name():
@@ -110,6 +100,159 @@ def _run_campaign_watch(tmp_path: Path, turns_log: str, before: str = "") -> str
     )
     assert out.returncode == 0, out.stderr
     return out.stdout.strip()
+
+
+@pytest.mark.parametrize("watch_crash, expect_down", [("1", True), ("0", False)])
+def test_campaign_watch_says_down_when_crash_watch_is_not_running(tmp_path, watch_crash, expect_down):
+    # live 11-05 (the test laptop): the campaign ran 14:41-16:50 without crash-watch; its 16:38 crash sat
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    # loop and bot run; no crash_watch.sh process, and the unit is inactive. The second sleep stops
+    # the loop, so a watch that lets crash-watch's absence pass exits DOWN on the loop instead
+    (bin_dir / "pgrep").write_text(
+        f"#!/usr/bin/env bash\ncase \"$*\" in *rash_watch*) exit 1;; esac\n[ -f '{tmp_path}/stop' ] && exit 1\n"
+        "printf '101 python3 -m parley run games/local/scratch.toml\\n"
+        "102 python3 -m parley discord games/local/scratch.toml\\n'\n")
+    (bin_dir / "systemctl").write_text("#!/usr/bin/env bash\nexit 3\n")
+    (bin_dir / "sleep").write_text(
+        # only the watch's own minute counts (game.sh's desktop helper sleeps too)
+        f"#!/usr/bin/env bash\n[ \"$1\" = 60 ] || exit 0\n"
+        f"[ -f '{tmp_path}/tick1' ] && touch '{tmp_path}/stop'; touch '{tmp_path}/tick1'\n")
+    for f in ("pgrep", "systemctl", "sleep"):
+        (bin_dir / f).chmod(0o755)
+    (tmp_path / "parley_bridge.log").write_text("2026-11-05 16:38:01 ok\n")
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path), "DISPLAY": ":99",
+           "PARLEY_TURN_ROOT": str(tmp_path), "PARLEY_LOGS_DIR": str(tmp_path), "WATCH_CRASH": watch_crash}
+    out = subprocess.run(["bash", str(SCRIPTS / "campaign_watch.sh"), "scratch"],
+                         env=env, capture_output=True, text=True, timeout=10)
+    said = out.stdout.strip()
+    assert ("crash-watch is not running" in said) == expect_down, said
+    assert said.startswith("DOWN"), said
+
+
+def test_campaign_watch_wakes_on_a_new_crash_report_even_a_recovered_one(tmp_path):
+    # live 11-05 20:00: crash-watch relaunched within a minute; the crash was noticed an hour later
+    crashes = tmp_path / "crashes"
+    (crashes / "2026-11-05-164448").mkdir(parents=True)  # there at the start: already seen
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    new = crashes / "2026-11-05-200049"
+    (bin_dir / "sleep").write_text(
+        f"#!/usr/bin/env bash\n[ \"$1\" = 60 ] || exit 0\nmkdir -p '{new}'\n"
+        f"printf -- '- crash-watch saw: crash dialog up on 2 polls\\n' > '{new}/report.md'\n")
+    (bin_dir / "sleep").chmod(0o755)
+    (tmp_path / "parley_bridge.log").write_text("2026-11-05 20:00:00 ok\n")
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path), "DISPLAY": ":99",
+           "PARLEY_TURN_ROOT": str(tmp_path), "PARLEY_LOGS_DIR": str(tmp_path), "PARLEY_CRASH_DIR": str(crashes)}
+    out = subprocess.run(["bash", str(SCRIPTS / "campaign_watch.sh"), "scratch"],
+                         env=env, capture_output=True, text=True, timeout=10)
+    assert out.stdout.strip() == "CRASH: 2026-11-05-200049: - crash-watch saw: crash dialog up on 2 polls", out.stdout
+
+
+@pytest.mark.parametrize("end_screen", [True, False])
+def test_campaign_watch_calls_a_stuck_campaign_over_screen_lost(tmp_path, end_screen):
+    # live 11-05 17:10 (run 9): England's last town fell on Scotland's turn; the game showed its
+    # campaign-over screen and the watch said only STUCK
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    (tmp_path / "parley_bridge.log").write_text(
+        f"{stamp} autoplay: scotland's turn stuck? try 10: no known popup open; reopening a minimized message\n")
+    (tmp_path / "ui_scan-scotland-s-turn.txt").write_text(
+        "campaign_hud: end_turn @960,588 62x68\n"
+        + ("end_campaign_scroll: #0 @304,61 415x471\n" if end_screen else "")
+        + "strat_ui: campaign_hud @0,587 1024x181\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "sleep").write_text("#!/usr/bin/env bash\nexit 0\n")
+    (bin_dir / "sleep").chmod(0o755)
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path), "DISPLAY": ":99",
+           "PARLEY_TURN_ROOT": str(tmp_path), "PARLEY_LOGS_DIR": str(tmp_path)}
+    out = subprocess.run(["bash", str(SCRIPTS / "campaign_watch.sh"), "scratch"],
+                         env=env, capture_output=True, text=True, timeout=10)
+    said = out.stdout.strip()
+    if end_screen:
+        assert said.startswith("LOST: the game shows its campaign-over screen"), said
+    else:
+        assert said.startswith("STUCK: "), said
+
+
+def test_campaign_watch_ignores_a_stuck_line_from_before_a_campaign_load(tmp_path):
+    # live 11-11 12:07: the lost campaign's "stuck? try 12" (40 s before a restart at turn 5) and its last
+    # ui_scan said LOST about the new campaign, healthy and waiting for its ruler
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    (tmp_path / "parley_bridge.log").write_text(
+        f"{stamp} autoplay: scotland's turn stuck? try 12: no known popup open; reopening a minimized message\n"
+        f"{stamp} bridge loaded campaign at turn 5\n"
+        f"{stamp} resumed\n")
+    (tmp_path / "ui_scan-scotland-s-turn.txt").write_text("end_campaign_scroll: #0 @304,61 415x471\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "sleep").write_text("#!/usr/bin/env bash\nexit 0\n")
+    (bin_dir / "sleep").chmod(0o755)
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path), "DISPLAY": ":99",
+           "PARLEY_TURN_ROOT": str(tmp_path), "PARLEY_LOGS_DIR": str(tmp_path)}
+    out = subprocess.run(["bash", str(SCRIPTS / "campaign_watch.sh"), "scratch"],
+                         env=env, capture_output=True, text=True, timeout=10)
+    said = out.stdout.strip()
+    assert not said.startswith(("LOST", "STUCK")), said
+
+
+@pytest.mark.parametrize("lock_age, quiet_minutes", [(60, 2), (7200, 0)])
+def test_campaign_watch_keeps_quiet_while_a_qa_run_holds_the_lock(tmp_path, lock_age, quiet_minutes):
+    # live 11-05 17:05: a one-case bench run parked the loop and the watch said DOWN. Nothing runs
+    # here; a fresh qa.lock goes at the watch's second minute, a two-hour-old one was left behind
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    lock = tmp_path / "qa.lock"
+    lock.write_text("{}")
+    os.utime(lock, (time.time() - lock_age,) * 2)
+    (bin_dir / "pgrep").write_text("#!/usr/bin/env bash\nexit 1\n")
+    (bin_dir / "systemctl").write_text("#!/usr/bin/env bash\nexit 3\n")
+    (bin_dir / "sleep").write_text(
+        f"#!/usr/bin/env bash\n[ \"$1\" = 60 ] || exit 0\necho x >> '{tmp_path}/minutes'\n"
+        f"[ $(wc -l < '{tmp_path}/minutes') -ge 3 ] && rm -f '{lock}'\nexit 0\n")
+    for f in ("pgrep", "systemctl", "sleep"):
+        (bin_dir / f).chmod(0o755)
+    (tmp_path / "parley_bridge.log").write_text("2026-11-05 17:05:00 ok\n")
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path), "DISPLAY": ":99",
+           "PARLEY_TURN_ROOT": str(tmp_path), "PARLEY_LOGS_DIR": str(tmp_path), "WATCH_BOT": "0"}
+    out = subprocess.run(["bash", str(SCRIPTS / "campaign_watch.sh"), "scratch"],
+                         env=env, capture_output=True, text=True, timeout=10)
+    said = out.stdout.strip()
+    assert said.startswith("DOWN: turn loop: not running"), said
+    minutes = len((tmp_path / "minutes").read_text().splitlines())
+    assert minutes == quiet_minutes + 1, (minutes, said)
+    assert ("just qa-restore" in said) == (lock_age > 3600), said
+
+
+@pytest.mark.parametrize("bot_log,no_token", [
+    ("INFO bot stopped\n", False),
+    ("error: DISCORD_BOT_TOKEN is not set\n", True),
+    # an old error, then a start that connected: the bot is expected again
+    ("error: DISCORD_BOT_TOKEN is not set\nINFO connected to Parley\nINFO bot stopped\n", False),
+])
+def test_campaign_watch_needs_no_bot_on_a_host_without_a_token(tmp_path, bot_log, no_token):
+    # live 11-20 (the test laptop, no bot token by design): `just watch scratch` exited "DOWN: bot: not
+    # running" at once, so nothing watched the campaign until WATCH_BOT=0 was typed by hand
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "pgrep").write_text(
+        "#!/usr/bin/env bash\ncase \"$*\" in *'parley run'*) "
+        "echo '123 python3 -m parley run games/local/scratch.toml';; *) exit 1;; esac\n")
+    (bin_dir / "systemctl").write_text("#!/usr/bin/env bash\nexit 3\n")
+    (bin_dir / "sleep").write_text("#!/usr/bin/env bash\nexit 0\n")
+    for f in ("pgrep", "systemctl", "sleep"):
+        (bin_dir / f).chmod(0o755)
+    (tmp_path / "parley_bridge.log").write_text("2026-11-20 07:40:00 ok\n")
+    (tmp_path / "scratch-discord.log").write_text(bot_log)
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path), "DISPLAY": ":99",
+           "PARLEY_TURN_ROOT": str(tmp_path), "PARLEY_LOGS_DIR": str(tmp_path)}
+    out = subprocess.run(["bash", str(SCRIPTS / "campaign_watch.sh"), "scratch"],
+                         env=env, capture_output=True, text=True, timeout=10)
+    said = out.stdout.strip()
+    if no_token:  # past the bot check: the next check (crash-watch, stubbed off) is what speaks
+        assert said.startswith("DOWN: crash-watch is not running"), said
+    else:  # a host that has a token still reports its missing bot
+        assert said.startswith("DOWN: turn loop: running") and "bot: not running" in said, said
 
 
 def test_campaign_watch_exits_on_three_consecutive_seat_errors(tmp_path):
@@ -203,9 +346,13 @@ def test_campaign_watch_lost_counts_from_the_qa_restore_and_skips_a_qa_run(tmp_p
     # an old restore doesn't hide a real loss
     os.utime(tmp_path / "qa.last_restore", (old, old))
     assert _run_campaign_watch(tmp_path, "").startswith("LOST?:")
-    # a QA run in progress parks the campaign: no check at all
+    # a QA run in progress parks the campaign: no LOST check at all. The lock is two hours old so
+    # the loop checks run again and end the watch with DOWN once the fake loop stops (a fresh lock
+    # silences DOWN too: test_campaign_watch_keeps_quiet_while_a_qa_run_holds_the_lock)
     (tmp_path / "qa.lock").write_text("123\n")
-    assert _run_campaign_watch(tmp_path, "").startswith("DOWN:")
+    os.utime(tmp_path / "qa.lock", (time.time() - 7200,) * 2)
+    said = _run_campaign_watch(tmp_path, "")
+    assert said.startswith("DOWN:") and "qa-restore" in said, said
 
 
 # --- the crash dialog (live 10-30 20:11: a Wine message box "Medieval 2", ~330x110, with the text
@@ -271,7 +418,7 @@ def test_crash_dialog_is_a_small_medieval_2_window_never_the_game(tmp_path):
 
 def _run_crash_watch(
     tmp_path: Path, polls: list[str], sleeps: int, report_body: str = "", extra_env: dict | None = None,
-    extra_fakes: dict[str, str] | None = None,
+    extra_fakes: dict[str, str] | None = None, log_text: str | None = None,
 ) -> tuple[str, list[str]]:
     """`polls[i]` is what poll i+1 sees on screen (the last one repeats); the watch ends at its
     `sleeps`-th sleep (sleep's parent is the watch's shell)."""
@@ -304,7 +451,8 @@ def _run_crash_watch(
         + (report_body or "print('runs/crashes/x')\n")
     )
     now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    (tmp_path / "parley_bridge.log").write_text(f"{now} autoplay: turn 41, waiting for england\n")
+    (tmp_path / "parley_bridge.log").write_text(
+        (log_text or "{now} autoplay: turn 41, waiting for england\n").replace("{now}", now))
     env = {
         "PATH": f"{bin_dir}:/usr/bin:/bin",
         "HOME": str(tmp_path), "DISPLAY": ":99",
@@ -323,6 +471,26 @@ def _run_crash_watch(
 
 DIALOG = "33:1600x900 44:330x110"
 GAME = "33:1600x900"
+
+
+def test_crash_watch_rotates_the_logs_every_twenty_polls(tmp_path):
+    # STANDARDS log-rotation (11-05): with no campaign watch and no relaunch, nothing capped the logs
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    big = logs / "scratch-turns.log"
+    big.write_bytes(b"x" * (1024 * 1024 + 10))
+    _run_crash_watch(tmp_path, [GAME], sleeps=19, extra_env={"PARLEY_LOGS_DIR": str(logs), "PARLEY_LOG_CAP_MB": "1"})
+    assert not (logs / "scratch-turns.log.1").exists()  # 19 polls: not yet
+    _run_crash_watch(tmp_path, [GAME], sleeps=21, extra_env={"PARLEY_LOGS_DIR": str(logs), "PARLEY_LOG_CAP_MB": "1"})
+    assert (logs / "scratch-turns.log.1").stat().st_size > 1024 * 1024 and big.stat().st_size == 0
+
+
+def test_a_log_with_no_stamped_line_is_not_hours_old(tmp_path):
+    # live 11-13 10:24: rotation left no bridge log during a long AI turn; `date -d ""` is midnight, the
+    # log read as 37445 s old, the busy game didn't answer the probe, and a healthy game was killed
+    out, calls = _run_crash_watch(tmp_path, [GAME], sleeps=3, log_text="\n")
+    assert "crash suspected" not in out, out
+    assert "relaunch" not in calls
 
 
 def test_crash_watch_relaunches_on_the_crash_dialog_seen_on_two_polls(tmp_path):
@@ -428,6 +596,24 @@ def test_crash_watch_relaunches_when_the_report_hangs(tmp_path):
     assert time.monotonic() - t0 < 10
 
 
+STUCK_LOG = ("{now} popup handled: a battle's result (acknowledged with its check)\n"
+             "{now} autoplay: denmark's turn stuck? try TRIES: no known popup open; reopening a minimized message\n")
+
+
+def test_crash_watch_relaunches_a_turn_stuck_twenty_tries(tmp_path):
+    # live 11-11 13:58: Denmark's AI turn stood still after a battle, nothing on screen; the bridge kept
+    # logging "stuck? try N" (so the log was never quiet) and only a relaunch moved it on
+    out, calls = _run_crash_watch(tmp_path, [GAME], sleeps=2, log_text=STUCK_LOG.replace("TRIES", "20"))
+    assert "a turn stuck 20 tries" in out
+    assert "relaunch" in calls
+
+
+def test_crash_watch_leaves_a_turn_stuck_a_few_tries(tmp_path):
+    out, calls = _run_crash_watch(tmp_path, [GAME], sleeps=3, log_text=STUCK_LOG.replace("TRIES", "12"))
+    assert out == ""
+    assert "relaunch" not in calls
+
+
 def test_crash_watch_ignores_a_dialog_seen_once(tmp_path):
     out, calls = _run_crash_watch(tmp_path, [DIALOG, GAME], sleeps=4)
     assert out == ""
@@ -447,64 +633,6 @@ def test_crash_watch_leaves_a_working_game_alone(tmp_path):
     out, calls = _run_crash_watch(tmp_path, [GAME], sleeps=1)
     assert out == ""
     assert calls == ["sleep 30"]
-
-
-# --- after a QA restore, Continue Campaign loads the QA game's autosave (live 10-30 20:12: the real
-# loop came back on turn 45 instead of 41); relaunch_game.sh --clicks hands that case to Python ---
-
-def _relaunch_env(tmp_path: Path) -> tuple[dict, Path, Path]:
-    bin_dir = _fake_bin(tmp_path, FAKES)
-    calls = tmp_path / "calls.log"
-    calls.touch()
-    turn_root = tmp_path / "parley_turns"
-    turn_root.mkdir()
-    py = tmp_path / "fake-python"
-    py.write_text(f'#!/usr/bin/env bash\necho "python $*" >>"{calls}"\n')
-    py.chmod(0o755)
-    env = {
-        "PATH": f"{bin_dir}:/usr/bin:/bin",
-        "LOG": str(calls),
-        "HOME": str(tmp_path), "DISPLAY": ":99",
-        "PARLEY_TURN_ROOT": str(turn_root),
-        "PARLEY_PY": str(py),
-    }
-    return env, turn_root, calls
-
-
-def test_relaunch_after_a_qa_restore_hands_over_to_the_reload_check(tmp_path):
-    env, turn_root, calls = _relaunch_env(tmp_path)
-    (turn_root / "parley_bridge.log").write_text("0123456789")  # 10 bytes before the relaunch
-    (turn_root / "qa.last_restore").write_text('{"newest_save_mtime": 1.0}\n')
-    out = subprocess.run(
-        ["bash", str(SCRIPTS / "relaunch_game.sh"), "--clicks"],
-        env=env, capture_output=True, text=True, timeout=30,
-    )
-    assert out.returncode == 0, out.stderr
-    lines = calls.read_text().splitlines()
-    assert lines[-1] == f"python -m parley.qa after-relaunch --turn-root {turn_root} --log-offset 10"
-    # after the Continue Campaign click
-    assert lines.index("xdotool mousemove 376 361 click 1") < len(lines) - 1
-
-
-def test_relaunch_without_a_qa_restore_only_continues(tmp_path):
-    env, _, calls = _relaunch_env(tmp_path)
-    out = subprocess.run(
-        ["bash", str(SCRIPTS / "relaunch_game.sh"), "--clicks"],
-        env=env, capture_output=True, text=True, timeout=30,
-    )
-    assert out.returncode == 0, out.stderr
-    assert not any(c.startswith("python") for c in calls.read_text().splitlines())
-
-
-def test_relaunch_fails_when_the_reload_check_fails(tmp_path):
-    env, turn_root, _ = _relaunch_env(tmp_path)
-    (turn_root / "qa.last_restore").write_text('{"newest_save_mtime": 1.0}\n')
-    Path(env["PARLEY_PY"]).write_text("#!/usr/bin/env bash\nexit 1\n")
-    out = subprocess.run(
-        ["bash", str(SCRIPTS / "relaunch_game.sh"), "--clicks"],
-        env=env, capture_output=True, text=True, timeout=30,
-    )
-    assert out.returncode != 0
 
 
 # --- crash-watch runs as the transient user unit parley-crash-watch (live 10-30 20:20: started from a
@@ -634,77 +762,64 @@ def test_crash_watch_stop_is_quiet_when_nothing_runs(tmp_path):
     assert "systemctl --user stop parley-crash-watch" not in calls.read_text().splitlines()
 
 
-def test_relaunch_under_the_unit_starts_steam_in_its_own_scope(tmp_path):
-    # Steam started by a relaunch inside parley-crash-watch would die with the unit
-    bin_dir = _fake_bin(tmp_path, {
-        **FAKES,
-        "steam": 'echo "steam $*" >>"$LOG"',
-        "systemd-run": 'echo "systemd-run $*" >>"$LOG"; while [ "${1#-}" != "$1" ]; do shift; done; exec "$@"',
-    })
-    log = tmp_path / "calls.log"
-    log.touch()
-    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "LOG": str(log), "HOME": str(tmp_path), "DISPLAY": ":99"}
-    for scoped in (False, True):
-        log.write_text("")
-        run_env = {**env, **({"PARLEY_STEAM_SCOPE": "1"} if scoped else {})}
-        out = subprocess.run(
-            ["bash", str(SCRIPTS / "relaunch_game.sh"), "--clicks"],
-            env=run_env, capture_output=True, text=True, timeout=30,
-        )
-        assert out.returncode == 0, out.stderr
-        for _ in range(50):  # steam is started in the background
-            if "steam steam://rungameid/4700" in log.read_text():
-                break
-            time.sleep(0.05)
-        calls = log.read_text().splitlines()
-        assert "steam steam://rungameid/4700" in calls
-        runs = [c for c in calls if c.startswith("systemd-run")]
-        if scoped:
-            assert runs == ["systemd-run --user --scope --collect --quiet steam steam://rungameid/4700"]
-        else:
-            assert runs == []
-
-
-def _no_display_env(tmp_path, procs: dict[str, str]):
-    """A relaunch run over ssh: no DISPLAY; `procs` maps a process name to its pid for a fake pgrep."""
-    pgrep = ('name=""; for a in "$@"; do name="$a"; done; case "$name" in '
-             + " ".join(f'{n}) echo {p}; exit 0 ;;' for n, p in procs.items())
-             + ' esac; exit 1')
-    bin_dir = _fake_bin(tmp_path, {**FAKES, "steam": 'echo "steam $*" >>"$LOG"', "pgrep": pgrep})
-    log = tmp_path / "calls.log"
-    log.touch()
-    return {"PATH": f"{bin_dir}:/usr/bin:/bin", "LOG": str(log), "HOME": str(tmp_path)}, log
-
-
-def test_relaunch_with_nobody_logged_in_fails_at_once(tmp_path):
-    # the test laptop 11-05: after its nightly power-off it sat at the login screen and each restore
-    # waited the full 240 s for a Steam that could never start
-    env, log = _no_display_env(tmp_path, {})
-    out = subprocess.run(["bash", str(SCRIPTS / "relaunch_game.sh"), "--clicks"],
-                         env=env, capture_output=True, text=True, timeout=30)
-    assert out.returncode == 1
-    assert "nobody is logged in to the desktop" in out.stderr
-    assert "steam " not in log.read_text()
-
-
-def test_relaunch_over_ssh_reads_the_steam_url_from_environment_d(tmp_path):
-    env, log = _no_display_env(tmp_path, {"steam": "4242"})  # Steam already up: it takes the URL
-    conf = tmp_path / ".config" / "environment.d"
-    conf.mkdir(parents=True)
-    (conf / "parley.conf").write_text("PARLEY_STEAM_URL=steam://launch/4700/option0\n")
-    out = subprocess.run(["bash", str(SCRIPTS / "relaunch_game.sh"), "--clicks"],
-                         env=env, capture_output=True, text=True, timeout=30)
-    assert out.returncode == 0, out.stderr
-    for _ in range(50):
-        if "steam steam://launch/4700/option0" in log.read_text():
-            break
-        time.sleep(0.05)
-    assert "steam steam://launch/4700/option0" in log.read_text().splitlines()
-
-
 def test_crash_watch_recipes_are_one_line_calls_to_the_unit_script():
     text = (REPO / "justfile").read_text()
     for recipe, action in (("crash-watch", "start"), ("crash-watch-stop", "stop")):
         m = re.search(rf"^{re.escape(recipe)}:\n((?:    .*\n)+)", text, re.M)
         assert m, recipe
         assert m.group(1).strip() == f"bash scripts/crash_watch_unit.sh {action}", recipe
+
+
+def _game_sh(tmp_path: Path, *args: str) -> subprocess.CompletedProcess:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    (bin_dir / "pgrep").write_text("#!/usr/bin/env bash\nexit 1\n")  # nothing running
+    (bin_dir / "pgrep").chmod(0o755)
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "PARLEY_TURN_ROOT": str(tmp_path / "turns")}
+    return subprocess.run(["bash", str(SCRIPTS / "game.sh"), *args], env=env, capture_output=True,
+                          text=True, timeout=20)
+
+
+def test_just_stop_pauses_the_campaign_and_the_qa_runners_stop_does_not(tmp_path):
+    # live 11-05: with the loop stopped, autoplay ended turns 24-29 with no orders
+    (tmp_path / "turns").mkdir()
+    paused = tmp_path / "turns" / "paused.txt"
+    plain = _game_sh(tmp_path, "stop")  # the QA runner's park: its bench turns must still play
+    assert not paused.exists()
+    assert plain.returncode == 0, plain.stderr  # a stop that worked says so
+    r = _game_sh(tmp_path, "stop", "--pause")
+    assert r.returncode == 0 and paused.read_text().startswith("stopped by just stop")
+
+
+def test_play_lifts_only_the_pause_just_stop_wrote(tmp_path):
+    turns = tmp_path / "turns"
+    turns.mkdir()
+    fn = subprocess.run(["sed", "-n", "/^TURNS=/,/^}$/p;/^resume_after_stop()/,/^}/p", str(SCRIPTS / "game.sh")],
+                        capture_output=True, text=True, check=True).stdout
+    run = lambda: subprocess.run(["bash", "-c", fn + "\nresume_after_stop"], capture_output=True, text=True,
+                                 env={**os.environ, "PARLEY_TURN_ROOT": str(turns)}, timeout=10)
+    (turns / "paused.txt").write_text("qa instant case: holding the turn\n")
+    run()
+    assert (turns / "paused.txt").exists()  # a QA hold stays
+    (turns / "paused.txt").write_text("stopped by just stop: the turn loop is off; just play resumes\n")
+    assert "resumed" in run().stdout and not (turns / "paused.txt").exists()
+
+
+def _await_bot(tmp_path: Path, discord_log: str) -> subprocess.CompletedProcess:
+    # await_bot alone, lifted out of game.sh, with no bot process running
+    (tmp_path / "g-discord.log").write_text(discord_log, encoding="utf-8")
+    fn = subprocess.run(["sed", "-n", "/^await_bot()/,/^}/p", str(SCRIPTS / "game.sh")],
+                        capture_output=True, text=True, check=True).stdout
+    return subprocess.run(["bash", "-c", fn + "\nrunning() { :; }\nawait_bot g"],
+                          env={**os.environ, "LOGS": str(tmp_path)}, capture_output=True, text=True, timeout=20)
+
+
+def test_await_bot_without_a_token_warns_and_lets_the_loop_run(tmp_path):
+    # live 11-05 16:45 (the test laptop, no token by design): a QA restore failed here and kept qa.lock
+    r = _await_bot(tmp_path, "ERROR DISCORD_BOT_TOKEN is not set (put it in the untracked env file)\n")
+    assert r.returncode == 0 and "turn loop runs without it" in r.stderr
+
+
+def test_await_bot_still_fails_when_the_bot_dies_for_another_reason(tmp_path):
+    r = _await_bot(tmp_path, "Traceback: discord.errors.LoginFailure: Improper token has been passed.\n")
+    assert r.returncode == 1 and "the bot stopped" in r.stderr

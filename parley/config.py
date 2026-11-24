@@ -3,6 +3,7 @@
 import re
 import tomllib
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
@@ -34,6 +35,8 @@ class SeatConfig(BaseModel):
     # top up treasury at turn start for live testing; spoils economic judgement
     playtest_funds: bool = False
     playtest_funds_amount: int = 50000
+    # short town entries; the ruler may ask for towns in full first (spec 2026-11-23-ruler-lookups-design)
+    lookups: bool = False
     # this seat's own think/answer budget ([seats.x.ruler_budget]); the game's [ruler_budget] otherwise
     ruler_budget: RulerBudget | None = None
 
@@ -71,11 +74,20 @@ class AutoplayConfig(BaseModel):
     wait: int = 300  # seconds to wait for late rulers before ending the turn anyway
     until_turn: int | None = None  # stop ending turns at this game turn
     # End Turn waits (bounded) for the ruler's answer to an offer on screen (the papal click race)
-    hold_decisions: bool = True
+    # "diplomacy": only an AI's diplomatic offer holds it, not a family offer (marriage, adoption).
+    # The QA bench uses that: its choice cases test diplomacy, and a marriage offer for a bench
+    # general held turns a minute each (live 11-05 09:37 and 09:39, ai_offer_on_its_turn)
+    hold_decisions: bool | Literal["diplomacy"] = True
+    # caps, in seconds, for that hold and for the turn loop's answer to a decision; unset, the
+    # bridge's own (570 and 540 s). The QA bench sets 90 and 60: a stall costs ~2 min, not 10.
+    decision_hold: int | None = None
+    decide_wait: int | None = None
     # papal scrolls get no work inside their open event (onScrollOpened returns at once: Lua work
     # there preceded the results crashes); the bridge finds the vote scroll from its per-frame
     # tick after the Pope's death notice, so the ruler still votes. Off: the old in-event handling
     papal_hands_off: bool = True
+    # End Turn waits (bounded) for a game message the turn loop hasn't read yet
+    hold_reads: bool = False
 
 
 class GameConfig(BaseModel):

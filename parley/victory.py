@@ -105,11 +105,13 @@ def victory_line(faction: str, turn: int, held: int, folder: Path, length: str =
     text = "To win the campaign: " + ", ".join(parts) + "."
     if standing := _outlive_standing(goal.get("outlive") or [], factions):
         text += " " + standing
-    if limit:
-        # the report's turn 0 is the game's turn 1, when the game shows the whole limit remaining
-        left = max(limit - turn, 0)
+    # the report's turn 0 is the game's turn 1, when the game shows the whole limit remaining
+    left = limit - turn if limit and turn < limit else None
+    if left is not None:
         text += f" The campaign ends after turn {limit}: {left} turns left. If it ends first, you have lost."
-    left = max(limit - turn, 0) if limit else None
+    elif limit:
+        # live 11-14 (turn 677): "0 turns left" read as a broken counter; the game plays on past it
+        text += f" The campaign's turn limit ({limit}) has passed; the game plays on, so the goal still stands."
     return "\n".join([text, *economy_lines(history or [], left)])
 
 

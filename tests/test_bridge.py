@@ -29,6 +29,34 @@ def test_pending_lists_unanswered_only(tmp_path, venice_state_dict):
     assert td.pending() == [waiting]
 
 
+def test_pending_skips_a_factions_older_reports(tmp_path, venice_state_dict):
+    # live 11-05 14:42: stale reports for turns 6-8 were answered before the real turn 75, and both
+    # rulers ran out of time; only each faction's newest report can still be acted on
+    td = TurnDir(tmp_path)
+    for turn in (6, 7, 75):
+        _state(td, "france", venice_state_dict, turn=turn)
+    old_england = _state(td, "england", venice_state_dict, turn=74)
+    td.write_orders(old_england, _orders("england"))
+    england = _state(td, "england", venice_state_dict, turn=75)
+    assert td.pending() == [td.path_for("test", 75, "france"), england] or \
+        sorted(td.pending()) == sorted([td.path_for("test", 75, "france"), england])
+
+
+def test_pending_follows_a_reload_to_an_earlier_turn(tmp_path, venice_state_dict):
+    # review 11-05 (agy): turn 75 answered, then an earlier save loaded and its turn-74 report rewritten;
+    # by highest turn the loop would wait on 75 forever. The report written last is the live one
+    import os
+    import time
+    td = TurnDir(tmp_path)
+    t74 = _state(td, "england", venice_state_dict, turn=74)
+    td.write_orders(t74, _orders("england"))
+    t75 = _state(td, "england", venice_state_dict, turn=75)
+    td.write_orders(t75, _orders("england"))
+    later = time.time() + 5
+    os.utime(t74 / "state.json", (later, later))  # the game rewrote turn 74's report after the load
+    assert td.pending() == [t74]
+
+
 def test_tmp_files_ignored(tmp_path):
     td = TurnDir(tmp_path)
     d = td.path_for("test", 1, "venice")

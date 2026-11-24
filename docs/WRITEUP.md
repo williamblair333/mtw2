@@ -20,8 +20,9 @@ This assumes the one-time install (§4) is done. Run these in the repo folder (`
 | `just new-game game3 [options]` | creates `games/local/game3.toml` from your template: who plays, which personalities, which brains. `just new-game --help` lists every option with examples (§5a) |
 | `just play game3` | stops anything running, starts the turn loop **and** the Discord bot in the background, and waits until the bot is connected |
 | `just status` | what's running, and for which game |
+| `just dashboard game3` | one page: turn, health, crashes, how each ruler is doing, open gaps |
 | `just logs game3` | the latest output from both |
-| `just stop` | stops both |
+| `just stop` | stops both and pauses the campaign, so autoplay ends no turn while nobody gives orders; `just play` lifts the pause |
 | `just reload-bridge` | installs the bridge, then the running game reloads it in place through EOP's `restartLua`. No relaunch needed. Orders already applied this turn aren't applied again. The game's per-turn autosave is the fallback: EOP's `saveGame` failed live ("cannot create m2tweop save file") |
 | `just restart-loop game3` | restarts only the turn loop (new Python code); the bot keeps running |
 | `just follow england game3` | follows one ruler live: everything it says (lobby, private threads, its adviser) and its private note each turn |

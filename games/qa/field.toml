@@ -241,7 +241,10 @@ expect = [
 # scroll after it is maintained (#261; live 10-30 18:31 the one-unit army was gone by the next
 # report, #272: the scroll and the note are the evidence, not the army); and a tired army (#267)
 # stays tired through the turn start's refill (tire at turn start) and its move is refused in the
-# report. Both scenes are spawned by the hostile town, away from own towns (the absorbed spawns)
+# report. Both scenes are spawned by the hostile town, away from own towns (the absorbed spawns).
+# The march_on army leads heavy infantry, not peasants: it must outlive two AI rounds before its order
+# runs, and every frozen AI is let go after 1 s (FROZEN_TURN_LIMIT). Live 11-05 09:48 and 10:19
+# (the test laptop): two battles in the AI round, and the peasant army was gone by the order ("unknown army")
 [[cases]]
 name = "turn_start_orders"
 max_turns = 2
@@ -249,7 +252,7 @@ setup = [
     { lua = 'return M.qa.hostile_town("england", $garrison_town_x, $garrison_town_y)', bind = "hostile" },
     { lua = 'return M.qa.town("$hostile")', bind = "hostile_at" },
     { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 1, 1)', bind = "next" },
-    { lua = 'return M.qa.spawn_army("england", $next_x, $next_y, nil, "Peasants")', bind = "army" },
+    { lua = 'return M.qa.spawn_army("england", $next_x, $next_y, nil, "Dismounted Feudal Knights")', bind = "army" },
     { lua = 'return M.qa.free_tile($hostile_at_x, $hostile_at_y, 3, 4)', bind = "at" },
     { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "tired" },
     { lua = 'return M.qa.free_tile($at_x, $at_y, 1, 1)', bind = "dest" },
@@ -257,7 +260,11 @@ setup = [
 ]
 expect = [
     { order_ok = false },
-    { log = "march_on: done: [^\\n]*next to (?s:.*?)popup handled: a siege \\(siege_scroll -> siege_maintain_button\\)" },
+    # the siege scroll is maintained by whichever path sees it first: its own popup ("a siege"), a game
+    # message (live 11-05 11:43:45, the test laptop: "game message 75 (siege_scroll -> siege_maintain_button)")
+    # or the stuck-turn watcher (11:49:04: "turn 7 stuck? try 1: siege_maintain_button"). The button
+    # pressed is the evidence
+    { log = "march_on: done: [^\\n]*next to (?s:.*?)(popup handled: (a siege|game message \\d+) \\(siege_scroll -> siege_maintain_button\\)|stuck\\? try \\d+: siege_maintain_button)" },
     { log = "qa: tired $tired at turn start: moves=0" },
     { state = "last_results", equals = "next to .*(so it is besieging it|so it was ordered to besiege it)" },
     { state = "last_results", equals = "has no moves left this turn" },

@@ -35,9 +35,10 @@ This is a working hobby project, not a finished product. Be ready to read logs.
   fake game.
 
 **What doesn't yet:**
-- **A few screen clicks are left.** The papal election vote, and family offers (a marriage or
-  adoption your faction must accept or decline), still need a mouse click, which our scripts make
-  from a screenshot. That only works at one screen size. The rest goes through EOP.
+- **A few screen clicks are left.** Family offers (a marriage or adoption your faction must accept
+  or decline) are answered with no click: the bridge presses the scroll's button through our EOP
+  fork. The papal election vote and the reopening of minimized messages still need a mouse click,
+  made from a screenshot, which only works at one screen size. The rest goes through EOP.
 - **Cheap models play poorly.** Strong models play well but cost money. Making a cheap model play
   a competent campaign is open work.
 - **Setup takes an afternoon.** There is no one-step installer. The guide below has every step.
@@ -74,7 +75,9 @@ cp games/template.toml games/local/template.toml   # once; then put your Discord
 just new-game game3 --rivals 6     # a game with 6 LLM rivals
 just play game3                    # start the turn loop and the Discord bot
 just status                        # what's running
-just stop                          # stop everything
+just dashboard game3               # one page: turn, health, crashes, how each ruler is doing
+just stop                          # stop everything and pause the campaign (just play resumes)
+just resume-at-boot scratch        # resume that campaign at every desktop login (off: just resume-at-boot-off)
 ```
 
 Then start a new Grand Campaign in the game as England. `just --list` shows every command.

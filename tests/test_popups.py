@@ -62,6 +62,12 @@ def _popups(tmp_path, seat=None, rec=None, **kwargs):
     return p, rec
 
 
+def _answered(root, rid):
+    """The turn loop's answer for the bridge to press by element: `.answer` first, then `.done`."""
+    assert (root / f"{rid}.done").exists()
+    return (root / f"{rid}.answer").read_text()
+
+
 def test_a_message_is_screenshotted_released_and_read_for_the_ruler(tmp_path):
     p, rec = _popups(tmp_path)
     _req(tmp_path, "popup-22-1", kind="read", event=40)
@@ -106,7 +112,56 @@ def test_offer_prompts_say_the_records_are_base_values_and_the_scroll_wins():
         assert "base values, before his traits" in prompt and "trust the scroll" in prompt
 
 
-def test_a_marriage_offer_is_decided_by_the_ruler_then_clicked(tmp_path):
+def test_the_tick_is_found_with_green_borders_beside_the_scroll(tmp_path):
+    # live 11-10 16:31 (turn 126): green province borders at the scroll's edges hid the papal
+    # notice's check from find_tick, and End Turn stuck behind the notice
+    from PIL import Image, ImageDraw
+    from parley.popups import find_tick
+    im = Image.new("RGB", (1600, 900), (200, 180, 140))
+    d = ImageDraw.Draw(im)
+    d.ellipse((785, 384, 815, 414), fill=(40, 200, 40))  # the check
+    for x in (410, 1185):  # borders just inside the old 0.25-0.75 band
+        d.rectangle((x, 280, x + 4, 660), fill=(40, 200, 40))
+    png = tmp_path / "notice.png"
+    im.save(png)
+    gx, gy = find_tick(png)
+    assert abs(gx - 0.5) < 0.01 and abs(gy - 399 / 900) < 0.01
+
+
+def test_an_accepted_wife_is_answered_for_the_bridge_not_clicked(tmp_path):
+    # live 11-10 15:23: England accepted a wife for Arthur Fowler; the accept click crashed the game.
+    # The bridge now presses the scroll's accept by element: no click, no Escape
+    seat = Seat("ACCEPT. A wife for the young lord.")
+    p, rec = _popups(tmp_path, seat=seat, rec=Recorder(choice=CHOICE))
+    _req(tmp_path, "popup-79-1", kind="marriage", suitor={"name": "Matilda", "age": 18, "female": True})
+    p.poll()
+    assert _answered(tmp_path, "popup-79-1") == "accept\n"
+    assert rec.clicks == []
+    [msg] = p.messages_for("england")
+    assert "You accepted" in msg
+
+
+def test_an_accepted_wife_for_our_own_man_is_answered_for_the_bridge_not_clicked(tmp_path):
+    # live 11-10 17:10: the game's offer named our man, Perkin Tyler (no `female`), so #547 missed
+    # it, the accept was clicked, and the game crashed
+    p, rec = _popups(tmp_path, seat=Seat("ACCEPT. He should marry."), rec=Recorder(choice=CHOICE))
+    _req(tmp_path, "popup-147-1", kind="marriage", suitor={"name": "Perkin Tyler", "age": 16, "son": True})
+    p.poll()
+    assert _answered(tmp_path, "popup-147-1") == "accept\n"
+    assert rec.clicks == []
+    [msg] = p.messages_for("england")
+    assert "a wife for your Perkin Tyler" in msg and "You accepted" in msg
+
+
+def test_an_accepted_suitor_for_a_princess_is_answered_for_the_bridge_not_clicked(tmp_path):
+    p, rec = _popups(tmp_path, seat=Seat("ACCEPT. A good match."), rec=Recorder(choice=CHOICE))
+    _req(tmp_path, "popup-79-2", kind="marriage", suitor={"name": "Jacob Terrett", "age": 30})
+    p.poll()
+    assert _answered(tmp_path, "popup-79-2") == "accept\n"
+    assert rec.clicks == []
+
+
+def test_a_marriage_offer_is_decided_by_the_ruler_then_answered_for_the_bridge(tmp_path):
     seat = Seat("DECLINE. At 62 he will not serve long, and Mixed Loyalties makes him a risk.")
     p, rec = _popups(tmp_path, seat=seat, rec=Recorder(choice=CHOICE))
     _req(tmp_path, "popup-22-2", kind="marriage", suitor={
@@ -116,7 +171,7 @@ def test_a_marriage_offer_is_decided_by_the_ruler_then_clicked(tmp_path):
     prompt = seat.prompts[0]
     assert "You are Scratch." in prompt and "Jacob Terrett" in prompt and "age 62" in prompt
     assert "MixedLoyalties" in prompt and "ACCEPT or DECLINE" in prompt
-    assert rec.clicks == ["decline"] and (tmp_path / "popup-22-2.done").exists()
+    assert _answered(tmp_path, "popup-22-2") == "decline\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "You declined" in msg and "Mixed Loyalties" in msg
 
@@ -127,16 +182,18 @@ def test_a_message_request_leaves_a_marriage_scroll_to_the_offers_own_request(tm
     # 21:25:21. The marriage request (popup-63-943732) then found no buttons for 25 looks, and the
     # bridge held End Turn "the ruler is deciding a popup" for its full 180 s.
     seat = Seat("ACCEPT. A fine match.")
-    rec = Recorder(choice=[CHOICE, CHOICE, CHOICE, CHOICE, None, None, None])
+    # the scroll is up for the first looks, gone once the offer is answered (no last look before
+    # the answer any more: the bridge checks the scroll itself)
+    rec = Recorder(choice=[CHOICE, CHOICE, CHOICE, None, None, None])
     p, rec = _popups(tmp_path, seat=seat, rec=rec)
     _req(tmp_path, "popup-62-943730", kind="read", event=75)
     _req(tmp_path, "popup-63-943732", kind="marriage", suitor={"name": "Jacob Terrett", "age": 34})
     p.poll()
-    assert rec.clicks[0] == "accept"
+    assert _answered(tmp_path, "popup-63-943732") == "accept\n"
     assert "ACCEPT or DECLINE" in seat.prompts[0] and "Jacob Terrett" in seat.prompts[0]  # the offer's prompt
-    assert (tmp_path / "popup-63-943732.done").exists()
+    assert len(seat.prompts) == 1  # the message never decides the offer's scroll
     assert (tmp_path / "popup-62-943730.done").exists()  # the message is read once the offer is answered
-    assert len(rec.clicks) == 1
+    assert not (tmp_path / "popup-62-943730.answer").exists() and rec.clicks == []
 
 
 def test_an_unclear_answer_is_declined_so_autoplay_goes_on(tmp_path):
@@ -144,7 +201,7 @@ def test_an_unclear_answer_is_declined_so_autoplay_goes_on(tmp_path):
     p, rec = _popups(tmp_path, seat=Seat("Hmm, let me think about it."), rec=Recorder(choice=CHOICE))
     _req(tmp_path, "popup-22-3", kind="marriage", suitor={"name": "Jacob", "age": 30})
     p.poll()
-    assert rec.clicks == ["decline"] and (tmp_path / "popup-22-3.done").exists()
+    assert _answered(tmp_path, "popup-22-3") == "decline\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "You declined it" in msg and "Nobody answered in time" in msg
 
@@ -157,15 +214,15 @@ def test_a_scroll_gone_while_the_ruler_thought_is_not_clicked(tmp_path):
     assert rec.clicks == [] and p.messages_for("england") == []
 
 
-def test_an_offer_minimized_at_once_is_reopened_to_be_decided(tmp_path):
+def test_an_offer_minimized_at_once_is_decided_once_the_bridge_reopens_it(tmp_path):
     # live: an offer's icon sat in the minimized stack while the decision waited two minutes
     p, rec = _popups(tmp_path, seat=Seat("ACCEPT a fine match"), rec=Recorder(
         text="A Suitable Prince\nJacob", choice=[None, None, CHOICE, CHOICE]))
-    p.find_slots = lambda png: [(0.02, 0.74)]
     _req(tmp_path, "popup-54-1", kind="marriage", suitor={"name": "Jacob", "age": 30})
     p.poll()
-    assert rec.at[0] == (0.02, 0.74)  # the stack is opened first
-    assert rec.clicks[-1] == "accept" and (tmp_path / "popup-54-1.done").exists()
+    # the bridge reopens it by its icon's element; the turn loop clicks no icon (deleted 11-21)
+    assert rec.clicks == [] and rec.at == []
+    assert _answered(tmp_path, "popup-54-1") == "accept\n"
 
 
 def test_an_offer_with_no_buttons_on_screen_is_never_clicked_blind(tmp_path):
@@ -194,7 +251,7 @@ def test_a_usage_limit_pauses_instead_of_declining(tmp_path):
     from parley import pause
     pause.resume(tmp_path)
     p.poll()  # tried again after the pause
-    assert rec.clicks == ["accept"]
+    assert _answered(tmp_path, "popup-33-1") == "accept\n" and rec.clicks == []
 
 
 def test_a_request_the_bridge_gave_up_on_is_not_acted_on(tmp_path):
@@ -237,7 +294,7 @@ def test_each_request_is_handled_once(tmp_path):
 CHOICE = {"accept": (0.475, 0.698), "decline": (0.524, 0.698)}
 
 
-def test_an_adoption_offer_is_decided_by_the_ruler_then_clicked_where_found(tmp_path):
+def test_an_adoption_offer_is_decided_by_the_ruler_then_answered_for_the_bridge(tmp_path):
     seat = Seat("ACCEPT. A loyal young commander strengthens a thin family.")
     p, rec = _popups(tmp_path, seat=seat, rec=Recorder(text="A Candidate for Adoption", choice=CHOICE))
     _req(tmp_path, "popup-23-1", kind="adoption", suitor={"name": "Charles of Hastings", "age": 21,
@@ -245,8 +302,8 @@ def test_an_adoption_offer_is_decided_by_the_ruler_then_clicked_where_found(tmp_
     p.poll()
     prompt = seat.prompts[0]
     assert "decide an adoption" in prompt and "Charles of Hastings, age 21" in prompt and "loyalty 6 of 10" in prompt
-    assert rec.clicks == ["accept"] and rec.at == [CHOICE["accept"]]
-    assert (tmp_path / "popup-23-1.done").exists() and (tmp_path / "popup-23-1.hold").exists()
+    assert _answered(tmp_path, "popup-23-1") == "accept\n" and rec.clicks == []
+    assert (tmp_path / "popup-23-1.hold").exists()
     [msg] = p.messages_for("england")
     assert msg.startswith("Adoption offer: Charles of Hastings (age 21)") and "You accepted" in msg
 
@@ -258,12 +315,8 @@ def test_stacked_offers_each_get_their_own_answer(tmp_path):
             super().__init__(choice=CHOICE)
             self.top = ["Humphrey of Lydham", "Godwine"]
 
-        def read(self, path):
-            return f"A Candidate for Adoption\n{self.top[0]}, Age: 30"
-
-        def click(self, which, at=None):
-            super().click(which, at)
-            self.top.pop(0)  # the answered scroll closes; the one beneath shows
+        def read(self, path):  # the bridge closes each answered scroll; the one beneath shows
+            return f"A Candidate for Adoption\n{self.top[len(list(tmp_path.glob('*.answer')))]}, Age: 30"
 
     class Ruler(Seat):
         def chat(self, prompt, *, timeout):
@@ -276,7 +329,10 @@ def test_stacked_offers_each_get_their_own_answer(tmp_path):
     _req(tmp_path, "popup-26-1", kind="adoption", suitor={"name": "Captain Godwine", "age": 21})
     _req(tmp_path, "popup-26-2", kind="adoption", suitor={"name": "Humphrey of_Lydham", "age": 30})
     p.poll()
-    assert rec.clicks == ["decline", "accept"]  # Humphrey's scroll first, then Godwine's
+    # Humphrey's scroll first, then Godwine's; each request answers its own man
+    assert _answered(tmp_path, "popup-26-2") == "decline\n" and _answered(tmp_path, "popup-26-1") == "accept\n"
+    assert "Humphrey" in seat.prompts[0].split("THE CANDIDATE")[1] and len(seat.prompts) == 2
+    assert rec.clicks == []
     msgs = p.messages_for("england")
     assert any("Humphrey of_Lydham" in m and "You declined" in m for m in msgs)
     assert any("Captain Godwine" in m and "You accepted" in m for m in msgs)
@@ -289,7 +345,7 @@ def test_any_popup_with_a_check_and_an_x_is_the_rulers_decision(tmp_path):
     _req(tmp_path, "popup-23-2", kind="read", event=77)
     p.poll()
     assert "Masons' Guild" in seat.prompts[0] and "green check" in seat.prompts[0]
-    assert rec.clicks == ["decline"] and rec.at == [CHOICE["decline"]]
+    assert _answered(tmp_path, "popup-23-2") == "decline\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "A decision the game asked of you" in msg and "You declined" in msg
 
@@ -299,14 +355,15 @@ def test_stacked_requests_decide_the_scroll_once(tmp_path):
     # after the first click finds no buttons, so the later requests are only read.
     seat = Seat("ACCEPT. A wife for Henry costs nothing.")
     # looks per request: at poll (stale, still the scroll), then the fresh one before deciding
-    rec = Recorder(text="Bride Presented", choice=[CHOICE, CHOICE, CHOICE, None, CHOICE, None])
+    rec = Recorder(text="Bride Presented", choice=[CHOICE, CHOICE, None, CHOICE, None])
     p, rec = _popups(tmp_path, seat=seat, rec=rec)
     for i in (1, 2, 3):
         _req(tmp_path, f"popup-24-{i}", kind="read", event=i)
     for _ in range(3):  # one plain reading per pass: the bridge clears each scroll in between
         p.poll()
-    assert rec.clicks == ["accept"] and len(seat.prompts) == 1
-    assert all((tmp_path / f"popup-24-{i}.done").exists() for i in (1, 2, 3))
+    assert _answered(tmp_path, "popup-24-1") == "accept\n" and len(seat.prompts) == 1
+    assert all((tmp_path / f"popup-24-{i}.done").exists() for i in (2, 3))
+    assert list(tmp_path.glob("*.answer")) == [tmp_path / "popup-24-1.answer"] and rec.clicks == []
 
 
 def test_the_ruler_chooses_on_a_named_scroll_and_the_bridge_presses_it(tmp_path):
@@ -343,14 +400,52 @@ def test_the_ruler_chooses_the_next_pope(tmp_path):
     assert "voted for candidate 2 of 3" in msg
 
 
+def test_the_vote_is_answered_for_the_bridge_when_by_element_not_clicked(tmp_path):
+    # (a) When by_element is set, ruler answers candidate 2: written to .answer, no click
+    seat = Seat("2. Domingo leans our way, and Rome owes England for its tithes.")
+    p, rec = _popups(tmp_path, seat=seat, rec=Recorder(text="1 Ulaszlo\n2 Domingo\n3 Froderigus"))
+    p.find_votes = lambda png: [(0.68, 0.39), (0.68, 0.51), (0.68, 0.63)]
+    _req(tmp_path, "popup-44-9", kind="vote", by_element=True)
+    p.poll()
+    assert (tmp_path / "popup-44-9.answer").read_text() == "2\n"
+    assert (tmp_path / "popup-44-9.done").exists()
+    assert rec.clicks == [] and rec.at == []
+    [msg] = p.messages_for("england")
+    assert "voted for candidate 2 of 3" in msg
+
+
+def test_the_vote_falls_back_to_click_when_not_by_element(tmp_path):
+    # (c) Fallback: without by_element, the old click path still clicks the Vote button
+    seat = Seat("2. Domingo leans our way.")
+    p, rec = _popups(tmp_path, seat=seat, rec=Recorder(text="1 Ulaszlo\n2 Domingo\n3 Froderigus"))
+    p.find_votes = lambda png: [(0.68, 0.39), (0.68, 0.51), (0.68, 0.63)]
+    _req(tmp_path, "popup-44-9", kind="vote")
+    p.poll()
+    assert rec.clicks == ["vote"] and rec.at == [(0.68, 0.51)]
+    assert not (tmp_path / "popup-44-9.answer").exists()
+    assert (tmp_path / "popup-44-9.done").exists()
+
+
 def test_a_message_with_a_lone_check_is_acknowledged_not_cleared(tmp_path):
     # live: the papal election's notice, cleared, was only minimized again, turn after turn
     p, rec = _popups(tmp_path, rec=Recorder(text="With the death of the Pope..."))
     p._find_tick = lambda png: (0.5, 0.45)
-    _req(tmp_path, "popup-44-1", kind="read", event=202)
+    _req(tmp_path, "popup-44-1", kind="read", event=202, press_check=True)  # as the bridge asks for it
     p.poll()
     assert rec.at == [(0.5, 0.45)] and (tmp_path / "popup-44-1.done").read_text() == "acked"
     assert p.messages_for("england") == ["With the death of the Pope..."]
+
+
+def test_a_check_is_not_clicked_unless_the_bridge_asks(tmp_path):
+    # live 11-15 turn 1143: this click acknowledged post_battle_scroll and the bridge pressed its tick too;
+    # the game faulted. The bridge closes scrolls itself; the turn loop only reads them
+    p, rec = _popups(tmp_path, rec=Recorder(text="Captain Humphrey has won a battle"))
+    p._find_tick = lambda png: (0.5, 0.45)
+    _req(tmp_path, "popup-1143-1", kind="read", event=40)
+    p.poll()
+    assert rec.clicks == [] and rec.at == []
+    assert (tmp_path / "popup-1143-1.done").read_text() == ""
+    assert p.messages_for("england") == ["Captain Humphrey has won a battle"]
 
 
 def test_the_papal_notice_gets_its_check_though_it_looks_like_the_last_reading(tmp_path):
@@ -365,39 +460,15 @@ def test_the_papal_notice_gets_its_check_though_it_looks_like_the_last_reading(t
     assert rec.at == [(0.5, 0.45)] and (tmp_path / "popup-48-2.done").read_text() == "acked"
 
 
-def test_a_stuck_turn_reopens_minimized_messages_one_slot_at_a_time(tmp_path):
-    # a minimized decision blocks End Turn unseen; plain notices reopened get minimized again,
-    # so each stuck look opens the next slot up
-    slots = [(0.02, 0.74), (0.02, 0.68), (0.02, 0.62)]
-    p, rec = _popups(tmp_path)
-    p.find_slots = lambda png: slots
-    for i in range(4):
-        _req(tmp_path, f"popup-42-m{i}", kind="minimized")
-        p.poll()
-    assert rec.at == [slots[0], slots[1], slots[2], slots[0]]
-    assert list(tmp_path.glob("popup-42-m*")) == []  # nobody waits on these
-
-
 def test_a_stuck_turn_with_a_decision_on_screen_has_the_ruler_decide_it(tmp_path):
     # live: a marriage offer missed its window; recovery only reopened minimized messages and
     # the offer sat on screen all night
     seat = Seat("DECLINE. Actively disloyal, one star: a rebel in waiting.")
     p, rec = _popups(tmp_path, seat=seat, rec=Recorder(text="Davy Heyway, Age: 31", choice=CHOICE))
-    p.find_slots = lambda png: [(0.02, 0.74)]
     _req(tmp_path, "popup-86-m1", kind="minimized")  # _req names england as the faction
     p.poll()
-    assert len(seat.prompts) == 1 and rec.clicks == ["decline"]
-    assert rec.at == [CHOICE["decline"]]  # no click on the message stack
-
-
-def test_a_screen_job_clicks_each_card_then_closes_the_scroll(tmp_path):
-    # retraining: the bridge opens the Retrain tab and lists the cards; the loop clicks them
-    p, rec = _popups(tmp_path)
-    cards = [[596 / 1024, 363 / 768], [639 / 1024, 363 / 768]]
-    _req(tmp_path, "popup-128-r1", kind="clicks", what="retrain London", cards=cards)
-    p.poll()
-    assert rec.at == [tuple(cards[1]), tuple(cards[0]), Popups.SEAL]  # last first: clicked cards shift the rest
-    assert (tmp_path / "popup-128-r1.done").exists()
+    assert len(seat.prompts) == 1 and rec.clicks == []  # no click on the message stack, nor the scroll
+    assert _answered(tmp_path, "popup-86-m1") == "decline\n"
 
 
 def test_find_choice_needs_a_check_with_an_x_beside_it(tmp_path):
@@ -528,8 +599,7 @@ def test_opted_in_adoption_strong_candidate_answered_by_steward(tmp_path):
     _req(tmp_path, "popup-22-1", kind="adoption", suitor={"name": "Charles", "age": 25, "command": 6, "loyalty": 6})
     p.poll()
     assert seat.prompts == []
-    assert rec.clicks == ["accept"] and rec.at == [CHOICE["accept"]]
-    assert (tmp_path / "popup-22-1.done").exists()
+    assert _answered(tmp_path, "popup-22-1") == "accept\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "your steward decided by rule" in msg
     assert "You accepted it" in msg
@@ -546,8 +616,7 @@ def test_opted_in_adoption_unknown_command_escalates_to_llm(tmp_path):
     _req(tmp_path, "popup-22-2", kind="adoption", suitor={"name": "Unknown", "age": 25, "loyalty": 6})
     p.poll()
     assert len(seat.prompts) == 1
-    assert rec.clicks == ["accept"]
-    assert (tmp_path / "popup-22-2.done").exists()
+    assert _answered(tmp_path, "popup-22-2") == "accept\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "your steward decided by rule" not in msg
     assert "You accepted it" in msg
@@ -560,7 +629,7 @@ def test_opted_in_adoption_close_call_goes_to_the_ruler(tmp_path):
                      ladder={"england"})
     _req(tmp_path, "popup-22-5", kind="adoption", suitor={"name": "Hugh", "age": 50, "command": 1, "loyalty": 2})
     p.poll()
-    assert len(seat.prompts) == 1 and rec.clicks == ["accept"]
+    assert len(seat.prompts) == 1 and _answered(tmp_path, "popup-22-5") == "accept\n" and rec.clicks == []
     assert "your steward decided by rule" not in p.messages_for("england")[0]
 
 
@@ -571,8 +640,7 @@ def test_not_opted_in_adoption_always_calls_llm(tmp_path):
     _req(tmp_path, "popup-22-3", kind="adoption", suitor={"name": "Strong", "age": 25, "command": 6, "loyalty": 6})
     p.poll()
     assert len(seat.prompts) == 1
-    assert rec.clicks == ["accept"]
-    assert (tmp_path / "popup-22-3.done").exists()
+    assert _answered(tmp_path, "popup-22-3") == "accept\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "your steward decided by rule" not in msg
 
@@ -597,8 +665,7 @@ def test_opted_in_adoption_high_stakes_no_heir_escalates_to_llm(tmp_path, venice
     _req(tmp_path, "popup-22-4", kind="adoption", suitor={"name": "Noble", "age": 25, "command": 6, "loyalty": 6})
     p.poll()
     assert len(seat.prompts) == 1
-    assert rec.clicks == ["accept"]
-    assert (tmp_path / "popup-22-4.done").exists()
+    assert _answered(tmp_path, "popup-22-4") == "accept\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "your steward decided by rule" not in msg
 
@@ -612,8 +679,7 @@ def test_opted_in_marriage_strong_candidate_answered_by_steward(tmp_path):
     _req(tmp_path, "popup-22-10", kind="marriage", suitor={"name": "Charles", "age": 25, "command": 6, "loyalty": 6})
     p.poll()
     assert seat.prompts == []
-    assert rec.clicks == ["accept"] and rec.at == [CHOICE["accept"]]
-    assert (tmp_path / "popup-22-10.done").exists()
+    assert _answered(tmp_path, "popup-22-10") == "accept\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "your steward decided by rule" in msg
     assert "You accepted it" in msg
@@ -622,20 +688,22 @@ def test_opted_in_marriage_strong_candidate_answered_by_steward(tmp_path):
     assert rows[0].rung == 2
     assert rows[0].kind == "marriage"
     assert rows[0].choice == "accept"
-    assert rows[0].outcome == "clicked accept" and rows[0].outcome_turn == 22
+    assert rows[0].outcome == "accept: pressed by the bridge" and rows[0].outcome_turn == 22
 
 
-def test_steward_outcome_records_a_scroll_gone_before_the_click(tmp_path):
+def test_steward_outcome_is_handed_to_the_bridge_without_a_last_look(tmp_path):
     from jigsaw import DecisionLog
     dlog = DecisionLog(tmp_path / "decisions.db")
-    # up at poll's look and the second look, gone at the last one before the click
+    # up at poll's look and the second look; a third look (gone) is never taken: whether the scroll
+    # is still up when the answer lands is the bridge's check, made on the scroll's element
     p, rec = _popups(tmp_path, seat=Seat("DECLINE"), rec=Recorder(text="A Suitable Prince\nCharles, Age: 25",
                      choice=[CHOICE, CHOICE, None]), ladder={"england"}, decision_log=dlog)
     _req(tmp_path, "popup-22-13", kind="marriage", suitor={"name": "Charles", "age": 25, "command": 6, "loyalty": 6})
     p.poll()
-    assert rec.clicks == []
+    assert _answered(tmp_path, "popup-22-13") == "accept\n" and rec.clicks == []
+    assert rec.choice == [None] and len(rec.shots) == 2
     [row] = dlog.query(actor="england")
-    assert row.outcome == "not clicked: the scroll was gone"
+    assert row.outcome == "accept: pressed by the bridge"
 
 
 def test_opted_in_marriage_weak_or_old_candidate_declined_by_steward(tmp_path):
@@ -645,8 +713,7 @@ def test_opted_in_marriage_weak_or_old_candidate_declined_by_steward(tmp_path):
     _req(tmp_path, "popup-22-11", kind="marriage", suitor={"name": "Old Suitor", "age": 65, "command": 0, "loyalty": 2})
     p.poll()
     assert seat.prompts == []
-    assert rec.clicks == ["decline"] and rec.at == [CHOICE["decline"]]
-    assert (tmp_path / "popup-22-11.done").exists()
+    assert _answered(tmp_path, "popup-22-11") == "decline\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "your steward decided by rule" in msg
     assert "You declined it" in msg
@@ -659,7 +726,7 @@ def test_opted_in_marriage_close_call_goes_to_the_ruler(tmp_path):
                      ladder={"england"})
     _req(tmp_path, "popup-22-12", kind="marriage", suitor={"name": "Hugh", "age": 50, "command": 2, "loyalty": 2})
     p.poll()
-    assert len(seat.prompts) == 1 and rec.clicks == ["accept"]
+    assert len(seat.prompts) == 1 and _answered(tmp_path, "popup-22-12") == "accept\n" and rec.clicks == []
     assert "your steward decided by rule" not in p.messages_for("england")[0]
 
 
@@ -795,14 +862,21 @@ def test_read_agy_command_and_stdout(monkeypatch, tmp_path):
     assert not Path(seen["kw"]["cwd"]).exists()
 
 
-def test_make_reader_parsing():
-    r_claude = make_reader("claude:haiku")
-    assert r_claude.func is read
-    assert r_claude.keywords == {"model": "haiku"}
+def test_make_reader_parsing(monkeypatch):
+    from parley import popups
+    calls = []
+    monkeypatch.setattr(popups.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(popups, "read", lambda path, *, model: calls.append(("claude", path, model)) or "from claude")
+    monkeypatch.setattr(popups, "read_agy", lambda path, *, model: calls.append(("agy", path, model)) or "from agy")
 
+    r_claude = make_reader("claude:haiku")
+    assert r_claude(Path("c.png")) == "from claude"
+    assert calls == [("claude", Path("c.png"), "haiku")]
+
+    calls.clear()
     r_agy = make_reader("agy:gemini-3.8-flash-low")
-    assert r_agy.func is read_agy
-    assert r_agy.keywords == {"model": "gemini-3.8-flash-low"}
+    assert r_agy(Path("a.png")) == "from agy"
+    assert calls == [("agy", Path("a.png"), "gemini-3.8-flash-low")]
 
     with pytest.raises(ValueError):
         make_reader("agy:")
@@ -843,10 +917,11 @@ def test_nothing_is_screenshotted_or_pressed_while_the_papal_window_is_open(tmp_
     assert rec.shots == [] and rec.clicks == [] and not (tmp_path / "popup-59-1.done").exists()
     (tmp_path / "papal_window.txt").unlink()  # the result has closed
     p.poll()
-    assert rec.clicks == ["accept"] and (tmp_path / "popup-59-1.done").read_text() == "acked"
+    # read, not clicked: the bridge closes it (one closer per scroll, 11-15 turn 1143)
+    assert rec.clicks == [] and (tmp_path / "popup-59-1.done").read_text() == ""
 
 
-def test_a_decision_answered_as_the_papal_window_opens_is_clicked_after_it_without_asking_again(tmp_path):
+def test_a_decision_answered_as_the_papal_window_opens_is_handed_over_after_it_without_asking_again(tmp_path):
     # live 20:48:31-34 (qa-field turn 59): a marriage declined; the click landed as the papal
     # result opened, and the game died
     class Late(Seat):
@@ -859,12 +934,13 @@ def test_a_decision_answered_as_the_papal_window_opens_is_clicked_after_it_witho
     _req(tmp_path, "popup-59-2", kind="marriage", suitor={"name": "Jacob", "age": 62})
     p.poll()
     assert rec.clicks == [] and len(seat.prompts) == 1
+    assert not (tmp_path / "popup-59-2.answer").exists() and not (tmp_path / "popup-59-2.done").exists()
     p.poll()  # still open: still nothing
-    assert rec.clicks == []
+    assert not (tmp_path / "popup-59-2.answer").exists()
     (tmp_path / "papal_window.txt").unlink()
     p.poll()
-    assert rec.clicks == ["decline"] and len(seat.prompts) == 1  # the ruler's answer, kept
-    assert (tmp_path / "popup-59-2.done").exists()
+    assert _answered(tmp_path, "popup-59-2") == "decline\n" and len(seat.prompts) == 1  # the ruler's answer, kept
+    assert rec.clicks == []
     assert any("You declined it" in m for m in p.messages_for("england"))
 
 
@@ -900,50 +976,46 @@ def test_the_notice_check_is_pressed_only_before_the_election_opens(tmp_path):
     assert rec.clicks == ["accept"] and not (tmp_path / "popup-48-6.done").exists()
 
 
-def test_a_stuck_turn_reopen_is_dropped_in_the_papal_window(tmp_path):
-    # live 18:34:05 and 08:41:40: a stuck-turn reopen shortly before the game died
-    p, rec = _popups(tmp_path)
-    p.find_slots = lambda png: [(0.02, 0.74)]
-    _papal(tmp_path, "notice")
-    _req(tmp_path, "popup-46-m1", kind="minimized")
-    p.poll()
-    assert rec.clicks == [] and rec.shots == [] and list(tmp_path.glob("popup-46-m1*")) == []
-
-
 def test_an_offer_waiting_for_its_buttons_reopens_nothing_in_the_papal_window(tmp_path):
     # live 20:48:11 and 20:56:13: "reopened a minimized message to find it" before a papal result
     p, rec = _popups(tmp_path, rec=Recorder(text="A Suitable Prince\nJacob", choice=None))
-
-    def slots(png):  # the result opens between the look and the click
-        _papal(tmp_path, "results")
-        return [(0.02, 0.74)]
-    p.find_slots = slots
     _req(tmp_path, "popup-59-7", kind="marriage", suitor={"name": "Jacob", "age": 30})
     p.poll()
-    assert rec.at == [] and p.parked  # nothing pressed; the offer waits out the window
+    assert rec.at == [] and rec.clicks == []  # nothing pressed (no icon click since 11-21)
     assert (tmp_path / "popup-59-7.req").exists()
 
 
-def test_the_real_click_stops_before_the_button_when_the_papal_window_opens(monkeypatch):
+def test_the_real_click_is_refused_before_it_looks_up_a_window(monkeypatch):
+    # the click was deleted 11-21 (no screen input): refused whatever the papal guard says
     from parley import popups
+    from parley.xinput import XInputRefused
     done = []
-    monkeypatch.setattr(popups, "_window", lambda: "7")
-    monkeypatch.setattr(popups.time, "sleep", lambda s: None)
+    monkeypatch.setattr(popups, "_window", lambda: done.append("window") or "7")
+    monkeypatch.setattr(popups, "_xdo", lambda *args: done.append(args) or "")
+    for guard in (lambda: True, lambda: False):
+        with pytest.raises(XInputRefused):
+            popups.click("decline", (0.5, 0.5), guard=guard)
+    assert done == []
 
-    def xdo(*args):
-        done.append(args)
-        if args[0] == "getwindowgeometry":
-            return "X=0\nY=0\nWIDTH=1600\nHEIGHT=900"
-        if args[0] == "getmouselocation":
-            return "X=10\nY=20"
-        return "3" if args[0] == "getactivewindow" else ""
-    monkeypatch.setattr(popups, "_xdo", xdo)
-    with pytest.raises(popups.PapalHold):
-        popups.click("decline", (0.5, 0.5), guard=lambda: True)
-    assert not any(a[0] in ("mousedown", "mouseup") for a in done)
-    assert done[-2] == ("mousemove", "10", "20") and done[-1] == ("windowactivate", "3")
-    done.clear()
-    popups.click("decline", (0.5, 0.5), guard=lambda: False)
-    assert ("mousedown", "1") in done
+
+def test_a_stuck_turn_escape_dismisses_the_scroll_without_a_screenshot(tmp_path):
+    # live 11-10 09:41: papal_election_results_scroll stayed open after End Turn; one Escape closed it
+    dismissed = []
+    p, rec = _popups(tmp_path, dismiss=dismissed.append)
+    _req(tmp_path, "popup-42-e1", kind="escape", scroll="papal_election_results_scroll")
+    p.poll()
+    assert len(dismissed) == 1 and dismissed[0]["scroll"] == "papal_election_results_scroll"
+    assert rec.shots == [] and rec.clicks == [] and list(tmp_path.glob("popup-42-e1*")) == []
+
+
+def test_a_stuck_turn_escape_is_dropped_in_the_papal_window(tmp_path):
+    dismissed = []
+    p, rec = _popups(tmp_path, dismiss=dismissed.append)
+    _papal(tmp_path, "notice")
+    _req(tmp_path, "popup-46-e1", kind="escape", scroll="papal_election_results_scroll")
+    p.poll()
+    assert dismissed == [] and rec.clicks == [] and rec.shots == []
+    assert list(tmp_path.glob("popup-46-e1*")) == []
+
 
 

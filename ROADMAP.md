@@ -13,6 +13,22 @@
 - [x] Per-turn saves and backups (newest save copied before each poll, last 20 kept)
 
 ## Next
+- [x] **QA restore drops a ruler's report** (2026-11-23): the bench restored the live campaign while it
+      held qa.lock, and a load under the lock skipped the missing-report write (France waited 720 s at
+      turn 3492). The write now waits for the lock to go, then runs.
+- [x] **Bench refuses a stale bridge** (2026-11-22, #694): install-bridge stamps parley_build.txt, the
+      bridge writes bridge_loaded_build.txt, and the runner reloads on a mismatch or refuses. Live 08:46
+      on tc: installed without a reload, the bench reloaded and ran on 62f7a60edcd0.
+- [x] **Rulers move off the map and into the sea** (2026-11-23): England ordered moves to (100,200) on a
+      295x189 map and onto sea one step from land. The prompt now prints the map's bounds once, and a walk
+      aimed at sea with land 1 tile off goes to that land, saying so (M.to_coast; farther stays refused).
+- [x] **Trend alarm on few orders** (2026-11-23, #698): England's 1-4 orders a turn woke the watch twice
+      on varied ruler mistakes (92% to 56%); a share fall now needs 3 refusals of one order type.
+- [x] **Settlements compacted** (2026-11-22, #696): "same as X, plus/without" lists; France's section
+      92 -> 61 KB, prompt 168 -> 136 KB (144 KB live), lossless by test; 0 recruit refusals in 35 turns.
+- [ ] **Live UI probe recipe** (2026-11-22): `just ui-probe` dumps every open window's class bytes and
+      part 0's over the control channel, and can run one close/activate on demand, so a UI fix is tried
+      in seconds on a window held open, not by a 3-minute bench rerun per try.
 - [ ] **Jigsaw** (the author, 2026-10-26): algorithms first, the LLM only when a gate says so, every
       decision logged; one engine (`../jigsaw`), MTW2 its first game pack. Done: decision
       log, ladder and gate, every ruler decision recorded (#143), decision outcomes (#148, #154),
@@ -39,6 +55,9 @@
       news (human slot only). Measured on France. Done since: retraining and agent recruitment by
       direct write for any faction (PRs #107, #111; agents live since #118, rules from the EDB).
 - [ ] Freeze each LLM faction's game AI once its decision coverage is complete (docs/decision-inventory.md)
+      2026-11-05: a frozen faction's turn can't end, and the unfreeze at turn end lets its AI move
+      armies (run 10: France lost 2-4 orders a turn to captains renamed in the AI's moves); a
+      complete freeze needs a way to end an AI faction's turn without its AI.
 - [x] Refresh docs/decision-inventory.md against the code and the live game (#156). Done 2026-10-26:
       updated with steward rows, retraining confirmed in master (done by direct write), repair route
       mapped (construction options + `addBuildingToQueue`), and upstream #89/#90 noted. Next: work
@@ -94,7 +113,9 @@
       parity stage above (offers, votes and news for AI-run seats, direct-write actions), turn
       hand-off between humans, and a per-human view so nobody sees another's screen or report.
       Base already there: MTW2 hotseat campaigns, and EOP's online hotseat battles with results
-      carried back to the campaign map (EOP README).
+      carried back to the campaign map (EOP README). 2026-11-05: flipping a faction's
+      `isPlayerControlled` to 1 mid-campaign doesn't make it a hotseat player (the game never ended
+      its turn); hotseat slots have to come from the campaign's start menu.
 - [ ] Contribute to EOP upstream (EOP-Labs/M2TWEOP-library, a Windows C++ build; the author's account,
       public): what we had to work around or found missing. PR #90 submitted for #88 (`getBuildingInQueue`
       off-by-one fix), compile-tested on Gitea Windows runner. Feature request #89 filed (missions

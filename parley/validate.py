@@ -49,7 +49,9 @@ def order_cap(report: StateReport, floor: int | None = None) -> int:
     return min(HARD_MAX_ORDERS, max(floor, scaled))
 MAX_PER_RECIPIENT = 3
 MAX_CHARS = 600
-TITLES = {"princess", "prince", "king", "queen", "lord", "lady", "sir", "duke", "count"}
+# "admiral" and "captain": live 11-05 (run 10, turn 11) England wrote board/move_army for "Nigel" and
+# "Geiles", its report's "Admiral Nigel" and "Admiral Geiles", and all four were refused as unknown
+TITLES = {"princess", "prince", "king", "queen", "lord", "lady", "sir", "duke", "count", "admiral", "captain"}
 NAME_FIELDS = ("army", "into", "agent", "who", "fleet")  # the ruler's own armies and agents
 SEEN_FIELDS = ("settlement", "target_settlement", "to_settlement", "target")  # towns and characters in sight
 
@@ -108,6 +110,21 @@ def _canonical(order, own: set[str], report: StateReport):
     return order.model_copy(update=update) if update else order
 
 
+def _into_full_town(report: StateReport, army_id: str, town: str) -> str:
+    """The refusal for an army entering its own town when the two would pass 20 units, or "".
+    The bridge refuses it at turn start (live 11-23: Bordeaux and Caen, 8 times); refused here the
+    ruler hears it the same turn."""
+    army = next((x for x in report.armies if x.id == army_id), None)
+    garrison = next((x for x in report.armies if x.id == f"garrison:{town}"), None)
+    if army is None or garrison is None or army is garrison or army.is_fleet:
+        return ""
+    if army.units + garrison.units <= 20:
+        return ""
+    return (f"{town}'s garrison has {garrison.units} units and this army {army.units}: "
+            f"{army.units + garrison.units}, over the 20 a settlement holds, so it would stay outside. "
+            f"Disband or leave units out first, or merge_units to fold worn ones")
+
+
 def _check(report: StateReport, order, gold_left: int) -> str:
     factions = {f.id for f in report.factions}
     owned = {s.id for s in report.settlements}
@@ -139,6 +156,8 @@ def _check(report: StateReport, order, gold_left: int) -> str:
                 return "cannot besiege own settlement"
             if isinstance(order, Withdraw) and order.to_settlement not in owned:
                 return f"settlement '{order.to_settlement}' not owned"
+            if isinstance(order, Withdraw) and (full := _into_full_town(report, a, order.to_settlement)):
+                return full
         case SetStance():
             pass
         case Assassinate() | Spy() | Bribe() | Sabotage():
@@ -258,15 +277,40 @@ def _check(report: StateReport, order, gold_left: int) -> str:
                 return f"unknown army '{a if a not in mine else b}'"
             if a == b:
                 return "an army can't merge into itself"
+            # one stack under two names: a garrison and the general who leads it (live 11-23,
+            # England turn 4451, refused by the bridge as a merge into itself)
+            if b == mine[a].leader or a == mine[b].leader:
+                return f"'{a}' and '{b}' are one army ({mine[a].leader or mine[b].leader} leads it)"
             if mine[a].is_fleet != mine[b].is_fleet:
                 return "a fleet and a land army can't merge"
+            if mine[a].is_fleet:
+                # live 11-14 15:37: Admiral Robin into Admiral John, then two crashes in that round
+                return (f"two fleets can't be merged: it removes {a}, and an admiral of yours leaving "
+                        f"the game crashes it (11-14); sail them together instead")
             if mine[a].aboard or mine[b].aboard:
                 return f"'{a if mine[a].aboard else b}' is aboard a fleet; land it first"
             if mine[a].units + mine[b].units > 20:
                 return f"together they'd be {mine[a].units + mine[b].units} units; an army holds at most 20"
         case MergeUnits(army=a):
-            if a not in {x.id for x in report.armies}:
+            mine = {x.id: x for x in report.armies}
+            if a not in mine:
                 return f"unknown army '{a}'"
+            # the bridge pours the weakest unit into the fullest one that isn't full, so it needs two
+            # under-strength units of one type (it refuses: "no two worn units of one type"). Live
+            # 11-13: France ordered it 21 times in half an hour on two armies that had none. Units
+            # pair only within one type AND armour/weapon level, bodyguards and retraining units
+            # left out (Unit.merge_group, the bridge's merge_key): live 11-13/14, Captains Foucher
+            # and Gerbert each had two worn Pike Militia the bridge wouldn't pair, 20 refusals.
+            # Only when every unit's maximum is known
+            troops = mine[a].troops
+            if troops and all(t.max_soldiers > 0 for t in troops):
+                worn: dict[str, int] = {}
+                for t in troops:
+                    if (g := t.merge_group()) is not None:
+                        worn[g] = worn.get(g, 0) + 1
+                if not any(n >= 2 for n in worn.values()):
+                    return (f"nothing to merge in {a}: no two under-strength units of one type and "
+                            f"armour/weapon level (under strength: {', '.join(sorted(worn)) or 'none'})")
         case Disband(army=a, unit=u, count=n):
             mine = {x.id: x for x in report.armies}
             if a not in mine:
@@ -283,6 +327,10 @@ def _check(report: StateReport, order, gold_left: int) -> str:
                 return f"unknown army '{a}'"
             if isinstance(order, MoveArmy) and (off := _off_map(report, order.x, order.y)):
                 return off
+            if isinstance(order, MoveArmy) and a in armies:
+                town = next((s for s in report.settlements if (s.x, s.y) == (order.x, order.y)), None)
+                if town is not None and (full := _into_full_town(report, a, town.id)):
+                    return full
             if isinstance(order, Attack) and order.target not in {e.id for e in report.visible_enemies}:
                 return f"target '{order.target}' is not in sight (use an id from FOREIGN ARMIES IN SIGHT)"
     return ""
@@ -352,8 +400,17 @@ def validate_orders(report: StateReport, orders: Orders,
     kept, rejected = [], []
     gold_left = max(report.treasury, playtest_funds_amount) if playtest_funds else report.treasury
     busy = set()  # agents already given an order: the game lets each act once a turn
+    # one agent mission per target a turn: live 11-13 a bribe won a captain over and the same
+    # turn's assassination of him then crashed the game (the bridge refuses it too)
+    targeted: dict[str, str] = {}
     training: dict[str, int] = {}  # agents of each kind ordered trained this turn
     queued = {s.id: set(s.queue) for s in report.settlements}  # buildings queued, this turn's included
+    merged: set[str] = set()  # armies given merge_units this turn
+    # mercenaries hired this turn, by (pool, unit): a region's pool is shared by every army in it.
+    # Live 11-21 (scratch, turn 3130): one Galloglaich listed under three of England's armies;
+    # Alfred Gryffin's hire took it and Aston Morgan's was refused by the bridge as "offers: nothing"
+    hired: dict[tuple[str, str], list[str]] = {}
+    hires_into: dict[str, int] = {}  # units hired into each army this turn
     own = _own_names(report)
     cap = order_cap(report)
     for i, order in enumerate(orders.orders):
@@ -368,6 +425,20 @@ def validate_orders(report: StateReport, orders: Orders,
         agent = None if isinstance(order, RecruitAgent) else getattr(order, "agent", None)  # a kind, not an agent
         if not reason and agent in busy:
             reason = f"'{agent}' already has an order this turn"
+        mission_target = None
+        if isinstance(order, (Assassinate, Spy, Bribe, Sabotage)):
+            mission_target = order.settlement if isinstance(order, Sabotage) else order.target
+        if not reason and mission_target is not None and mission_target.lower() in targeted:
+            reason = (f"'{mission_target}' is already the target of {targeted[mission_target.lower()]}'s "
+                      f"mission this turn: one mission per target a turn")
+        # one merge_units folds every group in the army: live 11-14 England sent four for
+        # garrison:York in one turn and the bridge refused three, "nothing to merge"
+        if not reason and isinstance(order, MergeUnits):
+            if order.army in merged:
+                reason = (f"merge_units is already ordered for {order.army} this turn: one merges "
+                          f"every group of worn units in it")
+            else:
+                merged.add(order.army)
         if not reason and isinstance(order, (Build, Repair)):
             if order.building in queued[order.settlement]:
                 reason = f"'{order.building}' is already ordered for {order.settlement} this turn"
@@ -378,12 +449,32 @@ def validate_orders(report: StateReport, orders: Orders,
                 reason = f"{order.agent} limit reached: {lim.have} of {lim.limit}, plus {training[order.agent]} ordered this turn"
             else:
                 training[order.agent] = training.get(order.agent, 0) + 1
+        if not reason and isinstance(order, HireMercenary):
+            army = next(x for x in report.armies if x.id == order.army)
+            offer = next(m for m in army.can_hire if m.unit == order.unit)
+            key = (offer.pool or f"army:{army.id}", order.unit)
+            took = hired.setdefault(key, [])
+            # live 11-23: seven hires refused by the bridge, "already holds 20 units": each was
+            # checked against the report's count, not the hires before it this turn
+            before = hires_into.get(army.id, 0)
+            if army.units + before >= 20:
+                reason = (f"'{army.id}' holds {army.units} units and this turn's {before} hires "
+                          f"before this one fill it to 20 (an army holds at most 20)")
+            elif len(took) >= offer.available:
+                where = f"the {offer.pool} pool" if offer.pool else "the pool"
+                reason = (f"{where} has {offer.available} {order.unit} and this turn's hires for "
+                          f"{', '.join(took)} take them: a region's pool is shared by every army in it")
+            else:
+                took.append(order.army)
+                hires_into[army.id] = before + 1
         if reason:
             rejected.append(OrderResult(index=i, type=order.type, ok=False, reason=reason))
             continue
         gold_left -= cost(report, order)
         if agent is not None:
             busy.add(agent)
+        if mission_target is not None:
+            targeted[mission_target.lower()] = agent
         if isinstance(order, Attack):
             target = next(e for e in report.visible_enemies if e.id == order.target)
             order = order.model_copy(update={"target_faction": target.faction})

@@ -239,7 +239,13 @@ def test_suites_load():
     assert smoke.name == "smoke"
     assert smoke.faction == "england"
     smoke_names = [c.name for c in smoke.cases]
-    assert {"spawn_agent", "teleport", "playtest_funds", "skill"} <= set(smoke_names)
+    # teleport and skill are checked in-turn by the instant helpers case (11-05: their turn
+    # versions only re-read the setup's own log lines)
+    assert {"helpers", "spawn_agent", "playtest_funds"} <= set(smoke_names)
+    assert not {"teleport", "skill"} & set(smoke_names)
+    helpers = next(c for c in smoke.cases if c.name == "helpers")
+    assert helpers.kind == "instant"
+    assert {e.log for e in helpers.expect if e.log} >= {"qa: teleport ok: $to", "qa: skill ok:"}
     for c in smoke.cases:
         assert any(e.independent for e in c.expect)
 
@@ -276,12 +282,9 @@ def test_suites_load():
             later += [str(o) for orders in c.orders.values() for o in orders]
             later += [str(e.state) for e in c.expect]
             assert not any("QA " in t for t in later), (c.name, later)
-    tp_c = smoke_by_name["teleport"]
-    # the destination is a free tile bound at setup ($to), not a fixed one (11-04: a taken tile crashed it)
-    assert {"to", "to_x", "to_y"} <= tp_c.binds
-    tp_bound = tp_c.model_copy(update={"targets": {**tp_c.targets, "to": "111,155", "to_x": 111, "to_y": 155}})
-    assert check(tp_bound, "qa: teleport ok: 111,155\n", {}, [], turns_used=1).outcome == "pass"
-    assert check(tp_bound, "qa: teleport ok: 110,154\n", {}, [], turns_used=tp_c.max_turns).outcome == "fail"
+    # teleport's destination is a free tile bound in the helpers case ($to), never a fixed one
+    # (11-04: a taken tile crashed it); the helpers case is instant, its expects checked above
+    assert any("free_tile($at_x, $at_y" in str(step) for step in smoke_by_name["helpers"].act)
     assert (
         check(
             smoke_by_name["playtest_funds"],
@@ -292,17 +295,6 @@ def test_suites_load():
         ).outcome
         == "pass"
     )
-    assert (
-        check(
-            smoke_by_name["skill"],
-            "qa: skill ok: QA Spy GoodSpy=5\n",
-            {},
-            [],
-            turns_used=1,
-        ).outcome
-        == "pass"
-    )
-
     assert (
         check(
             spy_case,
@@ -321,7 +313,8 @@ def test_suites_load():
     # outcome passes on the mission line and the report's agent_results, so no roll to wait on
     for name, mission in (("assassinate", "assassination"), ("sabotage", "sabotage")):
         c = covert_by_name[name]
-        assert c.kind == "turn" and not c.chance and c.max_turns == 2, name
+        # sabotage resolves after End Turn, so it gets one more turn to show its line (11-05)
+        assert c.kind == "turn" and not c.chance and c.max_turns == (3 if name == "sabotage" else 2), name
         line = f"agent mission: england: Harry Baker's {mission}: not successful\n"
         logs = [e.log for e in c.expect if e.log]
         assert logs and all(re.search(p, line) for p in logs), name

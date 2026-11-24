@@ -27,7 +27,7 @@ local function encode(value)
 end
 
 local function log(line)
-    local f = io.open(root .. "/parley_bridge.log", "a")
+    local f = io.open(root .. "/parley_bridge.log", "ab")
     if f then
         f:write(os.date("%Y-%m-%d %H:%M:%S "), line, "\n")
         f:close()
@@ -59,7 +59,53 @@ local function atomic_write(path, text)
     return os.rename(tmp, path)
 end
 
+-- The EOP build's fork level: M2TWEOP.forkLevel, only on our fork (author/M2TWEOP-library PR #8).
+-- Level 1: ImGui text as "%s" (#2), tile.isLandConnection/isSeaCrossing (#3), getBuildingInQueue
+-- 1-based with nil at n+1 (#4), splitArmy nil on a no-op (#5), gameSTDUI.getOpenUiElements (#6).
+-- 2: getSubElement and elementName check every pointer (#9), so M.open_ui walks parts at any depth.
+-- 3: getOpenUiElements also lists open message scrolls (#11): offers are pressed by element.
+-- 3.3.1 and upstream master have none of it, and the bridge no longer works around them.
+K.FORK_LEVEL_NEEDED = 3
+function M.fork_level()
+    return tonumber(M2TWEOP and M2TWEOP.forkLevel) or 0
+end
+
+-- Element class vtable pointers (Steam build): little-endian hex -> class name
+K.UI_CLASSES = {
+    ["9c3e3901"] = "VOTE_BUTTON",
+    ["dc493901"] = "UNDECIDED_VOTE_BUTTON",  -- 0x013949dc (scripts/ui_classes.py; was mistyped dc499401)
+    ["1c463901"] = "DECIDED_VOTE_BUTTON",
+    ["dc4b3901"] = "PAPAL_ELECTION_SCROLL",
+    ["ec5d3601"] = "SCROLL_CLOSE_GADGET",
+    ["dc4d3901"] = "PAPAL_ELECTION_RESULTS_SCROLL",  -- 0x01394ddc; shows as "unnamed" in the open-UI list
+}
+
+-- Element class name from its vtable pointer (requires fork level 5+ readBytes), or nil.
+function M.ui_class(e)
+    if not e or M.fork_level() < 5 then return nil end
+    local ok, res = pcall(function()
+        if type(e.readBytes) ~= "function" then return nil end
+        local hex = e:readBytes(0, 4)
+        if type(hex) == "string" then
+            return K.UI_CLASSES[hex:lower()]
+        end
+        return nil
+    end)
+    return (ok and res) or nil
+end
+
+-- nil on a build the bridge refuses (below K.FORK_LEVEL_NEEDED), else the line M.setup logs
+function M.refusal()
+    local level = M.fork_level()
+    if level >= K.FORK_LEVEL_NEEDED then return nil end
+    return string.format("EOP build is not the Parley fork (forkLevel %d, need %d): the bridge will not drive "
+        .. "this game; install it with just install-eop-zip", level, K.FORK_LEVEL_NEEDED)
+end
+
 local function config()
+    -- not our fork: no config, as with no bridge.txt, so nothing reports, applies orders or autoplays
+    -- (the reports read the building queue, which crashed unfixed master: W13)
+    if M.fork_level() < K.FORK_LEVEL_NEEDED then return nil end
     local text = read_file(root .. "/bridge.txt")
     if not text then return nil end
     -- control: faction -> areas; absent = ruler. freeze: factions whose game AI is frozen ("*":
@@ -82,8 +128,17 @@ local function config()
             if f and tonumber(amount) then cfg.playtest_funds[f] = tonumber(amount) end
         elseif k == "autoplay" then cfg.autoplay = v == "1"
         elseif k == "autoplay_wait" then cfg.wait = tonumber(v)
-        elseif k == "autoplay_hold_decisions" then cfg.hold_decisions = v ~= "0"
+        elseif k == "autoplay_hold_decisions" then
+            -- "diplomacy": only an AI's diplomatic offer holds End Turn (the QA bench)
+            if v == "diplomacy" then cfg.hold_decisions = "diplomacy" else cfg.hold_decisions = v ~= "0" end
+        -- shorter on the QA bench (a stall costs ~2 min there, not 10); unset: DECIDE_WAIT and
+        -- K.DECISION_HOLD_MAX, as a real campaign has
+        elseif k == "autoplay_decision_hold" then cfg.decision_hold = tonumber(v)
+        elseif k == "decide_wait" then cfg.decide_wait = tonumber(v)
         elseif k == "autoplay_until" then cfg.until_turn = tonumber(v)
+        elseif k == "autoplay_hold_reads" then cfg.hold_reads = v == "1"
+        elseif k == "eop_ai" then cfg.eop_ai = v == "1"  -- EOP's campaign AI kept on: see M.setup
+        elseif k == "fault_catcher" then cfg.fault_catcher = v ~= "0"  -- see M.fault_catcher
         elseif k == "papal_hands_off" then cfg.papal_hands_off = v == "1" end
     end
     -- read by luaPluginScript's onScrollOpened as a plain field (no call): see there
@@ -342,6 +397,20 @@ local function role_of(status)
 end
 
 
+-- A character record alive or dead: true, false, or nil when unreadable. EOP binds isAlive as a
+-- property (characterRecord.cpp:710, sol::property), not a function: `nc:isAlive()` raises, so until
+-- 11-05 every read here came back nil and the dead got their stale character pointers read (found
+-- by agy from a vanished bench general's family entry). A call is still tried, for a build that
+-- makes it one.
+local function record_alive(nc)
+    local ok, v = pcall(function() return nc.isAlive end)
+    if ok and type(v) == "function" then ok, v = pcall(function() return nc:isAlive() end) end
+    if not ok then return nil end
+    if v == true or v == 1 then return true end
+    if v == false or v == 0 then return false end
+    return nil
+end
+
 -- Every named character the faction has kept a record of, the dead and the off-map included
 -- (a dead one has no on-map character, so its kind is unknown): name, age, kind, alive, family,
 -- spouse and parent. Each field is read on its own, so one bad read doesn't lose the person.
@@ -354,7 +423,7 @@ local function family_of(f)
             local p = { name = clean_name(name) }
             local function read(key, fn) local okr, v = pcall(fn); if okr and v ~= nil then p[key] = v end end
             read("age", function() return nc.age end)
-            read("alive", function() return nc:isAlive() end)
+            read("alive", function() return record_alive(nc) end)
             read("male", function() return nc.isMale end)
             read("family", function() return nc.isFamily end)
             if type(p.alive) == "number" then p.alive = p.alive ~= 0 end
@@ -400,8 +469,7 @@ local function whereabouts(fac, family)
                 pcall(function()
                     local nc = other:getNamedCharacter(j)
                     local p = lost[clean_name(nc.fullName)]
-                    local alive = p and nc:isAlive()
-                    if p and (alive == true or alive == 1) then p.now_serves = other.name end
+                    if p and record_alive(nc) == true then p.now_serves = other.name end
                 end)
             end
         end
@@ -456,28 +524,9 @@ end
 -- as { x, y, from, to } (the regions on either side).
 local crossings_cache
 
--- EOP master or 3.3.1, told apart by a field only master has (stratMap.landConnectionsNum)
-local function eop_master()
-    local ok, n = pcall(function() return gd.stratMap.landConnectionsNum end)
-    return ok and type(n) == "number"
-end
-
 local function all_crossings()
     if crossings_cache then return crossings_cache end
     local map, found = gd.stratMap, {}
-    -- EOP master drops tile.isLandConnection and isSeaCrossing: the straits are a list,
-    -- stratMap.landConnectionsNum and stratMap:getLandConnection(i) -> coordPair {xCoord, yCoord}
-    -- (types/strategyMap.cpp:1295, 1337, 1559), and the sea crossings tile.hasSeaCrossing (:1702)
-    local master = eop_master()
-    local n = master and map.landConnectionsNum or 0
-    if master then
-        for i = 0, n - 1 do
-            pcall(function()
-                local c = map:getLandConnection(i)
-                if c then found[#found + 1] = { x = c.xCoord, y = c.yCoord } end
-            end)
-        end
-    end
     for y = 0, (map.mapHeight or 0) - 1 do
         for x = 0, (map.mapWidth or 0) - 1 do
             -- green-arrow straits (live: Gibraltar, the Bosphorus) and the "close proximity" sea
@@ -485,7 +534,6 @@ local function all_crossings()
             -- (148 tiles) is river fords and bridges, not straits
             local ok, yes = pcall(function()
                 local t = map.getTile(x, y)
-                if master then return t.hasSeaCrossing == true or t.hasSeaCrossing == 1 end
                 local a, b = t.isLandConnection, t.isSeaCrossing
                 return a == true or a == 1 or b == true or b == 1
             end)
@@ -1005,10 +1053,17 @@ local function agent_options(s, counts)
     return list
 end
 
+-- no recruit is ready further off than this (its turns, plus a full queue over one slot): one that
+-- is came from a later point of the campaign before a load went back (live 11-10: a restart at
+-- turn 5 kept turn-271 recruits, and Nottingham's queue read full for good)
+K.TRAINING_HORIZON = 20
 local function deliver_training(fac, turn)
     local list, keep = read_training(), {}
     for _, t in ipairs(list) do
-        if t.faction == fac.name and t.ready <= turn then
+        if t.faction == fac.name and t.ready > turn + K.TRAINING_HORIZON then
+            log(string.format("%s: %s for %s dropped: ready turn %d is from a later save (turn now %d)",
+                fac.name, t.unit, t.settlement or t.army_leader, t.ready, turn))
+        elseif t.faction == fac.name and t.ready <= turn then
             local lost, at = false, ""
             local ok, err = pcall(function()
                 if t.army_leader then  -- a mercenary hired by an army: it joins that army, wherever it stands now
@@ -1075,21 +1130,10 @@ end
 local function queue_of(s)
     local names, q = {}, s.buildingsQueue
     local n = q and q.numBuildingsInQueue or 0
-    if eop_master() then
-        -- EOP master's getBuildingInQueue(i) returns the circular buffer's element head+i
-        -- (types/settlement.cpp:972, realGameTypes.h:217) though documented 1-based: i = 1..n-1
-        -- are items 2..n, item 1 (the one being built) can't be reached, and i = n is an empty
-        -- slot whose getQueueBuildingName crashed the game (live, scratch2, England's report)
-        if n > 0 then names[1] = "(the building under construction: its name can't be read on this EOP)" end
-        for pos = 1, n - 1 do
-            local b = q:getBuildingInQueue(pos)
-            if b then names[#names + 1] = b:getQueueBuildingName() end
-        end
-        return names
-    end
-    for pos = 1, n do  -- 1-based and bounds-checked in EOP 3.3.1
+    for pos = 1, n do
         local b = q:getBuildingInQueue(pos)
-        if b then names[#names + 1] = b:getQueueBuildingName() end
+        if not b then break end
+        names[#names + 1] = b:getQueueBuildingName()
     end
     return names
 end
@@ -1227,8 +1271,20 @@ local function add_management(view, s, areas, counts)
             end
         end)
         if counts then pcall(function() view.can_recruit_agents = agent_options(s, counts) end) end
-        if eop_master() then pcall(function() view.recruit_queue = recruit_queue_of(s) end) end
+        pcall(function() view.recruit_queue = recruit_queue_of(s) end)
     end
+end
+
+-- What merge_units groups a unit by: type, armour and weapon level. nil for a unit it leaves
+-- alone (a general's bodyguard, a unit retraining). The report carries the same facts, so the
+-- orchestrator refuses a merge the bridge would (live 11-13/14: France ordered merge_units on
+-- Captains Foucher and Gerbert 20 times; each had two worn Pike Militia the bridge wouldn't pair).
+local function merge_key(u)
+    local ok, key = pcall(function()
+        if u.character or u.retrainingSettlement then return nil end
+        return u.eduEntry.eduType .. "|" .. (u.armourLVL or 0) .. "|" .. (u.weaponLVL or 0)
+    end)
+    return ok and key or nil
 end
 
 local function add_troops(view, st)
@@ -1236,8 +1292,13 @@ local function add_troops(view, st)
         local troops = {}
         for i = 0, st.numOfUnits - 1 do
             local u = st:getUnit(i)
-            if u then troops[#troops + 1] = { type = u.eduEntry.eduType, soldiers = u.soldierCountStratMap,
-                                              max_soldiers = u.soldierCountStratMapMax, exp = u.exp } end
+            if u then
+                local t = { type = u.eduEntry.eduType, soldiers = u.soldierCountStratMap,
+                            max_soldiers = u.soldierCountStratMapMax, exp = u.exp }
+                pcall(function() t.armour, t.weapon = u.armourLVL or 0, u.weaponLVL or 0 end)
+                if not merge_key(u) then t.held = true end
+                troops[#troops + 1] = t
+            end
         end
         view.troops = troops
     end)
@@ -1334,22 +1395,20 @@ function M.report(fac, cfg)
             put("capital", function() return other.capital and (other.capital.localizedName or other.capital.name) end)
             -- EOP master's treaty record per pair (types/campaign.h:675, ids 0..30, nil outside);
             -- read only: setDipStance stays the one way to change it
-            if eop_master() then
-                put("treaties", function()
-                    local d = campaign:getFactionDiplomacy(fac.factionID, other.factionID)
-                    local back = campaign:getFactionDiplomacy(other.factionID, fac.factionID)
-                    if not d then return nil end
-                    local list = {}
-                    if d.hasTradeRights then list[#list + 1] = "trade rights" end
-                    if d.hasMilitaryAccess then list[#list + 1] = "military access" end
-                    if d.isProtectorate or (back and back.isProtectorate) then list[#list + 1] = "protectorate" end
-                    return list
-                end)
-                put("turns_in_stance", function()
-                    local d = campaign:getFactionDiplomacy(fac.factionID, other.factionID)
-                    return d and d.numTurnsState
-                end)
-            end
+            put("treaties", function()
+                local d = campaign:getFactionDiplomacy(fac.factionID, other.factionID)
+                local back = campaign:getFactionDiplomacy(other.factionID, fac.factionID)
+                if not d then return nil end
+                local list = {}
+                if d.hasTradeRights then list[#list + 1] = "trade rights" end
+                if d.hasMilitaryAccess then list[#list + 1] = "military access" end
+                if d.isProtectorate or (back and back.isProtectorate) then list[#list + 1] = "protectorate" end
+                return list
+            end)
+            put("turns_in_stance", function()
+                local d = campaign:getFactionDiplomacy(fac.factionID, other.factionID)
+                return d and d.numTurnsState
+            end)
             factions[#factions + 1] = view
         end
     end
@@ -1415,8 +1474,43 @@ local function find_army(fac, id)
     return st
 end
 
+-- the refusal for an army id the faction doesn't have now. The report is written when the ruler's
+-- turn ends and the AI factions move while it decides: live 11-05 (scratch, turn 92) Nottingham fell
+-- in between, and hire_mercenary on garrison:Nottingham came back a bare "unknown army"
+local function unknown_army(fac, id)
+    local msg = "unknown army '" .. tostring(id) .. "'"
+    local town = type(id) == "string" and id:match("^garrison:(.+)$")
+    if town then
+        local ok, s = pcall(function() return gd.stratMap:getSettlement(town) end)
+        if ok and s then
+            local owner = s.ownerFaction and s.ownerFaction.name
+            local label = tostring(s.localizedName or town)
+            if owner and owner ~= fac.name then
+                return msg .. ": " .. label .. " now belongs to " .. owner
+                    .. " (taken while you decided), so that garrison is gone"
+            end
+            return msg .. ": no troops of yours are in " .. label .. " now"
+        end
+    end
+    -- a faction the game's AI also runs: its AI moves armies and renames their captains after the
+    -- ruler's orders (live 11-05, run 10: France blamed "border skirmishes" for 4 captains renamed so)
+    if fac.isPlayerControlled ~= 1 then
+        -- no apostrophe after the name: parley/audit.py UNKNOWN reads the name up to the last quote
+        return msg .. ": not one of your armies by that name now; the game AI that also runs your realm "
+            .. "moves armies and renames their captains between your turns, so use the ids in your latest report"
+    end
+    return msg .. ": not one of your armies now (destroyed or merged since your report?); "
+        .. "use an id from the latest report"
+end
+
 find_army_now = function(fac, id)
     local ids = army_ids(fac)
+    -- the exact id first: same_army_id drops the title, and live 11-13 (turns 1177-1180) France's
+    -- march_on "Captain Thibault" found the fleet "Admiral Thibault" earlier in getStack order and
+    -- was refused as a fleet three turns running
+    for i = 0, (fac.stacksNum or 0) - 1 do
+        if same(ids[i], id) then return fac:getStack(i) end
+    end
     for i = 0, (fac.stacksNum or 0) - 1 do
         if same_army_id(ids[i], id) then return fac:getStack(i) end
     end
@@ -1501,7 +1595,7 @@ end
 
 local function general(fac, id)
     local st = find_army(fac, id)
-    if not st then return nil, "unknown army '" .. tostring(id) .. "'" end
+    if not st then return nil, unknown_army(fac, id) end
     local leader = leader_of(fac, st)
     if not leader then return nil, "army '" .. id .. "' has no general to command (merge it into one that has)" end
     return st, leader
@@ -1876,10 +1970,24 @@ local function queue(fac, s, list, name, what)
         if o.name == name then
             if fac.money < o.cost then return "treasury too low (" .. fac.money .. ", needs " .. o.cost .. ")" end
             local before = fac.money
+            local function in_queue()
+                local okn, n = pcall(function() return s.buildingsQueue.numBuildingsInQueue end)
+                return okn and tonumber(n) or nil
+            end
+            local queued_before = what == "build" and in_queue() or nil
             local ok = what == "build" and o.opt:addBuildingToQueue() or what == "recruit" and o.opt:addUnitToQueue()
             -- unverified whether the game charges when queueing: the log is the evidence
             log(string.format("%s %s %s in %s: treasury %d -> %d", fac.name, what, name, s.name, before, fac.money))
             if not ok then return "the game refused to queue '" .. name .. "' (queue full?)" end
+            -- a guard: the game's yes is checked against the queue's length, so a yes that queued
+            -- nothing can't come back "done". (The treasury is no evidence: a build queued behind
+            -- another is charged only when it starts, games/qa/towns.toml build_queued.) The queue's
+            -- first name can't be read on EOP master, so its length is what is compared
+            local queued_after = queued_before and in_queue()
+            if queued_after and queued_after <= queued_before then
+                return "the game didn't queue '" .. name .. "' in " .. s.name .. " (its queue still holds "
+                    .. queued_after .. "); order it again next turn"
+            end
             return nil
         end
     end
@@ -2000,12 +2108,15 @@ function handlers.set_tax(fac, o, _, map)
     local level = K.TAX_LEVELS[o.level]
     if level == nil then return "unknown tax level '" .. tostring(o.level) .. "'" end
     s.settlementTaxLevel = level
+    -- read it back: live 11-10 (turns 262-270) Nottingham stayed "normal" through nine orders that
+    -- each said done, and its ruler spent turns guessing why
+    local now = s.settlementTaxLevel
+    if now ~= level then
+        local kept = tostring(now)
+        for name, v in pairs(K.TAX_LEVELS) do if v == now then kept = name end end
+        return string.format("the game kept %s's tax at %s; it didn't take %s", o.settlement, kept, o.level)
+    end
 end
-
--- Work the game's own screens for what EOP can't do (retraining): a queue of jobs, run a step at
--- a time on the human slot's turn while End Turn waits (see run_ui_job)
-local ui_jobs = {}
-M.ui_jobs = ui_jobs
 
 -- Retrain like the game's Retrain tab, by direct write, for any faction (the author: direct write
 -- wherever possible). A damaged unit in the garrison is refilled when its type has one in the
@@ -2141,7 +2252,7 @@ function M.merc_options(st, fac, campaign)
             if open then
                 list[#list + 1] = { name = e.eduType, cost = mu.cost, exp = mu.experience or 0,
                                     left = math.floor(mu.currentPool), max = mu.maxUnits or 0,
-                                    edu = e.index, entry = mu }
+                                    edu = e.index, entry = mu, pool = pool.name }
             end
         end
     end
@@ -2152,7 +2263,10 @@ function M.add_can_hire(view, st, fac, campaign)
     pcall(function()
         local hire = {}
         for _, m in ipairs(M.merc_options(st, fac, campaign)) do
-            hire[#hire + 1] = { unit = m.name, cost = m.cost, available = m.left, max = m.max, exp = m.exp }
+            -- pool: the region's, shared by every army standing in it (live 11-21, turn 3130: one
+            -- Galloglaich listed under three of England's armies, two hired it, one refused)
+            hire[#hire + 1] = { unit = m.name, cost = m.cost, available = m.left, max = m.max, exp = m.exp,
+                                pool = type(m.pool) == "string" and m.pool or nil }
         end
         if #hire > 0 then view.can_hire = hire end
     end)
@@ -2163,7 +2277,7 @@ end
 -- write like recruit; unverified live (the log gives treasury and pool before and after).
 function handlers.hire_mercenary(fac, o, _, map, campaign)
     local st = find_army(fac, o.army)
-    if not st then return "unknown army '" .. tostring(o.army) .. "'" end
+    if not st then return unknown_army(fac, o.army) end
     if st.isAdmiral then return "'" .. o.army .. "' is a fleet; mercenaries are hired by a land army with a general" end
     local leader = leader_of(fac, st)
     if not leader then return "'" .. o.army .. "' has no general; only an army with a general hires mercenaries" end
@@ -2262,6 +2376,14 @@ function handlers.blockade(fac, o, _, map)
     local s = map:getSettlement(o.settlement)
     if not s then return "unknown settlement '" .. tostring(o.settlement) .. "'" end
     if owned(fac, s) then return "cannot blockade your own port" end
+    -- a rebel port: the game crashed at the turn start that applied such a blockade, 3 times of 3
+    -- (QA bench 11-05 12:15:05, 12:31:39, 12:40:28, rebel Bruges; a spawned fleet and a real admiral
+    -- alike), while rulers' blockades of faction ports had held (10-29, 10-30). Refused until proven.
+    local okw, owner_name = pcall(function() return s.ownerFaction and s.ownerFaction.name end)
+    if okw and owner_name == "slave" then
+        return s.name .. " is a rebel port: blockading one has crashed the game, so the bridge won't; "
+            .. "besiege or take it from land instead"
+    end
     local region = map.getRegion(s.regionID)
     local tile = region and tile_at(region.portEntranceXCoord, region.portEntranceYCoord)
     local port = tile and tile.port
@@ -2325,6 +2447,24 @@ end
 -- trained ship was created in the town's land garrison like any other unit. The fleet comes from EOP
 -- factionStruct:spawnArmy with characterType.admiral (3), as the QA bench's spawn_fleet: unproven
 -- live. Returns the tile it put to sea on.
+-- EOP's spawnArmy gives a named character his first unit as bodyguard but not an admiral
+-- (army.cpp: setBodyguard only for characterType.namedCharacter), and the game replaces an admiral
+-- with no ship of his own at the next turn change: live 11-05 (the test laptop) a spawned fleet's admiral
+-- was Nicholas, then Morris, and orders naming last turn's fleet found none. The ship is made his
+-- (character:setBodyguardUnit, LuaDocs 3.3.1: "only for characters without it, such as immediately
+-- after creating a character"). Returns true when bound.
+function M.bind_admiral(fleet)
+    local ok, bound = pcall(function()
+        local c = fleet.leader
+        if not c or c.bodyguards ~= nil then return false end
+        local u = fleet:getUnit(0)
+        if not u then return false end
+        c:setBodyguardUnit(u)
+        return c.bodyguards ~= nil
+    end)
+    return ok and bound or false
+end
+
 function M.launch_ship(fac, s, edu)
     local port, region = port_of(s)
     local px, py = s.xCoord, s.yCoord
@@ -2340,6 +2480,7 @@ function M.launch_ship(fac, s, edu)
     local ctype = (characterType and characterType.admiral) or 3
     local fleet = fac:spawnArmy("random_name", "", ctype, label, "", x, y, 30, false, 31, edu, 0, 0, 0)
     if not fleet then error("spawnArmy returned nil") end
+    M.bind_admiral(fleet)
     return x, y
 end
 
@@ -2367,14 +2508,28 @@ local function own_fleet_at(fac, x, y)
     end
 end
 
--- the land (or, with sea = true, the sea) tile nearest (x, y), within a few tiles, or nil
-local function nearest_land(x, y, sea)
-    for r = 1, 3 do
+-- the settlement at (x, y) when another faction than fac owns it, else nil
+function M.foreign_town_at(fac, x, y)
+    local map = gd.stratMap
+    for r = 0, (map.regionsNum or 0) - 1 do
+        local ok, s = pcall(function() return map.getRegion(r).settlement end)
+        if ok and s and s.xCoord == x and s.yCoord == y and s.ownerFaction and s.ownerFaction.name ~= fac.name then
+            return s
+        end
+    end
+end
+
+-- the land (or, with sea = true, the sea) tile nearest (x, y), within a few tiles, or nil. With fac,
+-- another faction's town is skipped: nobody walks in (live 11-14: "the nearest land is (90,162)",
+-- Dublin, sent England's agent round a three-turn loop of refusals)
+local function nearest_land(x, y, sea, fac, reach)
+    for r = 1, reach or 3 do
         for dx = -r, r do
             for dy = -r, r do
                 if math.max(math.abs(dx), math.abs(dy)) == r then
                     local t = tile_at(x + dx, y + dy)
-                    if t and is_land(t) ~= (sea == true) then return x + dx, y + dy end
+                    if t and is_land(t) ~= (sea == true)
+                        and not (fac and M.foreign_town_at(fac, x + dx, y + dy)) then return x + dx, y + dy end
                 end
             end
         end
@@ -2503,19 +2658,17 @@ end
 -- turn audit): 15 such moves came back "done" while the mover stayed put; the game won't walk
 -- anyone into a settlement that isn't theirs.
 local function onto_foreign_settlement(fac, x, y, agent)
-    local map = gd.stratMap
-    for r = 0, (map.regionsNum or 0) - 1 do
-        local ok, s = pcall(function() return map.getRegion(r).settlement end)
-        if ok and s and s.xCoord == x and s.yCoord == y and s.ownerFaction and s.ownerFaction.name ~= fac.name then
-            local what = string.format("(%d,%d) is %s, %s's settlement", x, y,
-                tostring(s.localizedName or s.name), tostring(s.ownerFaction.name))
-            if agent then
-                return what .. ": an agent can't walk in; act on it from outside with the agent's own order "
-                    .. "(spy, assassinate, sabotage, bribe), which walks there and acts from the next tile"
-            end
-            return what .. ": an army can't walk in; besiege it (the besiege order, \"assault\": true to storm it)"
-        end
+    local s = M.foreign_town_at(fac, x, y)
+    if not s then return nil end
+    local what = string.format("(%d,%d) is %s, %s's settlement", x, y,
+        tostring(s.localizedName or s.name), tostring(s.ownerFaction.name))
+    local lx, ly = nearest_land(x, y, false, fac)
+    local beside = lx and string.format("; the nearest land beside it is (%d,%d)", lx, ly) or ""
+    if agent then
+        return what .. ": an agent can't walk in; act on it from outside with the agent's own order "
+            .. "(spy, assassinate, sabotage, bribe), which walks there and acts from the next tile" .. beside
     end
+    return what .. ": an army can't walk in; besiege it (the besiege order, \"assault\": true to storm it)" .. beside
 end
 
 -- Landing onto another faction's town is refused like a walk into one (the game won't take an army
@@ -2523,17 +2676,37 @@ end
 -- for 15 moves). The besiege advice holds for a landed army: land beside it first.
 function handlers.land(fac, o)
     local st = find_army(fac, o.army)
-    if not st then return "unknown army '" .. tostring(o.army) .. "'" end
+    if not st then return unknown_army(fac, o.army) end
     if not st.shipArmy then return "'" .. o.army .. "' is not aboard a fleet" end
     local leader = leader_of(fac, st)
     if not leader then return "'" .. o.army .. "' has no general to lead it ashore" end
     local tile = tile_at(o.x, o.y)
     if not tile then return "(" .. tostring(o.x) .. "," .. tostring(o.y) .. ") is off the map" end
-    if not is_land(tile) then return "(" .. o.x .. "," .. o.y .. ") is not land; land on a tile next to the fleet" end
+    -- the fleet's tile is its general's: a landing is one step ashore. splitArmy ignores a target
+    -- farther off and returns as if done (live 11-05 run 10 turns 1013-1016: England's "land order on
+    -- (105,135) reported done, yet Nigel stayed aboard", "failed to land twice"; the tile was two off)
+    local fx, fy = math.floor(leader.xCoord), math.floor(leader.yCoord)
+    local tx, ty = math.floor(o.x), math.floor(o.y)
+    local function shore()
+        local out = {}
+        for dx = -1, 1 do
+            for dy = -1, 1 do
+                local t = (dx ~= 0 or dy ~= 0) and tile_at(fx + dx, fy + dy)
+                if t and is_land(t) then out[#out + 1] = "(" .. (fx + dx) .. "," .. (fy + dy) .. ")" end
+            end
+        end
+        return #out > 0 and ("; land next to it: " .. table.concat(out, ", "))
+            or "; no land is next to it: sail the fleet beside the coast first"
+    end
+    if not is_land(tile) then return "(" .. o.x .. "," .. o.y .. ") is not land" .. shore() end
     local foreign = onto_foreign_settlement(fac, math.floor(o.x), math.floor(o.y))
     if foreign then return foreign .. ", from a tile beside it once landed" end
     local tired = M.no_moves_left(leader, "army", o.x, o.y)
     if tired then return tired end
+    if math.max(math.abs(tx - fx), math.abs(ty - fy)) > 1 then
+        return string.format("(%d,%d) is %d tiles from the fleet at (%d,%d); an army lands one step ashore%s",
+            tx, ty, math.max(math.abs(tx - fx), math.abs(ty - fy)), fx, fy, shore())
+    end
     record_move(fac, o.army, "army", leader.xCoord, leader.yCoord, string.format("(%d,%d)", math.floor(o.x), math.floor(o.y)), "land")
     -- the whole army splits ashore (EOP factionStruct:splitArmy disembarks). Live 10-31 18:30:
     -- moveToTile landed the general with his bodyguard only; two of three units stayed aboard
@@ -2544,6 +2717,23 @@ function handlers.land(fac, o)
     end
     local ok, err = pcall(function() fac:splitArmy(units, math.floor(o.x), math.floor(o.y)) end)
     if ok then
+        -- a split the game ignores returns as if done: the general goes with his unit, so he
+        -- stands on the target when it worked (his record outlives the stack; the stack may not)
+        -- only when he is one of the units sent (leader_of's last fallback can be the admiral, who stays)
+        local goes = false
+        for _, u in ipairs(units) do
+            if pcall(function() return u.character end) and u.character == leader then goes = true end
+        end
+        local okp, ax, ay = pcall(function() return math.floor(leader.xCoord), math.floor(leader.yCoord) end)
+        -- the game moves him a moment later (bench 11-14: land_on_coast's general still read the fleet's
+        -- tile right after a landing that took; its case waits up to 15 s), so not yet there is not a
+        -- refusal: the next report says whether he is ashore
+        if goes and okp and (ax ~= tx or ay ~= ty) then
+            log(string.format("%s: %s's landing at (%d,%d) ordered; not ashore yet, still at (%d,%d)", fac.name,
+                tostring(o.army), tx, ty, ax, ay))
+            return { pending = true, note = string.format("landing at (%d,%d) ordered; the game hasn't shown "
+                .. "it yet: the next report says whether %s is ashore", tx, ty, tostring(o.army)) }
+        end
         log(string.format("%s: %s lands at (%d,%d) by a split of its %d units", fac.name, tostring(o.army),
             math.floor(o.x), math.floor(o.y), #units))
         return nil
@@ -2572,6 +2762,21 @@ function M.into_full_settlement(fac, st, x, y)
     end
 end
 
+-- a walk aimed at sea one tile off the coast goes to that coast, the ruler's wish (live 11-22, England:
+-- "(98,165) is sea; the nearest land is (99,164)" and "(106,172) ... (105,171)" refused). Returns the land
+-- tile and a note, or nil and the refusal when the nearest land is farther off (or none is near)
+function M.to_coast(fac, x, y)
+    -- within 3, not 1 (live 11-23: England's agent to (88,178), the nearest land (91,179), refused)
+    local lx, ly = nearest_land(x, y, false, fac)
+    if lx then
+        return lx, ly, string.format("(%d,%d) is sea; moving to the nearest land (%d,%d)", x, y, lx, ly)
+    end
+    return nil, "(" .. x .. "," .. y .. ") is sea" .. (lx and ("; the nearest land is (" .. lx .. "," .. ly .. ")") or "")
+end
+
+-- a fleet ordered onto land sails to the nearest sea this close (in tiles); farther is refused
+K.FLEET_SHORE_REACH = 12
+
 function handlers.move_army(fac, o)
     local st, leader = general(fac, o.army)
     if not st then
@@ -2582,20 +2787,30 @@ function handlers.move_army(fac, o)
     end
     if type(o.x) ~= "number" or type(o.y) ~= "number" then return "move_army needs x and y" end
     local x, y, map = math.floor(o.x), math.floor(o.y), gd.stratMap
+    local coast  -- set when a sea target is moved to the land beside it (M.to_coast)
     if not (map.mapWidth and map.mapHeight and x >= 0 and y >= 0 and x < map.mapWidth and y < map.mapHeight) then
         return "(" .. x .. "," .. y .. ") is off the map"
     end
     local tile = tile_at(x, y)
     if st.isAdmiral then
         if tile and is_land(tile) then  -- live, turns 32-34: three guesses at one coast
-            local sx, sy = nearest_land(x, y, true)
-            return "a fleet can't sail onto land (" .. x .. "," .. y .. ")"
-                .. (sx and ("; the nearest sea is (" .. sx .. "," .. sy .. ")") or "")
+            -- live 11-23 turns 4576-4591: England sent Admiral Edgar to Caen's port tile (land)
+            -- seven times, refused each time, the nearest sea (104,136) one tile off; and Admiral
+            -- Gregory to inland tiles 15 times, looking for a way to Jerusalem. A fleet sent onto land
+            -- sails to the sea nearest it, as an army's sea target goes to the coast.
+            local sx, sy = nearest_land(x, y, true, nil, K.FLEET_SHORE_REACH)
+            if not sx then
+                return "a fleet can't sail onto land (" .. x .. "," .. y .. "): no sea within "
+                    .. K.FLEET_SHORE_REACH .. " tiles of it"
+            end
+            coast = string.format("(%d,%d) is land; sailing to the nearest sea, (%d,%d)", x, y, sx, sy)
+            x, y = sx, sy
         end
     elseif tile and not is_land(tile) and not own_fleet_at(fac, x, y) then
         -- live: an order to sea came back "done" and the army never moved
-        local lx, ly = nearest_land(x, y)
-        return "(" .. x .. "," .. y .. ") is sea" .. (lx and ("; the nearest land is (" .. lx .. "," .. ly .. ")") or "")
+        local lx, ly, why = M.to_coast(fac, x, y)
+        if not lx then return ly end
+        x, y, coast = lx, ly, why
     end
     if not st.isAdmiral then
         local refused = onto_foreign_settlement(fac, x, y) or M.into_full_settlement(fac, st, x, y)
@@ -2610,18 +2825,36 @@ function handlers.move_army(fac, o)
     record_move(fac, who, "army", leader.xCoord, leader.yCoord, string.format("(%d,%d)", x, y), "move_army")
     if st.isAdmiral then
         leader:moveToTile(x, y)
+        if coast then return { note = coast } end
         return
     end
     -- a general in a town goes out by a split (M.walk); the garrison stays (live 2026-10-29, York:
     -- the ruler thought the garrison had marched)
     local town, refused = M.walk(fac, leader, x, y)
     if refused then return refused end
-    if town then return { note = left_town_note(leader, town, o.army) } end
+    local lead = coast and (coast .. "; ") or ""
+    if town then return { note = lead .. left_town_note(leader, town, o.army) } end
+    if coast and not (gtown and who) then return { note = coast } end
     if gtown and who then
-        return { note = string.format("only %s and his bodyguard march out; the garrison stays in %s. To take "
+        return { note = lead .. string.format("only %s and his bodyguard march out; the garrison stays in %s. To take "
             .. "its troops, order merge_armies %s into %s once he is outside (the garrison marches out to join him)",
             who, gtown, tostring(o.army), who) }
     end
+end
+
+-- One action per target a turn, attack or agent mission. attackArmy and an out-of-range mission are
+-- queued, and the game carries them out in turn at the turn's end; a later one still points at what
+-- the earlier one changed, and the game crashed: two attacks on one rebel army (11-15 turn 1141, 20
+-- crashes, 00612ea6), an attack then an assassination of the same captain, who fell in the battle
+-- (turn 1143, 3 of 3, 00c5db34/00c5dc2f). The later order is held and runs at the next turn's start,
+-- against wherever its target is then; the ruler's result says why. M.acted_on is reset per turn
+function M.hold_if_acted_on(fac, o, key)
+    M.acted_on = M.acted_on or {}
+    if not M.acted_on[key] then return nil end
+    M.held_orders = M.held_orders or {}
+    table.insert(M.held_orders, { faction = fac.name, order = o })
+    return "waits for the next turn's start: '" .. tostring(o.target) .. "' is already the target of "
+        .. M.acted_on[key] .. " this turn, and two queued actions on one target crash the game"
 end
 
 function handlers.attack(fac, o)
@@ -2635,9 +2868,22 @@ function handlers.attack(fac, o)
                 return "'" .. o.target .. "' is now " .. tostring(e.view.faction) .. "'s army, not " ..
                     o.target_faction .. "'s; not attacking"
             end
+            -- one attack per target army a turn. attackArmy queues the attack and the game fights them in
+            -- turn at the turn's end; a second one still points at where the first battle's loser stood,
+            -- and the game opened its panel then emptied the defender's side under it: every press
+            -- crashed (live 11-15 turn 1141, 20 crashes; Humphrey alone fought fine). The later attack
+            -- runs at the next turn's start, at wherever the target is then
+            local key = string.lower(tostring(o.target))
+            local held = M.hold_if_acted_on(fac, o, key)
+            if held then return held end
             if st:attackArmy(e.stack) ~= 1 then
                 return "the game refused the attack (out of reach or no moves left)"
             end
+            M.acted_on[key] = tostring(o.army) .. "'s attack"
+            -- checked at the next turn start (M.attack_not_fought): did a battle come of it?
+            record_move(fac, mover_id(fac, o.army, leader), "army", leader.xCoord, leader.yCoord, e.view.id, "attack")
+            local rec = recorded_moves[fac.name]
+            if rec and rec[#rec] and rec[#rec].order_type == "attack" then rec[#rec].target_men = e.view.men end
             return nil
         end
     end
@@ -2652,15 +2898,12 @@ end
 -- of them are less than half, they need to be full strength as much as possible".)
 function handlers.merge_units(fac, o)
     local st = find_army(fac, o.army)
-    if not st then return "unknown army '" .. tostring(o.army) .. "'" end
+    if not st then return unknown_army(fac, o.army) end
     local groups = {}
     for i = 0, st.numOfUnits - 1 do
         local u = st:getUnit(i)
-        local ok, key = pcall(function()
-            if u.character or u.retrainingSettlement then return nil end
-            return u.eduEntry.eduType .. "|" .. (u.armourLVL or 0) .. "|" .. (u.weaponLVL or 0)
-        end)
-        if ok and key then
+        local key = merge_key(u)
+        if key then
             groups[key] = groups[key] or {}
             table.insert(groups[key], u)
         end
@@ -2725,14 +2968,24 @@ end
 -- unit with a character (a general's bodyguard). unit:kill() as merge_units uses it.
 function handlers.disband(fac, o)
     local st = find_army(fac, o.army)
-    if not st then return "unknown army '" .. tostring(o.army) .. "'" end
-    local found = {}
+    if not st then return unknown_army(fac, o.army) end
+    local found, carried = {}, false
     for i = 0, st.numOfUnits - 1 do
         local u = st:getUnit(i)
-        local ok, match = pcall(function() return not u.character and u.eduEntry.eduType == o.unit end)
-        if ok and match then found[#found + 1] = u end
+        local ok, match = pcall(function() return u.eduEntry.eduType == o.unit end)
+        if ok and match then
+            if u.character then carried = true else found[#found + 1] = u end
+        end
     end
-    if #found == 0 then return "'" .. tostring(o.army) .. "' has no '" .. tostring(o.unit) .. "' to release" end
+    if #found == 0 then
+        -- a general's bodyguard, or an admiral's ship: releasing it would kill him. Live 11-10: England's
+        -- fleet 'Admiral Richard' is one cog he rides on; "has no 'cog'" was ordered again 22 times
+        if carried then
+            return string.format("the %s in '%s' carries its commander; it can't be released while he leads it",
+                tostring(o.unit), tostring(o.army))
+        end
+        return "'" .. tostring(o.army) .. "' has no '" .. tostring(o.unit) .. "' to release"
+    end
     table.sort(found, function(a, b) return a.soldierCountStratMap < b.soldierCountStratMap end)
     local n = math.min(tonumber(o.count) or 1, #found)
     for k = 1, n do found[k]:kill() end
@@ -2765,10 +3018,32 @@ local function in_siege(st)
     return ok and s ~= nil
 end
 
+-- Walks under way, by faction then walking army: { into = id, total = units together }. Live 11-21
+-- (scratch, turn 3086): Walter Kynner and Aston Morgan walked to join George Harfford, the report
+-- still showed them apart, England re-issued both merges, and by then the two had arrived and joined
+-- him: refused as "unknown army", the ruler's wish carried out. On M, so a reload only loses the note.
+M.walking_merges = M.walking_merges or {}
+
+local function walk_arrived(fac, o)
+    local w = (M.walking_merges[fac.name] or {})[o.army]
+    if not w or w.into ~= o.into then return nil end
+    M.walking_merges[fac.name][o.army] = nil
+    local into = find_army(fac, o.into)
+    local okn, n = pcall(function() return into and into.numOfUnits end)
+    n = okn and type(n) == "number" and n or 0
+    if into and n >= w.total then
+        log(string.format("merge_armies: %s already arrived and joined %s (%d units now)", o.army, o.into, n))
+        return { note = string.format("%s already arrived and joined %s before these orders (%s has %d units "
+            .. "now); nothing more to do", o.army, o.into, o.into, n) }
+    end
+    return unknown_army(fac, o.army) .. string.format("; it was walking to join %s, which has %d units now, "
+        .. "so it fell on the way or joined someone else", tostring(o.into), n)
+end
+
 function handlers.merge_armies(fac, o)
     local st, into = find_army(fac, o.army), find_army(fac, o.into)
-    if not st then return "unknown army '" .. tostring(o.army) .. "'" end
-    if not into then return "unknown army '" .. tostring(o.into) .. "'" end
+    if not st then return walk_arrived(fac, o) or unknown_army(fac, o.army) end
+    if not into then return unknown_army(fac, o.into) end
     if st == into then return "an army can't merge into itself" end
     if (st.isAdmiral and true or false) ~= (into.isAdmiral and true or false) then
         return "a fleet and a land army can't merge"
@@ -2805,6 +3080,8 @@ function handlers.merge_armies(fac, o)
     if after < total then
         log(string.format("merge_armies: %s is walking to join %s (%s tiles); it merges when it arrives",
             tostring(o.army), tostring(o.into), tostring(dist and math.floor(dist) or "?")))
+        M.walking_merges[fac.name] = M.walking_merges[fac.name] or {}
+        M.walking_merges[fac.name][o.army] = { into = o.into, total = total }
         local town = tostring(o.army):match("^garrison:(.+)$")
         if town then  -- live, turn 12: Edinburgh's garrison left under a new captain, the town empty
             return { note = string.format("%s is %s tiles from %s: the garrison marches out of %s under a captain "
@@ -2840,36 +3117,90 @@ local function unknown_agent(fac, o)
     return text
 end
 
+-- the land tile next to (x, y), not another faction's town, nearest (fx, fy); nil if none
+function M.beside_town(fac, x, y, fx, fy)
+    local best, bx, by
+    for dx = -1, 1 do
+        for dy = -1, 1 do
+            local t = (dx ~= 0 or dy ~= 0) and tile_at(x + dx, y + dy)
+            if t and is_land(t) and not M.foreign_town_at(fac, x + dx, y + dy) then
+                local d = math.max(math.abs(x + dx - fx), math.abs(y + dy - fy))
+                if not best or d < best then best, bx, by = d, x + dx, y + dy end
+            end
+        end
+    end
+    return bx, by
+end
+
 function handlers.move_agent(fac, o)
     local a = own_agent(fac, o.agent)
     if not a then return unknown_agent(fac, o) end
     if type(o.x) ~= "number" or type(o.y) ~= "number" then return "move_agent needs x and y" end
     local x, y, map = math.floor(o.x), math.floor(o.y), gd.stratMap
+    local coast  -- set when a sea target is moved to the land beside it (M.to_coast)
     if not (map.mapWidth and map.mapHeight and x >= 0 and y >= 0 and x < map.mapWidth and y < map.mapHeight) then
         return "(" .. x .. "," .. y .. ") is off the map"
     end
     local tile = tile_at(x, y)
     if tile and not is_land(tile) and not own_fleet_at(fac, x, y) then
         -- live: an agent sent to sea came back "done" and never moved, as armies once did
-        local lx, ly = nearest_land(x, y)
-        return "(" .. x .. "," .. y .. ") is sea" .. (lx and ("; the nearest land is (" .. lx .. "," .. ly .. ")") or "")
+        local lx, ly, why = M.to_coast(fac, x, y)
+        if not lx then return ly end
+        x, y, coast = lx, ly, why
+    end
+    local town = M.foreign_town_at(fac, x, y)
+    if town then
+        -- an agent can't walk into another faction's town; it stops beside it, on the free land
+        -- tile nearest itself (live 11-23: England's agents sent into Antwerp, Angers and Rennes,
+        -- France's into Antioch, refused 6 times)
+        local bx, by = M.beside_town(fac, x, y, a.char.xCoord, a.char.yCoord)
+        if not bx then return onto_foreign_settlement(fac, x, y, true) end
+        coast = string.format("(%d,%d) is %s, %s's settlement: an agent can't walk in; stopping beside "
+            .. "it at (%d,%d) (spy, assassinate, sabotage or bribe act on it from there)", x, y,
+            tostring(town.localizedName or town.name), tostring(town.ownerFaction.name), bx, by)
+        x, y = bx, by
     end
     local refused = onto_foreign_settlement(fac, x, y, true) or no_land_path(fac, o.agent, a.char.xCoord, a.char.yCoord, x, y)
         or M.no_moves_left(a.char, "agent", x, y)
     if refused then return refused end
     record_move(fac, o.agent, "agent", a.char.xCoord, a.char.yCoord, string.format("(%d,%d)", x, y), "move_agent")
     a.char:moveToTile(x, y)
+    if coast then return { note = coast } end
 end
 
 -- run at the faction's next turn start: at its turn end a move just ordered hasn't landed yet
 -- (live: a diplomat sat on his old tile at England's turn end and stood on his target in France's
 -- report a minute later). Moves points are full again by then, so none are reported.
+
+-- an attack the game took ("done") that no battle came of: the target, still in sight with all its
+-- men, stepped away first. Live 11-20 turns 2380-2384: England sent an army at the rebel Captain
+-- Alfred (1 unit, 60 men) five turns running; each read "done", no battle was fought, and Alfred
+-- stood two tiles further off each time. Told only "done", the ruler ordered it again
+function M.attack_not_fought(fac, m)
+    if not m.target_men then return nil end
+    for _, e in ipairs(M.sight(fac).armies) do
+        if same(e.view.id, m.target) then
+            if (e.view.men or 0) < m.target_men then return nil end  -- it fought: it lost men
+            log(string.format("%s: %s's attack on %s came to no battle: %s is at (%d,%d) with all %d men",
+                fac.name, m.id, m.target, m.target, e.view.x or -1, e.view.y or -1, e.view.men or 0))
+            return { id = m.id, from_x = m.from_x, from_y = m.from_y, target = m.target,
+                     order_type = "attack", target_x = e.view.x, target_y = e.view.y }
+        end
+    end
+    return nil  -- destroyed or out of sight: nothing to tell
+end
+
 check_moves_not_made = function(fac)
     local unmade = {}
     local recorded = recorded_moves[fac.name] or {}
-    for _, m in ipairs(recorded) do
+    -- one entry at a time: live 11-20, one entry's error ("findInSettlement (a nil value)", 35 times in
+    -- two logs) dropped every move and attack check of that faction's turn
+    local function check(m)
         local cur_x, cur_y
-        if m.kind == "agent" then
+        if m.order_type == "attack" then
+            local item = M.attack_not_fought(fac, m)
+            if item then unmade[#unmade + 1] = item end
+        elseif m.kind == "agent" then
             local a = own_agent(fac, m.id)
             if a and a.char then cur_x, cur_y = a.char.xCoord, a.char.yCoord end
         else
@@ -2882,7 +3213,26 @@ check_moves_not_made = function(fac)
                 end
             end
             if not st then st = find_army(fac, m.id) end
-            if st then cur_x, cur_y = stack_pos(fac, st) end
+            -- the stand-in above (a general leading no stack) has no stack methods: his own tile it is
+            if st and st.findInSettlement then cur_x, cur_y = stack_pos(fac, st)
+            elseif leader then cur_x, cur_y = leader.xCoord, leader.yCoord end
+            -- live 11-21 08:59-09:08: Captain Jacob's board split left him on Admiral Jasper's sea tile
+            -- (108,142) but not aboard (no shipArmy, the fleet no boardedArmy), so every later board
+            -- and move did nothing. Split him back onto the shore he boarded from; the board is not made
+            if m.order_type == "board" and st and st.findInSettlement and not st.shipArmy and cur_x then
+                local tile = tile_at(cur_x, cur_y)
+                if tile and tile.isLand == 0 then
+                    local ok, err = pcall(function()
+                        local units = {}
+                        for i = 0, (st.numOfUnits or 0) - 1 do units[#units + 1] = st:getUnit(i) end
+                        fac:splitArmy(units, m.from_x, m.from_y)
+                    end)
+                    log(string.format("%s: %s stood on the sea at (%d,%d) but not aboard %s; %s", fac.name,
+                        m.id, cur_x, cur_y, tostring(m.target), ok and string.format("put back ashore at (%d,%d)",
+                        m.from_x, m.from_y) or ("the split back ashore failed: " .. tostring(err))))
+                    cur_x, cur_y = m.from_x, m.from_y
+                end
+            end
         end
         if cur_x and cur_y and cur_x == m.from_x and cur_y == m.from_y then
             local item = {
@@ -2899,6 +3249,10 @@ check_moves_not_made = function(fac)
                 fac.name, m.id, verb, tostring(m.target), m.from_x, m.from_y))
         end
     end
+    for _, m in ipairs(recorded) do
+        local ok, err = pcall(check, m)
+        if not ok then log(string.format("%s: move check failed for %s: %s", fac.name, tostring(m.id), tostring(err))) end
+    end
     unmade_moves[fac.name] = unmade
 end
 
@@ -2911,6 +3265,7 @@ function handlers.marry(fac, o)
         if same(e.view.id, o.target) then
             a.char:marry(e.char)
             M.note_proposal(fac.name, a.id, e.view.id)
+            M.mission_ordered(fac.name)
             return nil
         end
     end
@@ -2918,6 +3273,11 @@ function handlers.marry(fac, o)
 end
 
 local busy = {}  -- agents given an order this turn (reset per orders file); one action each
+-- targets of a mission issued this turn (lower-case name -> agent), reset with busy: one mission
+-- each. Live 11-13 (turn 1072): England bribed Captain Americo and sent an assassin at him the
+-- same turn; the bribe won him over, and the assassination then ran on the defected captain and
+-- crashed the game (eip in the heap, c0000096). The same pair with the bribe failing didn't crash.
+local targeted = {}
 
 -- Agent orders: your own agent of the right kind, against a target in sight right now.
 -- EOP's agent actions return nothing, so "done" means issued; the next report shows the outcome.
@@ -2933,8 +3293,8 @@ local function agent_order(fac, o)
         return nil, "'" .. agent.id .. "' is " .. a(agent.kind) .. ", not " .. a(need)
     end
     if busy[agent.id] then return nil, "'" .. agent.id .. "' already has an order this turn" end
-    local okl, alive = pcall(function() return agent.char.namedCharacter:isAlive() end)
-    if okl and (alive == false or alive == 0) then return nil, "'" .. agent.id .. "' is dead" end
+    local okl, alive = pcall(function() return record_alive(agent.char.namedCharacter) end)
+    if okl and alive == false then return nil, "'" .. agent.id .. "' is dead" end
     local seen = M.sight(fac)
     local name = o.type == "sabotage" and o.settlement or o.target
     for _, e in ipairs(seen.settlements) do
@@ -2960,7 +3320,13 @@ local function in_range(fac, o, agent, target)
     end)
     if not ok then return false, "can't tell how far '" .. tostring(o.agent) .. "' is from the target" end
     local what = tostring(o.type == "sabotage" and o.settlement or o.target)
-    if dist == 0 then return false, "'" .. tostring(o.agent) .. "' is already inside " .. what end
+    -- and say what to do (live 11-05, scratch turns 75-77: England sent the same assassination three
+    -- turns running and got "'Nigel Walkley' is already inside Gawain de Provence" each time)
+    if dist == 0 then
+        return false, "'" .. tostring(o.agent) .. "' is already inside " .. what .. " (on its tile): an agent "
+            .. "acts only from a tile next to its target, so move '" .. tostring(o.agent) .. "' one tile away "
+            .. "(move_agent) and give the order again next turn"
+    end
     if dist > 1 then
         local refused = no_land_path(fac, o.agent, agent.xCoord, agent.yCoord, target.xCoord, target.yCoord)
             or M.no_moves_left(agent, "agent")
@@ -2977,9 +3343,21 @@ local function agent_handler(on_char, on_sett)
     return function(fac, o)
         local agent, char, sett = agent_order(fac, o)
         if not agent then return char end  -- char holds the reason
+        local name = tostring(o.type == "sabotage" and o.settlement or o.target)
+        local key = string.lower(name)
+        if targeted[key] then
+            return "'" .. name .. "' is already the target of " .. targeted[key]
+                .. "'s mission this turn: one mission per target a turn"
+        end
+        if not sett then
+            local held = M.hold_if_acted_on(fac, o, key)
+            if held then return held end
+        end
         busy[o.agent] = true
         local near, why = in_range(fac, o, agent, sett or char)
         if not near then return why end
+        targeted[key] = tostring(o.agent)
+        if not sett then M.acted_on = M.acted_on or {}; M.acted_on[key] = tostring(o.agent) .. "'s mission" end
         if sett then
             if not on_sett then return "target '" .. o.target .. "' is a settlement" end
             agent[on_sett](agent, sett)
@@ -2987,6 +3365,10 @@ local function agent_handler(on_char, on_sett)
             if not on_char then return "target is not a settlement" end
             agent[on_char](agent, char)
         end
+        -- End Turn waits for a mission against a character (an assassination reported 6 s after its
+        -- order, inside the turn). One against a settlement (sabotage) resolves after End Turn
+        -- (10-30: 0-9 s after it), so holding the turn only delays it
+        if not sett then M.mission_ordered(fac.name) end
     end
 end
 
@@ -3144,6 +3526,7 @@ K.MOVES_OR_ATTACKS = {
 -- later try (autoplay: the human's own ruler may answer during its turn). Returns true
 -- once the turn's orders are settled (applied, or marked late).
 local function apply_orders(fac, cfg, turn, final)
+    if M.fork_level() < K.FORK_LEVEL_NEEDED then return false end
     local dir = turn_dir(cfg, turn - 1, fac.name)
     if applied[dir] then return true end
     local text = read_file(dir .. "/orders.json")
@@ -3178,8 +3561,23 @@ local function apply_orders(fac, cfg, turn, final)
     M.found_this_turn = M.found_this_turn or {}
     M.found_this_turn[fac.name] = {}  -- armies found by this turn's orders (find_army)
     local results = {}
-    busy, ordered = {}, {}
+    busy, ordered, targeted = {}, {}, {}
+    M.acted_on = {}
     recorded_moves[fac.name] = {}  -- last turn's were checked at this turn's start
+    -- orders held from last turn (M.hold_if_acted_on: one action per target a turn) go first; one held
+    -- again goes back on the list for the turn after
+    local waiting = M.held_orders or {}
+    M.held_orders = {}
+    for _, d in ipairs(waiting) do
+        if d.faction == fac.name then
+            local ok, res = pcall(apply, fac, d.order, cfg)
+            log(string.format("%s held %s %s -> %s: %s", fac.name, tostring(d.order.type),
+                              tostring(d.order.army or d.order.agent), tostring(d.order.target),
+                              (not ok and ("error: " .. tostring(res))) or (type(res) == "string" and res) or "done"))
+        else
+            M.held_orders[#M.held_orders + 1] = d
+        end
+    end
     for i, o in ipairs(orders.orders) do
         local ok, res = pcall(apply, fac, o, cfg)
         local err, note
@@ -3211,35 +3609,127 @@ local function apply_orders(fac, cfg, turn, final)
     return true
 end
 
+-- WORKAROUND (game/EOP bug, not understood): a seated faction's admiral leaving the game crashes the
+-- next round's start. 11-11, resume_t252.sav: England's only admiral (Admiral Richard, 66) dies of old
+-- age at the year's end, a new admiral is made, and England's turn-start character pass returns to
+-- eip=0 (medieval2.exe loop 0x4f8011 -> 0x597c60). No Parley at all: killing him, or his ship, crashes
+-- 2 of 2; killing the HRE's admiral or England's merchant doesn't; him held at 30, 0 of 3. So his age is
+-- capped: old age can't take him. Battle or assassination still can. HANDOFF has the open bug.
+M.ADMIRAL_AGE_CAP = 50
+function M.spare_admirals(fac)
+    for i = 0, (fac.numOfCharacters or 0) - 1 do
+        pcall(function()
+            local c = fac:getCharacter(i)
+            local nc = c and c:getTypeName() == "admiral" and c.namedCharacter
+            local age = nc and tonumber(nc.age)
+            if age and age > M.ADMIRAL_AGE_CAP then
+                nc.age = M.ADMIRAL_AGE_CAP
+                log(string.format("%s: %s's age held at %d (was %d): an admiral's death crashes the game",
+                    fac.name, tostring(nc.fullName), M.ADMIRAL_AGE_CAP, age))
+            end
+        end)
+    end
+end
+
+-- A character record's address (the pointer sol2's userdata holds), compared, never followed.
+-- Tests replace it: the fake game's records are tables.
+function M.record_addr(ud)
+    local ok, v = pcall(function()
+        local ffi = require("ffi")
+        return tonumber(ffi.cast("uint32_t*", ud)[0])
+    end)
+    return ok and v or nil
+end
+
+-- Spouses no faction lists any more. Live 11-11 turn 272, 11-13 turns 640 and 1252: the game
+-- crashed at eip 00eff4db writing a natural death's message (0xc4dec0 from 0x5a807c): it copies
+-- the dead man's name, then his spouse's (characterRecord +0x228), and that record had been freed.
+-- A load rebuilds the records (none were stale just after the 16:25 relaunch: 3672 married, all
+-- listed); the crashes came 180+ turns into a session. So at each faction's turn start every
+-- record's spouse pointer is compared, by value, with the records the factions list; one that
+-- isn't is cleared, which the game's message code handles (no spouse: a default name). The log
+-- names the freed spouse from the last scan, to find what frees them. 19 ms on 6449 records.
+local spouse_seen = {}  -- address -> "name (faction)" of each spouse at the last scan
+function M.stale_spouses()
+    local live, recs = {}, {}
+    for i = 0, stratmap.game.getFactionsCount() - 1 do
+        pcall(function()
+            local f = stratmap.game.getFaction(i)
+            for j = 0, (f.numOfNamedCharacters or 0) - 1 do
+                local r = f:getNamedCharacter(j)
+                local a = r and M.record_addr(r)
+                if a then live[a] = f.name; recs[#recs + 1] = { f = f.name, r = r } end
+            end
+        end)
+    end
+    local names, cleared = {}, 0
+    for _, e in ipairs(recs) do
+        pcall(function()
+            local sp = e.r.spouse
+            local a = sp and M.record_addr(sp)
+            if not a then return end
+            if live[a] then
+                if not names[a] then
+                    local okn, n = pcall(function() return clean_name(sp.fullName) end)
+                    names[a] = tostring(okn and n or "?") .. " (" .. live[a] .. ")"
+                end
+                return
+            end
+            e.r.spouse = nil
+            cleared = cleared + 1
+            log(string.format("stale spouse cleared: %s's %s (alive=%s) was married to a freed record %08x, "
+                .. "last seen as %s", e.f, tostring(clean_name(e.r.fullName)), tostring(record_alive(e.r)),
+                a, spouse_seen[a] or "unknown"))
+        end)
+    end
+    spouse_seen = names
+    return cleared
+end
+
 function M.on_turn_start(fac)
     local cfg = config()
     if not cfg then return end
+    pcall(M.stale_spouses)
     -- QA bench quiet world (freeze=*): the runner makes the Pope young after each bench load, but a
     -- turn case plays rounds and he ages a year each; keep him young at the player's turn start
     if cfg.freeze["*"] and fac.isPlayerControlled == 1 and M.qa then M.qa.quiet() end
     -- QA bench: movers it keeps without moves, a seatless faction's too (the covert case's rebel
     -- victim, live 10-30 21:38: the rebel army beside the assassin was gone a turn later)
     if M.qa then pcall(M.qa.tire_due, fac) end
-    if M.qa then pcall(M.qa.court_due, fac) end  -- the diplomacy suite's AI envoy, on its own turn
+    local courted = false  -- the diplomacy suite's AI envoy, on its own turn: its AI stays awake this turn
+    if M.qa then
+        local okc, parleyed = pcall(M.qa.court_due, fac)
+        courted = okc and parleyed == true
+    end
     -- an AI faction's game AI frozen or not, as the config says, every turn (a save may not keep
     -- it): a seat's with freeze=<faction>, and every AI faction's with freeze=* (the QA bench's
     -- quiet world) unless thaw=<faction>. Any other is unfrozen, so a world the bench froze
     -- thaws again under the real config. One field read per faction turn start.
     if fac.isPlayerControlled ~= 1 then
         local frozen = cfg.freeze[fac.name] or (cfg.freeze["*"] and not cfg.thaw[fac.name])
+        if frozen and courted then
+            frozen = false
+            log(fac.name .. ": game AI left awake this turn for its envoy's parley (an offer needs it)")
+        end
         local want = frozen and 1 or 0
         pcall(function()
             if fac.freezeFactionAI ~= want then
                 fac.freezeFactionAI = want
                 log(fac.name .. ": game AI " .. (want == 1 and "frozen" or "unfrozen"))
+            elseif want == 1 then
+                -- every frozen turn, not just the change: a QA case reads it as that faction's turn
+                -- having come (frozen_rival_offers_nothing, 11-14: two rounds, logged only once)
+                log(fac.name .. ": game AI frozen (kept)")
             end
         end)
-        M.frozen_turn = want == 1 and { fac = fac, since = M.clock() } or nil
+        M.frozen_turn = want == 1 and { fac = fac, since = M.clock(),
+            hold_moves = (cfg.freeze[fac.name] and cfg.factions[fac.name]) and true or nil } or nil
     end
     if not cfg.factions[fac.name] then return end
     local turn = gd.campaignStruct.turnNumber
     -- the orchestrator makes turn folders from this (Lua can't create directories)
     atomic_write(root .. "/heartbeat.txt", "turn=" .. turn .. "\n")
+    pcall(M.spare_admirals, fac)
     -- playtest funds: top up treasury if below target at turn start (testing switch)
     local target = cfg.playtest_funds and cfg.playtest_funds[fac.name] or 0
     if target > 0 and fac.money < target then
@@ -3263,13 +3753,21 @@ function M.on_turn_start(fac)
     -- under autoplay the human's turn waits for its ruler, if it played last turn
     local waits = cfg.autoplay and fac.isPlayerControlled == 1
         and exists(turn_dir(cfg, turn - 1, fac.name) .. "/state.json")
-    if cfg.autoplay and fac.isPlayerControlled == 1 then
+    -- each step says so first, so a crash here names its step (live 11-06 12:29: the log stopped between
+    -- "trained in York" and "governors england", and one replay later the same turn start went through)
+    local human = cfg.autoplay and fac.isPlayerControlled == 1
+    if human then
+        log("turn start " .. fac.name .. ": autoplay_turn_started")
         M.autoplay_turn_started(turn)
+        log("turn start " .. fac.name .. ": set_governors")
         M.set_governors(fac, areas_of(cfg, fac.name))
+        log("turn start " .. fac.name .. ": follow")
         M.follow(fac)
+        log("turn start " .. fac.name .. ": apply_orders")
     end
     ordered = {}
     if apply_orders(fac, cfg, turn, not waits) then pcall(M.keep_sieges, fac) end
+    if human then log("turn start " .. fac.name .. ": done") end
 end
 
 -- EOP's siegeSettlement(town, false) on the town an army already besieges asks the game AI which
@@ -3339,13 +3837,75 @@ function M.follow(fac)
     end)
 end
 
+-- one line describing the battle about to be auto-resolved: each side's armies (faction, units, leader).
+-- Live 11-13 turns 808/809: auto-resolve crashed at medieval2.exe 00612ea6 reading
+-- battle.sides[i].armies[0].army (null) -> its settlement; this shows which side was empty
+function M.battle_sides()
+    local ok, text = pcall(function()
+        local b = M2TW.battle
+        local parts = { "sides=" .. tostring(b.sidesNum) }
+        for i = 1, b.sidesNum do
+            local s = b.sides[i]
+            local armies = {}
+            for k = 1, s.armiesNum do
+                local ok2, desc = pcall(function()
+                    local a = s.armies[k].army
+                    if a == nil then return "NIL" end
+                    local who = a.leader and a.leader.characterRecord and a.leader.characterRecord.localizedDisplayName
+                    local where = a.leader and (a.leader.xCoord .. "," .. a.leader.yCoord) or "?"
+                    return a.faction.name .. ":" .. tostring(a.numOfUnits) .. "u:" .. tostring(who) .. "@" .. where
+                end)
+                armies[#armies + 1] = ok2 and desc or ("err " .. tostring(desc))
+            end
+            parts[#parts + 1] = string.format("[%d %s n=%d %s]", i, s.isDefender and "def" or "att",
+                s.armiesNum, table.concat(armies, ", "))
+        end
+        return table.concat(parts, " ")
+    end)
+    return ok and text or ("unavailable: " .. tostring(text))
+end
+
+-- why the battle is over, or nil while it can still be fought (or can't be read: then the press goes on,
+-- as before). Auto-resolve on a battle with a side's first army gone is the crash at medieval2.exe
+-- 00612ea6 (it reads sides[i].armies[0].army -> +0x100): live 11-13 turns 808/809 and 11-15 turn 1141
+-- (20 in a row). The first press had resolved the battle and destroyed the defender; the button stayed
+-- findable after the panel went, and a second press ran the battle again on the empty side.
+function M.battle_over()
+    local ok, why = pcall(function()
+        local b = M2TW.battle
+        if (b.sidesNum or 0) < 2 then return "fewer than 2 sides" end
+        for i = 1, b.sidesNum do
+            local s = b.sides[i]
+            if (s.armiesNum or 0) < 1 or s.armies[1].army == nil then return "side " .. i .. " has no army" end
+        end
+    end)
+    return ok and why or nil
+end
+
+-- the one way the bridge presses auto-resolve: a scripted click (execute() on it hung the game, live
+-- 2026-10-29 21:04, England defending at Caen), and never on a battle with a side emptied. Live 11-15
+-- turn 1141 that panel took no press: auto-resolve crashed at 00612ea6, Withdraw faulted at 0070fca3.
+-- Its cause (two queued attacks on one army) is held off in handlers.attack; if it shows anyway, the
+-- turn stands and is reported stuck, rather than crash
+function M.press_auto_resolve()
+    local over = M.battle_over()
+    if over then
+        log("auto-resolve not pressed: the battle has a side with no army (" .. over .. "); nothing on "
+            .. "this panel is safe to press (see handlers.attack)")
+        return false
+    end
+    stratmap.game.scriptCommand("select_ui_element", "prebattle_auto_resolve_button")
+    stratmap.game.scriptCommand("simulate_mouse_click", "lclick_up")
+    return true
+end
+
 -- EOP's onPreBattlePanelOpen: under autoplay nobody is there to choose, so auto-resolve
 function M.on_pre_battle()
     local cfg = config()
     if not cfg or not cfg.autoplay then return end
     log("autoplay: battle panel open; auto-resolving")
-    stratmap.game.scriptCommand("select_ui_element", "prebattle_auto_resolve_button")
-    stratmap.game.scriptCommand("simulate_mouse_click", "lclick_up")
+    log("battle sides: " .. M.battle_sides())
+    M.press_auto_resolve()
 end
 
 -- --- autoplay: end the human's turn once every ruler has answered ----------------------
@@ -3379,10 +3939,7 @@ end
 -- or when scripted is set. Never both: one press each. (No helper local for the scripted click:
 -- the main chunk is at Lua's 200-local limit; live, one more stopped the bridge loading.)
 local function click(element, scripted)
-    -- the battle panel's auto-resolve stays on the scripted click: live (2026-10-29 21:04, England
-    -- defending at Caen, the Battle Deployment panel), execute() on it hung the game for good; the
-    -- bridge never logged again and crash-watch had to relaunch. The scripted click had worked for weeks.
-    if element == "prebattle_auto_resolve_button" then scripted = true end
+    if element == "prebattle_auto_resolve_button" then return M.press_auto_resolve() end
     if not scripted then
         local ok, el = pcall(function() return gameSTDUI and gameSTDUI.getUiElement(element) end)
         if ok and el and el.execute and pcall(function() el:execute() end) then return end
@@ -3394,52 +3951,6 @@ end
 -- End Turn by the game's own call too (live, 2026-10-29: execute pressed the auto-resolve button
 -- and the battle resolved; #204); the scripted click stays the fallback inside click
 local function click_end_turn() click("end_turn") end
-
--- One step of the first screen job, at most every UI_STEP seconds (each step opens a scroll the
--- next needs drawn). Retraining, as a player does it (live, London): select the settlement, its
--- recruitment scroll, the Retrain tab; then the turn loop clicks each card (EOP's execute() on a
--- card does nothing) and closes the scroll. Card positions are in the UI's 1024x768 space.
-local UI_STEP, UI_GIVE_UP = 1.5, 120
-
-local function run_ui_job(now)
-    local j = ui_jobs[1]
-    j.started = j.started or now
-    if now - j.started > UI_GIVE_UP then  -- the turn loop never answered: End Turn mustn't wait forever
-        log("screen job " .. j.kind .. " " .. j.settlement .. ": gave up after " .. UI_GIVE_UP .. "s")
-        table.remove(ui_jobs, 1)
-        return
-    end
-    if j.at and now - j.at < UI_STEP then return end
-    j.at = now
-    if j.step == 1 then
-        stratmap.game.scriptCommand("select_settlement", j.settlement)
-    elseif j.step == 2 then
-        click("recruitment_button")
-    elseif j.step == 3 then
-        click("settlement_info_retrain_tab")
-    elseif j.step == 4 then
-        local cards = {}
-        local e = gameSTDUI and gameSTDUI.getUiElement("available_training_options")
-        for i = 0, (e and e.subElementsNum or 0) - 1 do  -- getSubElement is unchecked: stay in range
-            local c = e:getSubElement(i)
-            cards[#cards + 1] = { (c.xPos + c.xSize / 2) / 1024, (c.yPos + c.ySize / 2) / 768 }
-        end
-        local id = "popup-" .. gd.campaignStruct.turnNumber .. "-r" .. os.time()
-        j.request = root .. "/" .. id
-        atomic_write(j.request .. ".req", encode({ id = id, kind = "clicks", what = "retrain " .. j.settlement,
-                                                  cards = cards, faction = j.faction,
-                                                  turn = gd.campaignStruct.turnNumber }))
-        log("retrain " .. j.settlement .. ": " .. #cards .. " units can be retrained; the turn loop clicks them")
-    else  -- step 5: wait for the turn loop's clicks
-        if not exists(j.request .. ".done") then return end
-        os.remove(j.request .. ".req")
-        os.remove(j.request .. ".done")
-        log("retrain " .. j.settlement .. ": done")
-        table.remove(ui_jobs, 1)
-        return
-    end
-    j.step = j.step + 1
-end
 
 -- an open UI element's buttons (sub-elements), and their names as one line
 local function buttons_of(el)
@@ -3499,22 +4010,253 @@ local function open_popups()
     return #open > 0 and open or K.DISMISS
 end
 
--- Which UI elements are open right now, by trying every UI-like name in the game's exe
--- (ui_names.txt, written by install_bridge.sh) against the game's own lookup. EOP can't list
--- open elements, so this is how an unknown dialog's real name and buttons get found: written to
--- ui_scan-<who>.txt for a human (or Claude) to read. Nothing found this way is pressed.
-function M.scan_ui(who)
-    local text = read_file(root .. "/ui_names.txt")
-    if not text or not (gameSTDUI and gameSTDUI.getUiElement) then return end
-    local lines = {}
-    for name in text:gmatch("[^\r\n]+") do
-        -- never the papal election's scrolls (K.PAPAL_SCROLLS: looking one up hung the game)
-        local ok, el = false, nil
-        if not name:find("papal", 1, true) then ok, el = pcall(gameSTDUI.getUiElement, name) end
-        if ok and el then
-            local okd, parts = pcall(describe, el)
-            lines[#lines + 1] = name .. ": " .. (okd and parts or "?")
+-- The windows on screen now, from the game's own list of what is drawn: the fork's
+-- gameSTDUI.getOpenUiElements (#6) gives strat_ui's children bar the campaign HUD. A closed window
+-- keeps its parts on the game's list but is cut loose from strat_ui, so it isn't here (getUiElement
+-- still finds it by name). Each entry: { name, el, children = { part names, depth-first },
+-- parts = { [name] = element } }, so a button can be pressed by its element; nil when unreadable.
+-- A papal scroll's parts are never walked (looking one up by name hung the game, K.PAPAL_SCROLLS).
+function M.ui_name(e)
+    local ok, n = pcall(function() return e.elementName end)
+    if ok and type(n) == "string" and n ~= "" and n ~= "null" then return n end
+end
+-- every named part under `el`, depth-first (names, and name -> element), at most 8 deep and 60
+-- names. Safe at any depth on fork level 2: getSubElement never hands back a stale child (#9)
+function M.ui_parts(el)
+    local kids, parts = {}, {}
+    local function walk(e, depth)
+        local num = e.subElementsNum or 0
+        if depth > 8 or #kids > 60 or num < 1 or num > 200 then return end
+        for i = 0, num - 1 do
+            local c = e:getSubElement(i)
+            if c then
+                local cn = M.ui_name(c)
+                if cn then
+                    kids[#kids + 1] = cn
+                    parts[cn] = parts[cn] or c
+                end
+                walk(c, depth + 1)
+            end
         end
+    end
+    pcall(walk, el, 1)
+    return kids, parts
+end
+function M.open_ui()
+    if not (gameSTDUI and gameSTDUI.getOpenUiElements) then return nil end
+    local ok, list = pcall(gameSTDUI.getOpenUiElements)
+    if not ok or type(list) ~= "table" then return nil end
+    local out = {}
+    for _, w in ipairs(list) do
+        local wn = M.ui_name(w)
+        local kids, parts = {}, {}
+        if not (wn and K.PAPAL_SCROLLS[wn]) then kids, parts = M.ui_parts(w) end
+        -- an unnamed window with no part at all is HUD furniture (live: a few under strat_ui); a
+        -- decision message may have no named part, only its check and X
+        if wn or #kids > 0 or (tonumber(w.subElementsNum) or 0) > 0 then
+            out[#out + 1] = { name = wn or "unnamed", el = w, children = kids, parts = parts }
+        end
+    end
+    return out
+end
+
+-- Is `name` (a window or one of its named parts) on screen? true/false from the game's own list of
+-- what is drawn (M.open_ui), nil when that list can't be read. getUiElement also finds a window that
+-- has closed (its parts stay on the game's list, cut loose from strat_ui), and a press on one crashed
+-- the game: live 11-15 turn 1143, post_battle_scroll's tick pressed again after its result was
+-- acknowledged (00c5db34, 2 of 2); turn 1141, the battle panel's auto-resolve. Read once a second
+function M.on_screen(name)
+    local now = M.clock()
+    if not M._open_at or now - M._open_at >= 1 then
+        local ok, list = pcall(M.open_ui)
+        M._open, M._open_at = ok and list or nil, now
+    end
+    if not M._open then return nil end
+    for _, w in ipairs(M._open) do
+        if w.name == name then return true end
+        for _, c in ipairs(w.children) do
+            if c == name then return true end
+        end
+    end
+    return false
+end
+
+-- A decision scroll's check and X: two square buttons side by side under one part (live 11-15, a
+-- suitor offer: an unnamed part with two 42x42 buttons at 466,515 and 516,515; the left one the
+-- check). Returns accept, decline (elements) or nil. Found by shape: their names are empty.
+function M.choice_buttons(el)
+    local found
+    local function square(b)
+        local w, h = tonumber(b.xSize) or 0, tonumber(b.ySize) or 0
+        return w >= 30 and w <= 60 and math.abs(w - h) <= 4
+    end
+    local function walk(e, depth)
+        if found or depth > 6 then return end
+        local num = e.subElementsNum or 0
+        if num < 1 or num > 200 then return end
+        if num == 2 then
+            local a, b = e:getSubElement(0), e:getSubElement(1)
+            if a and b and square(a) and square(b) and a.yPos == b.yPos and a.xPos < b.xPos then
+                found = { a, b }
+                return
+            end
+        end
+        for i = 0, num - 1 do
+            local c = e:getSubElement(i)
+            if c then walk(c, depth + 1) end
+        end
+    end
+    pcall(walk, el, 1)
+    if found then return found[1], found[2] end
+end
+
+-- The open windows with a check and an X (a marriage, suitor or adoption offer, any decision
+-- message): { name, el, accept, decline } each. Never a papal scroll. Offers stack: one shows, and
+-- the next comes up when it closes (live 11-15, two forced suitors)
+function M.open_choices()
+    local out = {}
+    for _, w in ipairs(M.open_ui() or {}) do
+        if not K.PAPAL_SCROLLS[w.name] then
+            local a, d = M.choice_buttons(w.el)
+            if a then out[#out + 1] = { name = w.name, el = w.el, accept = a, decline = d } end
+        end
+    end
+    return out
+end
+function M.open_choice() return M.open_choices()[1] end
+
+-- Bind a decision request to its own scroll, the first open choice no other request holds (W30:
+-- with offers stacked, an answer must land on its own scroll). Elements compare by address (==)
+function M.bind_scroll(p, list)
+    for _, c in ipairs(M.open_choices()) do
+        local taken = false
+        for _, q in ipairs(list) do
+            if q ~= p and q.scroll_el ~= nil and q.scroll_el == c.el then taken = true end
+        end
+        if not taken then
+            p.scroll_el = c.el
+            return true
+        end
+    end
+    return false
+end
+
+-- Press the ruler's answer ("accept" or "decline") on a decision scroll by its element, no click
+-- and no key (W03 W21: a screen click on a marriage scroll crashed the game; Escape was the
+-- stand-in). With `el`, only on that scroll. Returns true, or false and why: "none" (no such
+-- scroll on screen) or "other" (another one is up; its own may come up when that one closes)
+function M.press_choice(which, what, el)
+    local list, c = M.open_choices(), nil
+    for _, o in ipairs(list) do
+        if el == nil or o.el == el then c = o break end
+    end
+    if not c then return false, (#list > 0) and "other" or "none" end
+    local ok, err = pcall(function() c[which]:execute() end)
+    log("popup: " .. tostring(what) .. ": pressed " .. which .. " on " .. c.name .. " by its element"
+        .. (ok and "" or (" (failed: " .. tostring(err) .. ")")))
+    M._open_at = nil
+    return ok
+end
+
+-- Candidate buttons on a papal election vote scroll: elements of class UI::VOTE_BUTTON,
+-- sorted top to bottom by yPos so candidates match top-to-bottom order.
+function M.vote_buttons(el)
+    if not el or M.fork_level() < 5 then return {} end
+    local buttons = {}
+    local function walk(e, depth)
+        if not e or depth > 4 then return end
+        local n = tonumber(e.subElementsNum) or 0
+        for i = 0, n - 1 do
+            local c = e:getSubElement(i)
+            if c then
+                if M.ui_class(c) == "VOTE_BUTTON" then
+                    buttons[#buttons + 1] = c
+                else
+                    walk(c, depth + 1)
+                end
+            end
+        end
+    end
+    pcall(walk, el, 1)
+    table.sort(buttons, function(a, b)
+        local ya, yb = tonumber(a.yPos) or 0, tonumber(b.yPos) or 0
+        if ya ~= yb then return ya < yb end
+        return (tonumber(a.xPos) or 0) < (tonumber(b.xPos) or 0)
+    end)
+    return buttons
+end
+
+-- Open papal election scroll with candidate buttons: { name, el, buttons } each.
+function M.open_votes()
+    local out = {}
+    for _, w in ipairs(M.open_ui() or {}) do
+        if w.name == "papal_election_scroll" or (w.name and w.name:find("papal_election", 1, true)) then
+            local btns = M.vote_buttons(w.el)
+            if btns and #btns > 0 then
+                out[#out + 1] = { name = w.name, el = w.el, buttons = btns }
+            end
+        end
+    end
+    return out
+end
+function M.open_vote() return M.open_votes()[1] end
+
+-- Press the ruler's chosen candidate on the papal election scroll by its element.
+function M.press_vote(pick, what, el)
+    local list = M.open_votes()
+    local v
+    for _, o in ipairs(list) do
+        if el == nil or o.el == el then v = o break end
+    end
+    if not v or not v.buttons or #v.buttons == 0 then return false, (#list > 0) and "other" or "none" end
+    local btn
+    local idx = tonumber(pick)
+    if idx and idx >= 1 and idx <= #v.buttons then
+        btn = v.buttons[idx]
+    else
+        for _, b in ipairs(v.buttons) do
+            if b.elementName == pick or (b.elementName and b.elementName:find(tostring(pick), 1, true)) then
+                btn = b
+                break
+            end
+        end
+    end
+    if not btn or M.ui_class(btn) ~= "VOTE_BUTTON" then
+        return false, not btn and "no_button" or "not_vote_button"
+    end
+    local ok, err = pcall(function() btn:execute() end)
+    local btn_name = (btn.elementName and btn.elementName ~= "" and btn.elementName ~= "null")
+        and btn.elementName or ("candidate " .. tostring(pick))
+    log("popup: " .. tostring(what) .. ": pressed " .. btn_name .. " on " .. v.name .. " by its element"
+        .. (ok and "" or (" (failed: " .. tostring(err) .. ")")))
+    M._open_at = nil
+    return ok
+end
+
+-- open_ui as one line for the log: "finance_scroll(a,b)" or "" when nothing is open beyond the HUD
+function M.open_ui_line()
+    local ok, list = pcall(M.open_ui)
+    if not ok or not list then return nil end
+    local parts = {}
+    for _, e in ipairs(list) do
+        parts[#parts + 1] = e.name .. (#e.children > 0 and ("(" .. table.concat(e.children, ",") .. ")") or "")
+    end
+    return table.concat(parts, " ")
+end
+
+-- What is on screen right now (M.open_ui): each window with its direct parts (unnamed ones by
+-- index, with position and size) and every named part under it, written to ui_scan-<who>.txt for a
+-- human (or Claude) to read. Nothing found this way is pressed.
+function M.scan_ui(who)
+    local list = M.open_ui()
+    if not list then return end
+    local lines = {}
+    for _, w in ipairs(list) do
+        if w.name == "end_campaign_scroll" then log("campaign over: end_campaign_scroll on screen") end
+        local okd, parts = false, nil
+        if not K.PAPAL_SCROLLS[w.name] then okd, parts = pcall(describe, w.el) end
+        lines[#lines + 1] = w.name .. ": " .. (okd and parts or "?")
+            .. (#w.children > 0 and (" | named: " .. table.concat(w.children, ", ")) or "")
     end
     local file = root .. "/ui_scan-" .. who:gsub("[^%w]+", "-") .. ".txt"
     atomic_write(file, table.concat(lines, "\n") .. "\n")
@@ -3618,10 +4360,12 @@ function M.record_layout(scroll, el)
     local file = K.LAYOUT_FILES[scroll]
     if not file or recorded[scroll] then return end
     recorded[scroll] = true
-    -- one level only, as the UI scans do safely: a walk four levels down crashed the game live
-    -- (the siege panel has a part named "null", likely a bad pointer; pcall can't catch that)
+    -- its direct parts, then every named part at any depth: a walk four levels down once crashed
+    -- the game (siege_scroll's "null" part held a stale pointer); fork level 2 returns nil for those
     pcall(function()
-        atomic_write(root .. "/" .. file, scroll .. ": " .. describe(el) .. "\n")
+        local kids = M.ui_parts(el)
+        atomic_write(root .. "/" .. file, scroll .. ": " .. describe(el)
+            .. (#kids > 0 and (" | named: " .. table.concat(kids, ", ")) or "") .. "\n")
         log("popup " .. scroll .. ": layout written to " .. file)
     end)
 end
@@ -3679,7 +4423,7 @@ local function press_tick_part(only)
             and not K.PAPAL_SCROLLS[scroll] then
             local ok, done = pcall(function()
                 local el = gameSTDUI.getUiElement(scroll)
-                if not el then return false end
+                if not el or M.on_screen(scroll) == false then return false end  -- found, but closed
                 local b
                 if K.TICK_PARTS[scroll] then
                     b = el
@@ -3748,10 +4492,141 @@ local function close_spy_report(now)
     end
 end
 
+-- A minimized message's icon is a 47x47 root element at the left edge, stacked up from the bottom
+-- (fork level 4 lists the roots). Fork level 6's activate() runs the icon's own use function, which
+-- opens its message as a click would. execute() presses only buttons: on an icon it jumps past the
+-- icon's vtable and crashed the game (11-19, 11-20). Returns the slot opened and how many there are.
+function M.open_minimized(tries)
+    if M.fork_level() < 6 or not (gameSTDUI and gameSTDUI.getRootUiElements) then return nil end
+    local icons = {}
+    for _, e in ipairs(gameSTDUI.getRootUiElements() or {}) do
+        if e.xSize == 47 and e.ySize == 47 and e.xPos == 0 and e.activate then icons[#icons + 1] = e end
+    end
+    if #icons == 0 then return nil end
+    table.sort(icons, function(a, b) return a.yPos > b.yPos end)  -- bottom first, as the click went
+    local k = (tries - 1) % #icons + 1
+    icons[k]:activate()
+    return k, #icons
+end
+
+M.papal_results = {}
+
+local function close_papal_results(who, tries)
+    if not gameSTDUI then return false end
+    -- Never looked up by name (that hung the game inside its open event, 10-30): strat_ui's parts
+    -- and open UI are checked by elementName only.
+    local strat_parts = 0
+    local ok, el = pcall(function()
+        if not gameSTDUI.getUiElement then return nil end
+        local s = gameSTDUI.getUiElement("strat_ui")
+        strat_parts = (s and tonumber(s.subElementsNum)) or 0
+        for i = 0, strat_parts - 1 do  -- getSubElement is unchecked: stay in range
+            local b = s:getSubElement(i)
+            if b and b.elementName == "papal_election_results_scroll" then return b end
+        end
+    end)
+    el = (ok and el) or nil
+    if not el then
+        for _, w in ipairs(M.open_ui() or {}) do
+            local e = w.el or w
+            -- live 11-22 07:29: the open results scroll is listed "unnamed"; its class names it
+            if (e and e.elementName == "papal_election_results_scroll") or w.name == "papal_election_results_scroll"
+                or (e and M.ui_class(e) == "PAPAL_ELECTION_RESULTS_SCROLL") then
+                el = e
+                break
+            end
+        end
+    end
+    if not el then
+        -- logged from both paths (the stuck turn's was silent live 11-22 07:29:30)
+        if M.papal_results.seen and not M.papal_results.logged_not_found then
+            M.papal_results.logged_not_found = true
+            local open_names = M.open_ui_line() or ""
+            -- each open window's own bytes and its part 0's, so a class we don't know yet is named
+            -- from the log (live 11-22 07:36: one "unnamed" window, not matched)
+            local seen_bytes = {}
+            for _, w in ipairs(M.open_ui() or {}) do
+                local e = w.el or w
+                local okb, own = pcall(function() return e:readBytes(0, 4) end)
+                local okp, p0 = pcall(function()
+                    return (tonumber(e.subElementsNum) or 0) > 0 and e:getSubElement(0):readBytes(0, 4) or "-"
+                end)
+                seen_bytes[#seen_bytes + 1] = string.format("%s=%s/%s(%s parts)", w.name or "?",
+                    okb and tostring(own) or "?", okp and tostring(p0) or "?", tostring(e.subElementsNum))
+            end
+            log(string.format("popup: papal results: scroll not found (strat_ui parts %d; open: %s; bytes: %s)",
+                              strat_parts, open_names, table.concat(seen_bytes, " ")))
+        end
+        return false
+    end
+    local part = nil
+    if el.subElementsNum and el.subElementsNum > 0 then
+        pcall(function() part = el:getSubElement(0) end)
+    end
+    local cls = part and M.ui_class(part)
+    if part and cls == "SCROLL_CLOSE_GADGET" and M.fork_level() >= 6 and part.activate then
+        local oka, erra = pcall(function() part:activate() end)
+        if oka then
+            if who then
+                log("autoplay: " .. who .. " stuck? try " .. (tries or 1)
+                    .. ": closed papal_election_results_scroll by its close gadget")
+                M.status = "Parley: " .. who .. " stuck? closed papal_election_results_scroll by its close gadget"
+            else
+                log("popup: papal results: closed papal_election_results_scroll by its close gadget")
+            end
+            M.papal_results.closed = true
+        else
+            if who then
+                log("autoplay: " .. who .. " stuck? try " .. (tries or 1)
+                    .. ": closing papal_election_results_scroll by its close gadget failed: " .. tostring(erra))
+                M.status = "Parley: " .. who .. " stuck? closing papal_election_results_scroll failed: " .. tostring(erra)
+            else
+                log("popup: papal results: closing papal_election_results_scroll by its close gadget failed: " .. tostring(erra))
+            end
+            M.papal_results.closed = true
+        end
+        return true
+    else
+        if who then
+            log("autoplay: " .. who .. " stuck? try " .. (tries or 1)
+                .. ": papal_election_results_scroll open but cannot be closed")
+        else
+            if not M.papal_results.logged_fail then
+                M.papal_results.logged_fail = true
+                log("popup: papal results: part 0 is " .. tostring(cls) .. ", not closed")
+            end
+        end
+    end
+    return false
+end
+
+function M.close_papal_results_tick(now)
+    now = now or M.clock()
+    if not M.papal_results.seen or M.papal_results.closed then return end
+    if now - M.papal_results.seen < 3 then return end
+    close_papal_results()
+end
+
 local function try_dismiss(state, who)
-    if M.deciding and M.deciding() then  -- the ruler is deciding a popup: it's not stuck
-        M.status = "Parley: " .. who .. ", the ruler is deciding a popup"
-        return false  -- nothing dismissed: no End Turn into the open scroll
+    -- the ruler is deciding a popup: it's not stuck, up to the decision cap the player's turn uses
+    -- too (End Turn's hold). Live 11-05 09:56 (QA bench, the test laptop): a battle's results scroll in the
+    -- rebels' turn, the turn loop gone, and "deciding" never ended; the watcher deferred to it every
+    -- 30 s, silently, and the game stood still until relaunched
+    if M.deciding and M.deciding() then
+        state.deciding_since = state.deciding_since or M.clock()
+        local cfg = config()
+        local cap = (cfg and cfg.decision_hold) or K.DECISION_HOLD_MAX
+        if M.clock() - state.deciding_since < cap then
+            M.status = "Parley: " .. who .. ", the ruler is deciding a popup"
+            return false  -- nothing dismissed: no End Turn into the open scroll
+        end
+        if not state.deciding_logged then
+            state.deciding_logged = true
+            log(string.format("autoplay: %s: a decision still open after %ds; treating the turn as stuck",
+                              who, M.clock() - state.deciding_since))
+        end
+    else
+        state.deciding_since, state.deciding_logged = nil, nil
     end
     if not state.scanned then
         state.scanned = true
@@ -3767,19 +4642,27 @@ local function try_dismiss(state, who)
         -- the turn loop to look, every second check (about 40 s; the author: two minutes was too slow)
         if (state.tries - K.MAX_TRIES) % 2 ~= 0 then return false end
     end
+    -- live 11-10 09:41: papal_election_results_scroll stayed open after End Turn and blocked England's
+    -- turn for 6 minutes (none of K.DISMISS's buttons is on it).
+    -- Never looked up by name (that hung the game inside its open event, 10-30): strat_ui's parts
+    -- are read by name only, as M.scan_ui's line for strat_ui did live at 09:41:58 with it up.
+    -- Part 0 is the close gadget (UI::SCROLL_CLOSE_GADGET); fork level 6 activates it (no screen input).
+    if close_papal_results(who, state.tries) then return true end
+    -- a decision open on screen that no request holds: the ruler answers it, the bridge presses it
+    local okq, queued = pcall(M.queue_stuck_decision, who)
+    if okq and queued then return true end
     -- a minimized decision blocks End Turn unseen (its icon names no UI element): ask the turn
     -- loop to reopen one from the stack on the left, the next slot each time. It also decides a
     -- decision it finds open on screen, so the request names the human slot's faction.
-    pcall(function()
-        local id = "popup-" .. gd.campaignStruct.turnNumber .. "-m" .. os.time()
-        local cfg, faction = config(), nil
-        for name in pairs(cfg and cfg.factions or {}) do
-            local f = gd.campaignStruct:getFaction(name)
-            if f and f.isPlayerControlled == 1 then faction = name end
-        end
-        atomic_write(root .. "/" .. id .. ".req", encode({ id = id, kind = "minimized", faction = faction,
-                                                          turn = gd.campaignStruct.turnNumber }))
-    end)
+    -- Fork level 6 opens the icon by its element, with no click. The turn loop's click on the icon
+    -- (a "minimized" request) was deleted 11-21: Parley makes no screen input (parley/xinput.py).
+    local okm, slot, slots = pcall(M.open_minimized, state.tries)
+    if okm and slot then
+        log("autoplay: " .. who .. " stuck? try " .. state.tries .. ": reopened minimized message "
+            .. slot .. " of " .. slots .. " by its element")
+    elseif not okm then
+        log("autoplay: opening a minimized message by its element failed: " .. tostring(slot))
+    end
     local ticked = gameSTDUI and (press_tick_part() or close_overview())
     if ticked then
         log("autoplay: " .. who .. " stuck? try " .. state.tries .. ": " .. ticked .. "'s tick")
@@ -3792,14 +4675,19 @@ local function try_dismiss(state, who)
     if gameSTDUI and gameSTDUI.getUiElement then
         for _, n in ipairs(K.DISMISS) do
             local ok, e = pcall(gameSTDUI.getUiElement, n)
+            if ok and e and M.on_screen(n) == false then e = nil end  -- found, but its window closed
             if ok and e and (not pressed[n] or (state.tries > 1 and not n:find("^diplomacy_"))) then
                 open[#open + 1] = n
             end
         end
     end
     local name = open[(state.tries - 1) % math.max(#open, 1) + 1]
+    -- the game's own list names what is really on screen (M.open_ui): the scroll a click-only
+    -- challenge waits on, by name, where the known-name lookup found nothing
+    local seen = not name and M.open_ui_line() or nil
     log("autoplay: " .. who .. " stuck? try " .. state.tries .. ": "
-        .. (name or "no known popup open; reopening a minimized message"))
+        .. (name or "no known popup open; reopening a minimized message")
+        .. (seen and seen ~= "" and ("; on screen: " .. seen) or ""))
     M.status = "Parley: " .. who .. " stuck? " .. (name and ("pressing " .. name) or "reopening a minimized message")
     if name then click(name) end
     return true
@@ -3820,10 +4708,32 @@ end
 -- only its name and its buttons' names, so the ruler hears what kind of popup it was.
 
 K.POPUP_DELAY = 3  -- seconds a popup stays up, so a watcher can read it
+K.GENERIC_PRESS_WAIT = 10  -- seconds a generic decision's answer waits for a scroll to press it on
+K.OFFER_REOPEN_EVERY = 5  -- seconds between opening minimized icons to find a held offer (the turn loop's look)
 -- an acknowledging button, best first
 K.ACK = { "close_tick", "tick", "_ok", "ok_", "accept", "continue", "close" }
 
 local pending, popups = {}, {}  -- popups waiting to be pressed; what the human slot hasn't heard yet
+
+-- A stuck turn with a decision scroll on screen (a check and an X) that no request holds: queue it
+-- as a decision, so the ruler answers it and the answer is pressed on that scroll by element. The
+-- turn loop used to click it from its stuck look; since #645 answers are the bridge's to press
+-- (live 11-15 turn 1242: a message with a check and an X held the turn). True when one was queued
+function M.queue_stuck_decision(who)
+    for _, c in ipairs(M.open_choices()) do
+        local held = false
+        for _, q in ipairs(pending) do
+            if q.scroll_el ~= nil and q.scroll_el == c.el then held = true end
+        end
+        if not held then
+            pending[#pending + 1] = { message = "stuck", kind = "read", decision = true, scroll_el = c.el,
+                                      at = M.clock() - K.POPUP_DELAY }
+            log("autoplay: " .. who .. ": a decision is open on screen (" .. c.name .. "); the ruler answers it")
+            return true
+        end
+    end
+    return false
+end
 function M.pending() return pending end
 
 -- The papal election's notice (event 202: the Pope is dead, the cardinals convene). Left alone,
@@ -3865,6 +4775,12 @@ function M.papal_window_open(phase)
     papal_window = { phase = phase, ends = now + secs }
     papal_window_write()
     log("papal window: " .. phase .. "; the turn loop presses nothing else for up to " .. secs .. "s")
+    if phase == "results" then
+        if not M.papal_results.seen then M.papal_results.seen = now end
+        M.close_papal_results_tick(now)
+    elseif phase == "notice" or phase == "vote" then
+        for k in pairs(M.papal_results) do M.papal_results[k] = nil end
+    end
 end
 
 -- the window's phase while it's open, else nil (and it's closed once over)
@@ -3877,6 +4793,7 @@ function M.papal_phase(now)
     for _, p in ipairs(pending) do  -- held through the window: each gets its full wait from now
         if p.requested then p.requested = now end
     end
+    for k in pairs(M.papal_results) do M.papal_results[k] = nil end
     log("papal window: closed; the turn loop may press again")
     return nil
 end
@@ -3889,6 +4806,9 @@ function M.papal_window_load()
     if phase and ends then
         papal_window = { phase = phase, ends = ends }
         log("papal window: " .. phase .. " (kept across the reload)")
+        if phase == "results" and not M.papal_results.seen then
+            M.papal_results.seen = ends - K.PAPAL_WINDOW.results
+        end
     end
     M.papal_phase()
 end
@@ -4014,6 +4934,45 @@ local function choose(scroll, buttons)
     end
 end
 
+-- Papal notice check button: find and press by element instead of x-input click
+local function notice_button(w)
+    if not w or not w.el then return nil end
+    if w.name == "papal_election_scroll" or w.name == "papal_election_results_scroll" then return nil end
+    if M.choice_buttons(w.el) then return nil end
+    local b = choose(w.name, buttons_for_scroll(w.name, w.el))
+    if b then return b, w.name end
+    local cb = close_button(w.el)
+    if cb then return cb, w.name end
+end
+
+function M.has_notice_button()
+    for _, w in ipairs(M.open_ui() or {}) do
+        if notice_button(w) then return true end
+    end
+    return false
+end
+
+function M.press_notice_check()
+    for _, w in ipairs(M.open_ui() or {}) do
+        local b, name = notice_button(w)
+        if b then
+            -- the notice's check is found by shape (close_button), so it may not be a button class:
+            -- execute() on a non-button crashes the game (11-19, 11-20); fork level 6's activate() is
+            -- the element's own use function, a no-op on a part that isn't pressable
+            local ok, err = pcall(function()
+                if M.fork_level() >= 6 and b.activate then b:activate() else b:execute() end
+            end)
+            local btn_name = (b.elementName and b.elementName ~= "" and b.elementName ~= "null")
+                and b.elementName or "close_tick_button"
+            log("popup: papal notice: pressed " .. btn_name .. " on " .. name .. " by its element"
+                .. (ok and "" or (" (failed: " .. tostring(err) .. ")")))
+            M._open_at = nil
+            return ok
+        end
+    end
+    return false
+end
+
 -- a papal scroll is up (its event, or the hands-off look from the tick): the papal window, and
 -- for the election one entry asking the ruler's vote; nothing is read from the scroll itself
 local function papal_queue(scroll)
@@ -4121,6 +5080,12 @@ end
 -- DECIDE_WAIT: The author 10-31 "give Heretic more time": at 180 the ruler (decide_timeout 120, queued
 -- behind both busy Heretic slots) timed out and the default was pressed; the loop now allows 480
 local READ_WAIT, DECIDE_WAIT = 30, 540  -- seconds before giving up on the turn loop
+K.READ_HOLD = 35  -- seconds (READ_WAIT is 30, after which captured() gives up on a read)
+-- the config's decide_wait (the QA bench: 60) or DECIDE_WAIT
+local function decide_wait()
+    local cfg = config()
+    return (cfg and cfg.decide_wait) or DECIDE_WAIT
+end
 K.DECISIONS = { marriage = "a marriage offer", adoption = "an adoption offer",
                     vote = "a papal election vote" }
 -- seeded from the clock so ids stay unique across bridge reloads (seen live: popup-23-1 twice)
@@ -4150,6 +5115,13 @@ local function offered(kind, e)
         local suitor = { name = c.fullName, age = c.age, command = c.command, loyalty = c.loyalty,
                          piety = c.piety, chivalry_or_dread = c.chivalryAndDread, authority = c.authority }
         pcall(function() suitor.traits = traits_of(c) end)
+        -- one event for two scrolls: a man as a suitor for a princess, a woman as a wife for a man
+        pcall(function() if c.isMale == 0 or c.isMale == false then suitor.female = true end end)
+        -- a wife offer's character is our own man, not the woman (live 11-10: Arthur Fowler, Perkin
+        -- Tyler, both of the family); a princess's suitor isn't family yet
+        pcall(function()
+            if not suitor.female and (c.isFamily == 1 or c.isFamily == true) then suitor.son = true end
+        end)
         return { kind = kind, faction = e.faction and e.faction.name, suitor = suitor }
     end)
     if not ok then return end
@@ -4160,7 +5132,8 @@ local function offered(kind, e)
     -- a request of its own: no message event may follow (seen live: a captain offered for
     -- adoption after his victory, with no message at all)
     pending[#pending + 1] = { message = "offer", kind = kind, offer = o, at = M.clock() }
-    log(kind .. " offer: " .. tostring(o.suitor.name) .. " for " .. tostring(o.faction))
+    log(kind .. " offer: " .. tostring(o.suitor.name) .. " for " .. tostring(o.faction)
+        .. (o.suitor.female and " (a wife)" or o.suitor.son and " (a wife for him)" or ""))
 end
 
 function M.on_offered_for_marriage(e) offered("marriage", e) end
@@ -4204,7 +5177,8 @@ local function captured(p, now)
                       suitor = p.offer and p.offer.suitor or nil,
                       -- pressed even if it looks like the last scroll read (live 19:43: a reopened
                       -- notice, never pressed, cleared again every stuck try)
-                      press_check = (p.message == K.PAPAL_NOTICE and not p.election_opened) or nil }
+                      press_check = (p.message == K.PAPAL_NOTICE and not p.election_opened and not M.has_notice_button()) or nil,
+                      by_element = (p.kind == "vote" and M.open_vote() ~= nil) or nil }
         atomic_write(p.request .. ".req", encode(req))
         return false
     end
@@ -4213,15 +5187,23 @@ local function captured(p, now)
     if exists(p.request .. ".done") then
         -- "acked": the turn loop pressed the scroll's own check; clearing would minimize the next
         if (read_file(p.request .. ".done") or ""):find("acked", 1, true) then p.acked = true end
+        -- the ruler's answer to a decision, pressed here by element (M.press_choice, M.press_vote)
+        p.answer = (read_file(p.request .. ".answer") or ""):match("^%s*([%w_]+)")
+        os.remove(p.request .. ".answer")
         os.remove(p.request .. ".req")
         os.remove(p.request .. ".done")
         os.remove(p.request .. ".hold")
         return true, "captured"
     end
-    if now - p.requested >= ((K.DECISIONS[p.kind] or p.decision) and DECIDE_WAIT or READ_WAIT) then
+    -- a load waits for the player's turn (M.qa.load): this world goes then, so no wait on a capture
+    -- (bench 11-21 12:28-12:31: the rebels' battle results, each held for a screenshot no turn loop
+    -- was taking, kept the bench reload waiting past its 180 s)
+    local waiting = M.pending_load
+    if waiting or now - p.requested >= ((K.DECISIONS[p.kind] or p.decision) and decide_wait() or READ_WAIT) then
         os.remove(p.request .. ".req")
         os.remove(p.request .. ".hold")
-        log("popup " .. p.request .. ": the turn loop didn't capture it in time")
+        log("popup " .. p.request .. (waiting and (": a load is waiting (" .. waiting .. "); not waiting on its capture")
+                                       or ": the turn loop didn't capture it in time"))
         return true, "timeout"
     end
     return false
@@ -4249,7 +5231,21 @@ local function handle_popups(now)
         end
     end
     for _, p in ipairs(list) do
+        -- a decision request takes its own scroll as soon as one is up (W30)
+        if (K.DECISIONS[p.kind] or p.decision) and p.kind ~= "vote" and p.scroll_el == nil then
+            pcall(M.bind_scroll, p, list)
+        elseif p.kind == "vote" and p.scroll_el == nil then
+            local v = M.open_vote()
+            if v then p.scroll_el = v.el end
+        end
         local held, how = false, p.how
+        if p.message == K.PAPAL_NOTICE and not p.how and not papal_notice_at and M.has_notice_button() then
+            if M.press_notice_check() then
+                p.how = "by_element"
+                p.acked = true
+                how = "by_element"
+            end
+        end
         if p.message and not p.how and now - p.at >= K.POPUP_DELAY then
             local done
             local tname = p.scroll or ("message:" .. tostring(p.message))
@@ -4258,6 +5254,29 @@ local function handle_popups(now)
             M.trace("captured() returned done=" .. tostring(done) .. " how=" .. tostring(how), tname)
             held = not done
             if done then p.how = how end  -- settled; a deferred one isn't asked again
+        end
+        -- the game may minimize an offer at once (live: its icon sat in the stack for two minutes while
+        -- the turn loop clicked slots to find it): open the next icon by its element instead, paced as
+        -- the turn loop's looks were, so a held offer opens one message every K.OFFER_REOPEN_EVERY s
+        -- A scroll bound earlier that's no longer open was minimized too (live 11-20 13:22: bound, then
+        -- minimized, and the turn loop clicked the stack): it counts as gone here, and only here
+        local offer_gone = p.scroll_el == nil
+        if not offer_gone and held and (p.kind == "marriage" or p.kind == "adoption") then
+            local okc, choices = pcall(M.open_choices)
+            offer_gone = true
+            for _, c in ipairs(okc and choices or {}) do
+                if c.el == p.scroll_el then offer_gone = false break end
+            end
+        end
+        if held and (p.kind == "marriage" or p.kind == "adoption") and offer_gone
+                and now - (p.reopened_at or p.at) >= K.OFFER_REOPEN_EVERY then
+            p.reopened_at = now
+            p.reopen_tries = (p.reopen_tries or 0) + 1
+            local okm, slot, slots = pcall(M.open_minimized, p.reopen_tries)
+            if okm and slot then
+                log("popup: " .. (K.DECISIONS[p.kind] or (p.kind .. " offer")) .. ": reopened minimized message "
+                    .. slot .. " of " .. slots .. " by its element")
+            end
         end
         if now - p.at < K.POPUP_DELAY or held then
             keep[#keep + 1] = p
@@ -4273,20 +5292,67 @@ local function handle_popups(now)
             -- (a generic decision the turn loop never answered falls through and is dismissed)
             -- the turn loop clicked the ruler's answer; if it timed out, a human answers it
             local what = K.DECISIONS[p.kind] or "a decision"
-            log("popup: " .. what .. " " .. (how == "captured" and "answered by the ruler" or "left for a human"))
-            note_popup(what .. " (" .. (how == "captured" and "you answered it" or "left unanswered") .. ")")
-            if p.kind == "vote" and how == "captured" and M.papal_hands_off then
-                -- hands off: no results event reaches the bridge, so the result's window opens
-                -- from the vote (the result follows the click and closes by itself)
-                M.papal_window_open("voted")
+            local deferred = false
+            if how == "captured" and (p.answer == "accept" or p.answer == "decline") then
+                if p.scroll_el == nil then pcall(M.bind_scroll, p, list) end
+                -- never another request's scroll: unbound, nothing is pressed
+                local ok = p.scroll_el ~= nil and M.press_choice(p.answer, what, p.scroll_el)
+                if not ok then
+                    -- its scroll is behind another offer or not drawn yet (the next of a stack comes
+                    -- up a moment after the last closes): wait for it, up to a minute. A generic one
+                    -- (the turn loop saw buttons, not a kind we know) waits K.GENERIC_PRESS_WAIT: bench
+                    -- 11-21 11:40, a message read captured while a marriage scroll was up came back as
+                    -- "a decision" after that offer was answered, and held End Turn its full 90 s
+                    p.press_until = p.press_until or (now + (K.DECISIONS[p.kind] and 60 or K.GENERIC_PRESS_WAIT))
+                    deferred = now < p.press_until
+                    if deferred and not p.defer_logged then
+                        p.defer_logged = true
+                        log("popup: " .. what .. ": its scroll isn't on screen yet; " .. p.answer .. " waits for it")
+                    end
+                    if not deferred then log("popup: " .. what .. ": its scroll never came up; " .. p.answer .. " not pressed") end
+                end
+            elseif how == "captured" and p.kind == "vote" and p.answer then
+                if p.scroll_el == nil then
+                    local v = M.open_vote()
+                    if v then p.scroll_el = v.el end
+                end
+                local ok = M.press_vote(p.answer, what, p.scroll_el)
+                if not ok then
+                    p.press_until = p.press_until or (now + 60)
+                    deferred = now < p.press_until
+                    if deferred and not p.defer_logged then
+                        p.defer_logged = true
+                        log("popup: " .. what .. ": its scroll isn't on screen yet; candidate " .. tostring(p.answer) .. " waits for it")
+                    end
+                    if not deferred then log("popup: " .. what .. ": its scroll never came up; candidate " .. tostring(p.answer) .. " not pressed") end
+                end
+            end
+            if deferred then
+                keep[#keep + 1] = p
+            else
+                log("popup: " .. what .. " " .. (how == "captured" and "answered by the ruler" or "left for a human"))
+                note_popup(what .. " (" .. (how == "captured" and "you answered it" or "left unanswered") .. ")")
+                if p.kind == "vote" and how == "captured" and M.papal_hands_off then
+                    -- hands off: no results event reaches the bridge, so the result's window opens
+                    -- from the vote (the result follows the click and closes by itself)
+                    M.papal_window_open("voted")
+                end
             end
         else
             local scrolls = p.scroll and { p.scroll } or K.MESSAGE_SCROLLS
             local done = p.acked and "acknowledged with its check" or nil
             if done or K.PAPAL_SCROLLS[p.scroll] then scrolls = {} end  -- a papal result closes by itself
+            if p.scroll == "prebattle_scroll" then
+                done = "prebattle_scroll -> left to the battle watcher"
+                scrolls = {}
+            end
             for _, scroll in ipairs(scrolls) do
+                -- the battle panel is never touched here (no lookup, no layout walk, no button, no tick),
+                -- also not for a game message (K.MESSAGE_SCROLLS holds every K.ACK scroll): watch_buttons
+                -- owns it. Live 11-15 13:02:25: "game message 67 (prebattle_scroll -> auto-resolve)"
                 M.trace("handle: calling getUiElement", scroll)
-                local ok, el = pcall(gameSTDUI.getUiElement, scroll)
+                local ok, el = false, nil
+                if scroll ~= "prebattle_scroll" then ok, el = pcall(gameSTDUI.getUiElement, scroll) end
                 if ok and el then
                     M.trace("handle: found; calling record_layout", scroll)
                     M.record_layout(scroll, el)
@@ -4322,8 +5388,13 @@ local function handle_popups(now)
             -- event messages (missions, riots, news, proposals) live in no element we can name;
             -- the campaign script command clear_messages closed one live (a riot in Rennes)
             if not done and p.message == K.PAPAL_NOTICE then
-                -- never cleared: clearing it never opened the election (live 19:42:13, 19:43:33)
-                done = "left to the game: the papal election's notice"
+                if M.press_notice_check() then
+                    done = "papal notice -> acknowledged by its element"
+                    p.acked = true
+                else
+                    -- never cleared: clearing it never opened the election (live 19:42:13, 19:43:33)
+                    done = "left to the game: the papal election's notice"
+                end
             elseif not done and p.message and not p.scroll then
                 M.trace("handle: calling scriptCommand('clear_messages')", "message:" .. tostring(p.message))
                 stratmap.game.scriptCommand("clear_messages", "")
@@ -4412,7 +5483,7 @@ local function choice_for(name, now)
         return nil
     end
     local answer = read_file(c.request .. ".answer")
-    if not answer and now - c.since < DECIDE_WAIT then return nil end
+    if not answer and now - c.since < decide_wait() then return nil end
     os.remove(c.request .. ".req")
     os.remove(c.request .. ".answer")
     choosing[name] = nil
@@ -4446,12 +5517,23 @@ end
 K.DECISION_HOLD_MAX = DECIDE_WAIT + 30  -- seconds
 
 -- what offer is still with the ruler (nil: none)
-function M.decision_waiting()
+function M.decision_waiting(diplomacy_only)
     if next(choosing) then return "a diplomatic offer" end
+    if diplomacy_only then return nil end
     for _, p in ipairs(pending) do
         if K.DECISIONS[p.kind] or p.decision then return K.DECISIONS[p.kind] or "a decision" end
     end
     return nil
+end
+
+function M.read_waiting(now)
+    local now = now or M.clock()
+    for _, p in ipairs(pending) do
+        if p.kind == "read" and not p.decision and not K.DECISIONS[p.kind] and (now - p.at < K.READ_HOLD) then
+            return true
+        end
+    end
+    return false
 end
 
 local function watch_buttons(now)
@@ -4480,6 +5562,7 @@ local function watch_buttons(now)
         end
         local ok, el = false, nil
         if name then ok, el = pcall(gameSTDUI.getUiElement, name) end
+        if ok and el and M.on_screen(name) == false then el = nil end  -- found, but its window closed
         if ok and el then
             -- press once, then not again until the button is gone: the game keeps a screen's
             -- buttons after they're used (seen live: decline pressed every 6 s, the AI answering)
@@ -4501,6 +5584,7 @@ local function watch_buttons(now)
                     end
                     if name:find("^diplomacy_") then offer_answered = true end
                     log("popup button on screen: pressing " .. press)
+                    if press == "prebattle_auto_resolve_button" then log("battle sides: " .. M.battle_sides()) end
                     note_popup(what)
                     -- press the chosen button, never the watched one: an offer is watched by its
                     -- decline button, and the ruler's "accept" must not press decline
@@ -4866,16 +5950,50 @@ M.qa = (function()
         local label = string.format("parley_qa_%d_%d", os.time(), M.qa_label_n)
         local army = fac:spawnArmy(name or "random_name", "", ctype, label, "", x, y, 30, false, 31, idx, 0, 0, 0)
         if not army then error("spawnArmy returned nil") end
+        if fleet then M.bind_admiral(army) end  -- or the game replaces him next turn (M.bind_admiral)
         local g = leader_of(fac, army) or (fleet and army.leader)
         local rec = g and (g.characterRecord or g.namedCharacter)
         if not rec and not fleet then error("spawned army has no general") end
         -- a name the faction's list lacks is dropped, as with createCharacter
         if rec and (clean_name(rec.fullName) or "") == "" then pcall(function() rec:giveRandomName(fac.factionID) end) end
+        -- "random_name" can come back as a name another of the faction's characters has: live 11-05
+        -- (the test laptop) the first spawn after a bench load was "Fraunce (of Leeds)" in every case
+        -- (field, navy, envoys), and by the next turn start the game had renamed him ("unknown army
+        -- 'Fraunce of Leeds'"; "'Admiral Fraunce' is not one of your fleets", Admiral Nicholas
+        -- now). A name nobody else has, drawn now, before the id is read
+        if rec and not name then
+            pcall(function() rec:giveRandomName(fac.factionID) end)
+            for _ = 1, 5 do
+                local mine = clean_name(rec.fullName) or ""
+                local taken = mine == ""
+                for i = 0, (fac.numOfCharacters or 0) - 1 do
+                    local ok, other = pcall(function()
+                        local c = fac:getCharacter(i)
+                        local r = c and (c.characterRecord or c.namedCharacter)
+                        return r ~= rec and r and clean_name(r.fullName) or nil
+                    end)
+                    if ok and other and (other == mine or other:find(mine, 1, true) == 1
+                                         or mine:find(other, 1, true) == 1) then taken = true end
+                end
+                if not taken then break end
+                pcall(function() rec:giveRandomName(fac.factionID) end)
+            end
+        end
         -- the loyalty every general gets on coming of age, adoption or marriage (LoyaltyStarter,
         -- Loyalty 5, export_descr_character_traits.txt). Without it a spawned general stands at 0
         -- and goes over to the rebels (live 10-30 19:47-19:49: Edmund Awood and Walter Baker, a turn
         -- after spawning; the rebel left beside the next case's army stopped its move a tile short)
         if not fleet then rec:addTrait("LoyaltyStarter", 1) end
+        -- and a wife, so the game offers him none (M.bench_marriages_off; live 11-05 13:03:39 a general
+        -- spawned that turn drew an offer at the next turn start, before the quiet step married him)
+        if not fleet and not M.marriages_on() then
+            -- family only, as M.marry_singles: a non-family man draws no offer, and his wife would
+            -- keep a pointer to his record after the game frees it at his death (the 00eff4db crash)
+            pcall(function()
+                local family = rec.isFamily == true or (tonumber(rec.isFamily) or 0) ~= 0
+                if family and rec.spouse == nil then rec:marryWife("random_name", 25) end
+            end)
+        end
         local ids, id = army_ids(fac), nil
         for i = 0, (fac.stacksNum or 0) - 1 do
             if fac:getStack(i) == army then id = ids[i] end
@@ -4910,35 +6028,39 @@ M.qa = (function()
         end
         return id
     end
+    local function spawn_field_army(faction, x, y, name, unit)
+        local fac = faction_named(faction)
+        if taken_tiles()[math.floor(x) * 1000 + math.floor(y)] then
+            for r = 0, (gd.stratMap.regionsNum or 0) - 1 do
+                local ok, s = pcall(function() return gd.stratMap.getRegion(r).settlement end)
+                if ok and s and s.xCoord == x and s.yCoord == y then
+                    error(string.format("(%d,%d) is %s's tile: spawn beside it (free_tile)", x, y, tostring(s.name)))
+                end
+            end
+            -- someone stands there: the game puts the army on a tile beside it (QA field
+            -- 10-30/31: spawns landed a tile off when the tile was taken, and the case read
+            -- the wrong tile). Spawn on a free_tile
+            error(string.format("(%d,%d) is taken: spawn on a free tile (free_tile)", x, y))
+        end
+        local id = spawn(fac, x, y, name, unit)
+        if tostring(id):match("^garrison:") then
+            error(string.format("the army spawned at (%d,%d) is inside a town (%s)", x, y, tostring(id)))
+        end
+        -- the landing tile is the one asked for, or the scene isn't the case's
+        local st = find_army_now(fac, id)
+        local ax, ay
+        if st then ax, ay = stack_pos(fac, st) end
+        if ax and ay and (math.floor(ax) ~= math.floor(x) or math.floor(ay) ~= math.floor(y)) then
+            error(string.format("the army %s landed at (%d,%d), not (%d,%d)", tostring(id), math.floor(ax), math.floor(ay), x, y))
+        end
+        return id, st, fac
+    end
     return {
         -- a field army only: a town's tile puts the general into its garrison (that is garrison()'s
         -- job), and the case would then look for an army id that isn't there
         spawn_army = function(faction, x, y, name, unit)
             return run("spawn_army", function()
-                local fac = faction_named(faction)
-                if taken_tiles()[math.floor(x) * 1000 + math.floor(y)] then
-                    for r = 0, (gd.stratMap.regionsNum or 0) - 1 do
-                        local ok, s = pcall(function() return gd.stratMap.getRegion(r).settlement end)
-                        if ok and s and s.xCoord == x and s.yCoord == y then
-                            error(string.format("(%d,%d) is %s's tile: spawn beside it (free_tile)", x, y, tostring(s.name)))
-                        end
-                    end
-                    -- someone stands there: the game puts the army on a tile beside it (QA field
-                    -- 10-30/31: spawns landed a tile off when the tile was taken, and the case read
-                    -- the wrong tile). Spawn on a free_tile
-                    error(string.format("(%d,%d) is taken: spawn on a free tile (free_tile)", x, y))
-                end
-                local id = spawn(fac, x, y, name, unit)
-                if tostring(id):match("^garrison:") then
-                    error(string.format("the army spawned at (%d,%d) is inside a town (%s)", x, y, tostring(id)))
-                end
-                -- the landing tile is the one asked for, or the scene isn't the case's
-                local st = find_army_now(fac, id)
-                local ax, ay
-                if st then ax, ay = stack_pos(fac, st) end
-                if ax and ay and (math.floor(ax) ~= math.floor(x) or math.floor(ay) ~= math.floor(y)) then
-                    error(string.format("the army %s landed at (%d,%d), not (%d,%d)", tostring(id), math.floor(ax), math.floor(ay), x, y))
-                end
+                local id = spawn_field_army(faction, x, y, name, unit)
                 return id
             end)
         end,
@@ -5186,8 +6308,33 @@ M.qa = (function()
                 log(why)
                 return why
             end
+            -- never load in the middle of an AI faction's turn: 11-05 07:17:43 a load 2 s after the
+            -- player's End Turn (France's turn running) crashed the game, as on 11-04 10:12 after the
+            -- same played-turn case. The tick loads it once the player's turn comes round, and logs
+            -- "qa: load ok" then (the runner waits for that and the map load, 180 s)
+            local okf, ai_turn = pcall(function()
+                local f = gd.campaignStruct.currentFaction
+                return f ~= nil and f.isPlayerControlled ~= 1, f and f.name
+            end)
+            if okf and ai_turn and type(path) == "string" and path ~= "" then
+                if M.pending_load and M.pending_load ~= path then
+                    log("qa: load deferred: replaces the waiting load of " .. M.pending_load)
+                end
+                M.pending_load = path
+                local _, who = pcall(function() return gd.campaignStruct.currentFaction.name end)
+                log("qa: load deferred: " .. tostring(who) .. "'s turn is running; loading " .. path
+                    .. " when the player's turn comes")
+                return "deferred: " .. path
+            end
             return run("load", function()
                 if type(path) ~= "string" or path == "" then error("load needs a path") end
+                -- a load now drops one still waiting: live 11-21 11:35, the restore loaded the real
+                -- campaign at once, and the bench load a failed case had left waiting since 11:31:58
+                -- fired 8 s later; the next run then kept a bench autosave as the real campaign
+                if M.pending_load then
+                    log("qa: load: drops the waiting load of " .. M.pending_load)
+                    M.pending_load = nil
+                end
                 M2TWEOP.loadGame(path)
                 return path
             end)
@@ -5360,6 +6507,10 @@ M.qa = (function()
         -- "pope=<name> age=<before>-><after>" (or "pope=none" mid-election), then per seated
         -- faction "; <faction> leader=<name> age=a->b heir=<name> age=a->b" (or "heir=none").
         quiet = function(max_age)
+            -- a case that needs the world awake (M.qa.quiet_off): rebellions, defections, offers and
+            -- missions are what the quiet step holds off, so it can't also test them
+            if root and read_file(root .. "/quiet_off.txt") then return "pope=quiet off" end
+            M.bench_marriages_off()
             return run("quiet", function()
                 local young = tonumber(max_age) or 45
                 local function keep_young(rec, who)
@@ -5452,6 +6603,187 @@ M.qa = (function()
                 error("no cardinal to give " .. tostring(faction) .. " (the college has " .. tostring(college.cardinalNum) .. ")")
             end)
         end,
+        -- family offers back for this campaign (the marriage-click crash's repro, 11-05): the limits
+        -- the quiet step zeroed are restored, and neither quiet nor spawn marries anyone until the
+        -- next load clears marriages_on.txt
+        marriage_offers_on = function()
+            return run("marriage_offers_on", function()
+                atomic_write(root .. "/marriages_on.txt", "on\n")
+                M.bench_marriages_restore()
+                return "on"
+            end)
+        end,
+        -- the quiet world off until the next load (which removes quiet_off.txt, M.setup)
+        quiet_off = function()
+            return run("quiet_off", function()
+                atomic_write(root .. "/quiet_off.txt", "off\n")
+                return "off"
+            end)
+        end,
+        -- every town of the faction but `keep` goes to the rebels, silently (settlement:changeOwner)
+        force_lose_towns = function(faction, keep)
+            return run("force_lose_towns", function()
+                local fac = faction_named(faction)
+                local rebels = faction_named("slave")
+                local n = 0
+                for i = (fac.settlementsNum or 0) - 1, 0, -1 do
+                    local s = fac:getSettlement(i)
+                    if s and s.name ~= keep then
+                        s:changeOwner(rebels, false)
+                        n = n + 1
+                    end
+                end
+                return n
+            end)
+        end,
+        -- a jihad called on a town (EOP jihadStruct:start): message 180 at once, seen 11-06
+        force_jihad = function(town)
+            return run("force_jihad", function()
+                local s = gd.stratMap:getSettlement(town)
+                if not s then error("unknown settlement '" .. tostring(town) .. "'") end
+                local j = M2TW and M2TW.campaign and M2TW.campaign.jihad
+                if not j then error("no jihad struct") end
+                j:start(s, 10, nil)
+                return s.name
+            end)
+        end,
+        -- a marriage offer now, not by the game's roll (EOP createMessageMarriageProposal: "a wife" for
+        -- the first unmarried grown son, "suitor" a husband for the first unmarried daughter); who's offered
+        force_offer = function(faction, kind)
+            return run("force_offer", function()
+                local fac = faction_named(faction)
+                local want_man = kind == "wife"
+                for i = 0, (fac.numOfNamedCharacters or 0) - 1 do
+                    local r = fac:getNamedCharacter(i)
+                    local man = r and r.isMale and r.isMale ~= 0
+                    if r and record_alive(r) ~= false and r.spouse == nil and (man and true or false) == want_man
+                        and (tonumber(r.age) or 0) >= 16 then
+                        local who = r:createMessageMarriageProposal()
+                        if not who then error("no offer made for " .. tostring(r.fullName)) end
+                        return tostring(who.fullName)
+                    end
+                end
+                error("nobody unmarried for a " .. tostring(kind) .. " offer in " .. tostring(faction))
+            end)
+        end,
+        force_disaster = function(kind, x, y)
+            return run("force_disaster", function()
+                local valid = { earthquake = true, flood = true, storm = true, famine = true, plague = true, riot = true, fire = true }
+                if not valid[kind] then error("unknown disaster kind '" .. tostring(kind) .. "'") end
+                M2TW.campaign.execScriptEvent("", kind, x, y, 1, "")
+                return kind
+            end)
+        end,
+        force_rebellion = function(town)
+            return run("force_rebellion", function()
+                local s = gd.stratMap:getSettlement(town)
+                if not s then error("unknown settlement '" .. tostring(town) .. "'") end
+                -- scriptRebel alone did nothing in 2 turns (bench 11-06); the game's own script command
+                M2TWEOP.scriptCommand("provoke_rebellion", s.name)
+                return s.name
+            end)
+        end,
+        force_leader_death = function(faction)
+            return run("force_leader_death", function()
+                local fac = faction_named(faction)
+                local rec = fac.leader
+                if not rec then error("no leader for " .. tostring(faction)) end
+                local name = clean_name(rec.fullName) or tostring(rec.fullName)
+                local c = rec.character or (rec.kill and rec)
+                if not c then error("leader " .. name .. " has no character on the map") end
+                c:kill()
+                return name
+            end)
+        end,
+        force_decision = function(title)
+            return run("force_decision", function()
+                M2TW.campaign.historicEvent("qa_forced_decision", title, "Forced by the QA bench.", true, -1, -1, { "england" })
+                return title
+            end)
+        end,
+        force_crusade = function(town)
+            return run("force_crusade", function()
+                local s = gd.stratMap:getSettlement(town)
+                if not s then error("unknown settlement '" .. tostring(town) .. "'") end
+                local cr = M2TW and M2TW.campaign and M2TW.campaign.crusade
+                if not cr then error("no crusade struct") end
+                cr:start(s, 10, nil)
+                return s.name
+            end)
+        end,
+        force_ai_attack = function(faction, x, y, target_faction, target_id)
+            return run("force_ai_attack", function()
+                local tfac = faction_named(target_faction)
+                local target_army = find_army_now(tfac, target_id)
+                if not target_army then error("unknown army '" .. tostring(target_id) .. "'") end
+                local _, army = spawn_field_army(faction, x, y)
+                if not army then error("spawned army not found") end
+                army:attackArmy(target_army)
+                return "attack"
+            end)
+        end,
+        force_ai_siege = function(faction, x, y, town)
+            return run("force_ai_siege", function()
+                local s = gd.stratMap:getSettlement(town)
+                if not s then error("unknown settlement '" .. tostring(town) .. "'") end
+                -- as M.qa.rebel_siege, whose siege the bench sees (siege.toml): infantry, and the
+                -- (town, false) call every other siege here makes (11-14: this one omitted it, and
+                -- forced_ai_siege's "popup message 39" never came)
+                local ok, _, army = pcall(spawn_field_army, faction, x, y, nil, "Peasants")
+                if not ok then
+                    log("qa: force_ai_siege: no Peasants for " .. tostring(faction) .. "; its default unit besieges")
+                    _, army = spawn_field_army(faction, x, y)
+                end
+                if not army then error("spawned army not found") end
+                army:siegeSettlement(s, false)
+                return s.name
+            end)
+        end,
+        -- the general leading `id` goes over to `to` with his army (EOP character:switchFaction)
+        force_defect = function(faction, id, to)
+            return run("force_defect", function()
+                local st = find_army_now(faction_named(faction), id)
+                if not st then error("unknown army '" .. tostring(id) .. "'") end
+                if not st.leader then error("army '" .. tostring(id) .. "' has no leader") end
+                st.leader:switchFaction(faction_named(to), true, true)
+                return tostring(id)
+            end)
+        end,
+        -- `faction`'s army `id` attacks `target_faction`'s army `target_id` (EOP armyStruct:attackArmy)
+        force_attack = function(faction, id, target_faction, target_id)
+            return run("force_attack", function()
+                local a = find_army_now(faction_named(faction), id)
+                local t = find_army_now(faction_named(target_faction), target_id)
+                if not a or not t then error("unknown army: " .. tostring(a and target_id or id)) end
+                a:attackArmy(t)
+                return tostring(id)
+            end)
+        end,
+        force_guild_offer = function(town, guild_id)
+            return run("force_guild_offer", function()
+                local s = gd.stratMap:getSettlement(town)
+                if not s then error("unknown settlement '" .. tostring(town) .. "'") end
+                -- not setGuildCooldown: it lasts in the game process, past the bench's restore (leaked 11-06)
+                s:setGuildStanding(guild_id, 300)
+                return s.name
+            end)
+        end,
+        -- a town with no garrison: a siege takes it at once and the game asks occupy, sack or exterminate
+        force_empty_town = function(town)
+            return run("force_empty_town", function()
+                local s = gd.stratMap:getSettlement(town)
+                if not s then error("unknown settlement '" .. tostring(town) .. "'") end
+                local a = s.army
+                local n = 0
+                if a then
+                    for i = a.numOfUnits - 1, 0, -1 do
+                        a:getUnit(i):kill(9999)
+                        n = n + 1
+                    end
+                end
+                return n
+            end)
+        end,
         -- no vote for the faction: each of its cardinals killed (EOP character:kill, the game's own
         -- death, natural); "<n> killed: <names>; the college counts <m> now"
         drop_cardinals = function(faction)
@@ -5465,12 +6797,15 @@ M.qa = (function()
                     chars[#chars + 1], names[#names + 1] = c, card_name(card)
                 end
                 for _, c in ipairs(chars) do c:kill() end
-                return string.format("%d killed: %s; the college counts %d now", #chars,
-                    #names > 0 and table.concat(names, ", ") or "-", #cardinals_of(fac))
+                -- the count is the faction's entries in the college (a killed one may stay listed
+                -- until the turn ends: bench 11-05 logged "1 killed: Aston; ... counts 1")
+                return string.format("%d killed: %s; the college lists %d of %s's now", #chars,
+                    #names > 0 and table.concat(names, ", ") or "-", #cardinals_of(fac), tostring(faction))
             end)
         end,
-        -- the Pope dies (EOP character:kill: the game's own death, as natural): the death notice
-        -- (message 202) and the election are the game's from here; his name
+        -- the Pope dies (EOP character:kill: the game's own death, as natural): the death (message
+        -- 201, at once), then next turn the election notice (202, only to a faction with a cardinal)
+        -- and the result (203) are the game's; his name
         kill_pope = function()
             return run("kill_pope", function()
                 local college = college_now()
@@ -5491,6 +6826,14 @@ M.qa = (function()
                 if type(name) ~= "string" or not name:match("^[%w_]+$") then error("event needs a historic event's name") end
                 stratmap.game.scriptCommand("historic_event", name)
                 return name
+            end)
+        end,
+        -- one stuck-turn try, the very function a stuck turn runs (try_dismiss), on a fresh state:
+        -- popups.toml's stuck_turn_reopens_minimized_message. A bench turn a minimized message
+        -- really blocks never came (11-21 15:29), so the case drives the stuck path itself
+        stuck_try = function()
+            return run("stuck_try", function()
+                return tostring(try_dismiss({}, "qa turn " .. gd.campaignStruct.turnNumber))
             end)
         end,
         -- press a named UI button as the bridge does (click: execute, else the scripted click), e.g.
@@ -5780,7 +7123,11 @@ M.qa = (function()
                     tostring(target), fac.name)
             end)
         end,
+        -- true when an envoy of `fac` parleyed: on_turn_start then leaves that faction's AI unfrozen for
+        -- this turn, since a frozen AI makes no offer (11-05 phase 2: Egypt's envoy parleyed, Egypt
+        -- was frozen the same second, no offer came; ai_offer_on_its_turn had never passed)
         court_due = function(fac)
+            local parleyed = false
             for i = #courts, 1, -1 do
                 local e = courts[i]
                 if e.faction == fac.name then
@@ -5792,8 +7139,10 @@ M.qa = (function()
                     end)
                     log(string.format("qa: court: %s parleys with %s at %s's turn start%s", tostring(e.agent),
                         tostring(e.target), fac.name, ok and "" or (" failed: " .. tostring(res))))
+                    parleyed = parleyed or ok
                 end
             end
+            return parleyed
         end,
         -- One step of the bridge's own offer handling (watch_buttons, close_leftover_diplomacy), for a
         -- held turn: tick() skips both while paused.txt is up, and resets every popup wait each tick,
@@ -6153,6 +7502,47 @@ M.qa = (function()
                 return "none"
             end)
         end,
+        -- an own town that trains merchants, made so on the bench: a building level the EDB says trains
+        -- them for this faction and raises their limit is built in the first town that takes it (EOP
+        -- master settlement:createBuilding). Live 10-31: on the bench save no town trained one and the
+        -- limit was full (1 of 1), so recruit_merchant could only wait for a later save. The town's name
+        merchant_town = function(faction)
+            return run("merchant_town", function()
+                local fac = faction_named(faction)
+                if not (agent_counts(fac).merchant or {}).limit then error("merchants have no limit in this EDB") end
+                local rules, culture = edb_rules(), culture_of(fac)
+                local levels = {}
+                for name, lvl in pairs(rules.levels) do
+                    local allow = lvl.agents and lvl.agents.merchant
+                    if allow and (allow["*"] or allow[fac.name] or (culture and allow[culture]))
+                        and (lvl.limits and (lvl.limits.merchant or 0) > 0) then
+                        levels[#levels + 1] = name
+                    end
+                end
+                table.sort(levels)
+                if #levels == 0 then error("no building level trains merchants for " .. fac.name) end
+                -- one level per town at most (review 11-05: trying every level on one town could stack a
+                -- whole chain there); a town that already trains merchants needs none if under the limit
+                for i = 0, (fac.settlementsNum or 0) - 1 do
+                    local s = fac:getSettlement(i)
+                    if s then
+                        local c = agent_counts(fac).merchant
+                        if can_train_agent(s, fac, "merchant") and c.have < c.limit then return s.name end
+                        if not can_train_agent(s, fac, "merchant") then
+                            local name = levels[1]
+                            pcall(function() s:createBuilding(name) end)
+                            c = agent_counts(fac).merchant
+                            if can_train_agent(s, fac, "merchant") and c.have < c.limit then
+                                log(string.format("qa: %s builds %s for a merchant (have %d, limit %d)",
+                                    s.name, name, c.have, c.limit))
+                                return s.name
+                            end
+                        end
+                    end
+                end
+                error("no town of " .. fac.name .. " took a building that trains merchants")
+            end)
+        end,
         -- the faction's agents of `kind` brought up to its limit, spawned on free tiles 1-4 from
         -- (x, y): "have=<n> limit=<n>"; "unlimited" when the EDB sets no limit for the kind
         fill_agents = function(faction, kind, x, y)
@@ -6462,10 +7852,7 @@ local function control()
             log("control: reloading the bridge")
             -- the release timer dies with this Lua state (live, 10-30 turn 44: France's frozen
             -- turn never ended); let go now, as release_frozen would; on_turn_start refreezes
-            if M.frozen_turn then pcall(M.release_frozen, M.frozen_turn.since + M.FROZEN_TURN_LIMIT) end
-            -- EOP carries out a requested restart only while its console is drawn
-            -- (console.cpp draw() returns early when hidden), so show it; setup() hides it again
-            M2TWEOP.toggleConsole()
+            if M.frozen_turn then pcall(M.release_frozen, M.frozen_turn.since + M.FROZEN_TURN_LIMIT, true) end
             M2TWEOP.restartLua()
             return
         elseif cmd then
@@ -6512,6 +7899,7 @@ function M.on_agent_mission(kind, e, has_chance)
     agent_news[faction] = list
     log("agent mission: " .. faction .. ": " .. text)
     if kind == "marriage proposal" then M.drop_proposal(faction, text) end
+    M.mission_reported(faction)
     -- only a player-controlled faction's (a ruler's) mission shows a spy report: the AI's many
     -- spy missions each turn open nothing
     if kind == "spying" then
@@ -6563,11 +7951,7 @@ local function named_alive(faction, name)
         local ok, nc = pcall(function() return f:getNamedCharacter(i) end)
         local okn, n = pcall(function() return clean_name(nc.fullName) end)
         if ok and nc and okn and n == name then
-            local oka, v = pcall(function() return nc:isAlive() end)
-            if not oka then oka, v = pcall(function() return nc.isAlive end) end
-            if oka and (v == false or v == 0) then return false end
-            if oka and (v == true or v == 1) then return true end
-            return nil
+            return record_alive(nc)
         end
     end
 end
@@ -6585,6 +7969,37 @@ local function settle_proposals(faction)
             log("agent mission: " .. faction .. ": " .. text)
         end
     end
+end
+
+-- Missions ordered this turn whose outcome hasn't come yet. An agent's action plays out a few seconds
+-- after the order (11-05: an assassination reported 6 s after it), and autoplay ended the turn 2 s
+-- after a sabotage order: the mission never reported (covert sabotage failed; it had passed when
+-- something else held the turn). End Turn waits for them, up to K.MISSION_WAIT seconds.
+K.MISSION_WAIT = 20
+M.missions = {}  -- faction -> { n = outcomes still to come, since = clock of the first order }
+
+function M.mission_ordered(faction)
+    local m = M.missions[faction] or { n = 0, since = M.clock() }
+    m.n = m.n + 1
+    M.missions[faction] = m
+end
+
+function M.mission_reported(faction)
+    local m = M.missions[faction]
+    if not m then return end
+    m.n = m.n - 1
+    if m.n <= 0 then M.missions[faction] = nil end
+end
+
+-- true while End Turn should wait for `faction`'s missions; gives up (and says so) after the cap
+function M.mission_hold(faction, now)
+    local m = M.missions[faction]
+    if not m then return false end
+    if now - m.since < K.MISSION_WAIT then return true end
+    log(string.format("autoplay: %s: %d mission(s) not reported after %ds; ending the turn anyway",
+                      faction, m.n, K.MISSION_WAIT))
+    M.missions[faction] = nil
+    return false
 end
 
 function M.take_agent_news(faction)
@@ -6700,11 +8115,31 @@ local paused_logged = false
 local function tick()
     if not root or not gd then return end
     control()
+    -- a QA load deferred during an AI faction's turn (M.qa.load): now, on the player's turn
+    if M.pending_load then
+        local okp, player = pcall(function() return gd.campaignStruct.currentFaction.isPlayerControlled == 1 end)
+        if okp and player then
+            local path = M.pending_load
+            M.pending_load = nil
+            local ok, err = pcall(M2TWEOP.loadGame, path)
+            log(ok and ("qa: load ok: " .. path) or ("qa: load failed: " .. tostring(err)))
+            return
+        end
+    end
+    if M.refusal() then return end
     local cfg = config()
     if not cfg or not cfg.autoplay then M.status = nil return end
     -- paused (parley/pause.py: a seat's usage limit): end no turn, press nothing, and keep every
     -- wait from running out, so the game resumes where it stopped with nothing decided for anyone
     local reason = read_file(root .. "/paused.txt")
+    -- the QA bench's hold (parley/qa/runner.py QA_HOLD_REASON) is for the player's turn only: during
+    -- AI turns the watcher must still clear what holds them. 11-05 07:33:53 the hold, written while
+    -- the AI turns played, stopped the tick before watch_ai_turn, a diplomacy screen from Denmark's
+    -- AI sat unanswered and the turn stood still for 9 min (diplomacy cede_settlement failed)
+    if reason and reason:find("^qa instant case") then
+        local okp, ai_turn = pcall(function() return gd.campaignStruct.currentFaction.isPlayerControlled ~= 1 end)
+        if okp and ai_turn then reason = nil end
+    end
     if reason then
         local now = M.clock()
         for _, p in ipairs(pending) do
@@ -6718,6 +8153,23 @@ local function tick()
         if not paused_logged then log("paused: " .. reason:gsub("%s+$", "")) end
         paused_logged = true
         M.status = "Parley: paused, the rulers can't answer (" .. reason:gsub("%s+$", "") .. ")"
+        -- a battle an instant case started still resolves under the hold: on_pre_battle's one press
+        -- can come before the panel takes clicks, and the tick that retries it in a played turn is
+        -- paused here (siege besiege_assault_storms, live 11-05 13:58:28: "battle panel open;
+        -- auto-resolving", then nothing for 150 s)
+        if reason:find("^qa instant case") and now - (M.autoresolve_at or 0) >= 3 then
+            local ok, el = pcall(function() return gameSTDUI.getUiElement("prebattle_auto_resolve_button") end)
+            if ok and el then
+                M.autoresolve_at = now
+                log("qa hold: the battle panel is still open; pressing auto-resolve")
+                pcall(M.press_auto_resolve)
+            elseif press_tick_part("post_battle_scroll") then
+                -- and its result closed, or the siege's state stays as it was (live 14:09:51: the
+                -- battle resolved, its results scroll stayed up, besieging=Bruges for 150 s)
+                M.autoresolve_at = now
+                log("qa hold: closed the battle's results")
+            end
+        end
         return
     end
     if paused_logged then log("resumed") end
@@ -6729,6 +8181,7 @@ local function tick()
     end
     local spy_report_closed = close_spy_report(M.clock())
     papal_look_tick(M.clock())  -- hands off: the vote scroll, looked for here, never in its event
+    M.close_papal_results_tick(M.clock())
     handle_popups(M.clock())
     watch_buttons(M.clock())
     close_leftover_diplomacy(M.clock())
@@ -6757,12 +8210,6 @@ local function tick()
         return
     end
     if cfg.factions[fac.name] then apply_orders(fac, cfg, turn, false) end
-    if #ui_jobs > 0 then  -- screen jobs (retraining) first, while no popup holds the screen
-        if #pending == 0 and not (M.deciding and M.deciding()) then run_ui_job(now) end
-        M.status = string.format("Parley: turn %d, working the screens (%s %s)", turn, ui_jobs[1] and ui_jobs[1].kind or "",
-                                 ui_jobs[1] and ui_jobs[1].settlement or "")
-        return
-    end
     local pending = pending_rulers(cfg, turn, fac)
     local waited = now - auto.since
     if #pending > 0 and waited < (cfg.wait or 300) then
@@ -6785,11 +8232,27 @@ local function tick()
         end
         return
     end
-    local offer = cfg.hold_decisions ~= false and M.decision_waiting()
+    if M.mission_hold(fac.name, now) then
+        M.status = string.format("Parley: turn %d, waiting for %s's agent missions to play out", turn, fac.name)
+        if auto.mission_logged ~= turn then
+            auto.mission_logged = turn
+            log("autoplay: turn " .. turn .. ": holding End Turn for " .. fac.name .. "'s agent missions")
+        end
+        return
+    end
+    if cfg.hold_reads and M.read_waiting(now) then
+        M.status = string.format("Parley: turn %d, waiting for the turn loop to read a message", turn)
+        if auto.read_logged ~= turn then
+            auto.read_logged = turn
+            log("autoplay: turn " .. turn .. ": holding End Turn until the turn loop reads a message")
+        end
+        return
+    end
+    local offer = cfg.hold_decisions ~= false and M.decision_waiting(cfg.hold_decisions == "diplomacy")
     if offer then
         auto.offer_since = auto.offer_since or now
         local held = now - auto.offer_since
-        if held < K.DECISION_HOLD_MAX then
+        if held < (cfg.decision_hold or K.DECISION_HOLD_MAX) then
             M.status = string.format("Parley: turn %d, waiting for the ruler's answer to %s (%ds)", turn, offer, held)
             if not auto.offer_logged then
                 auto.offer_logged = true
@@ -6813,7 +8276,42 @@ local function tick()
 end
 
 local last_error
+-- After a load (M.setup): each seated faction's report for the turn before, if it has none and no
+-- orders were settled for it, once the turn loop has made its folder.
+function M.write_load_reports()
+    local due, cfg = M.load_reports, config()
+    if not due or not cfg then return end
+    if due.lock and exists(due.lock) and gd.campaignStruct.turnNumber == due.turn then
+        due.until_t = M.clock() + 60  -- under QA the runner writes its own; the minute starts at the unlock
+        return
+    end
+    if M.clock() > due.until_t or gd.campaignStruct.turnNumber ~= due.turn then
+        for f in pairs(cfg.factions) do
+            if not due.done[f] then log(f .. ": no report for turn " .. (due.turn - 1) .. " at the load, and no folder to write it in") end
+        end
+        M.load_reports = nil
+        return
+    end
+    local left = false
+    for f in pairs(cfg.factions) do
+        if not due.done[f] then
+            local dir = turn_dir(cfg, due.turn - 1, f)
+            if exists(dir .. "/state.json") or exists(dir .. "/results.json") then
+                due.done[f] = true
+            elseif atomic_write(dir .. "/state.json", encode(M.report(gd.campaignStruct:getFaction(f), cfg))) then
+                due.done[f] = true
+                log(f .. ": no report for turn " .. (due.turn - 1) .. " at the load; wrote it now")
+            else
+                left = true
+            end
+        end
+    end
+    if not left then M.load_reports = nil end
+end
+
 function M.tick()
+    if M.menu_map then return end
+    pcall(M.write_load_reports)
     local ok, err = pcall(tick)
     if not ok and tostring(err) ~= last_error then
         last_error = tostring(err)
@@ -6826,11 +8324,59 @@ end
 -- on_turn_start freezes it again next turn. (Unfrozen, that turn closed in five seconds.)
 -- 3 s, not 15: a frozen AI's turn never ends by itself, and once let go it ends at once (11-05
 -- bench log: 26 releases, median 0 s to the next faction's turn, one over 3 s), so a longer wait
--- buys no quiet and cost ~15 s per AI faction per played turn
-M.FROZEN_TURN_LIMIT = 3
-function M.release_frozen(now)
+-- buys no quiet and cost ~15 s per AI faction per played turn. 1 s (11-05 later): checked on the
+-- fast frame path now, so a round of ~18 AI turns takes ~20-30 s instead of ~72
+M.FROZEN_TURN_LIMIT = 1
+-- A seat frozen by name (France: its ruler commands the armies) is let go only with nothing left to
+-- move. Live 11-21 10:04-10:07: Captain Evrart, ordered into Arhus each turn, spent 67-78 of 80
+-- points a turn going elsewhere once the released AI woke. So once the ruler's movers are at rest
+-- (every stack's tile and points unchanged for a second, at most FROZEN_REST_LIMIT s in), every
+-- stack's and agent's points are spent, then the AI is let go to end the turn
+M.FROZEN_REST_LIMIT = 10
+
+local function movers_snapshot(fac)
+    local parts = {}
+    for i = 0, (fac.stacksNum or 0) - 1 do
+        pcall(function()
+            local st = fac:getStack(i)
+            local c = st.leader or leader_of(fac, st)
+            parts[#parts + 1] = string.format("%s,%s,%s", tostring(c and c.xCoord), tostring(c and c.yCoord),
+                tostring(c and c.movePointsArmy))
+        end)
+    end
+    return table.concat(parts, ";")
+end
+
+local function spend_all_moves(fac)
+    local stacks, agents = 0, 0
+    for i = 0, (fac.stacksNum or 0) - 1 do
+        pcall(function()
+            local st = fac:getStack(i)
+            for j = 0, (st.numOfUnits or 0) - 1 do
+                pcall(function() st:getUnit(j).movePoints = 0 end)
+            end
+            local c = st.leader or leader_of(fac, st)
+            if c then pcall(function() c.movePoints = 0 end) end
+            stacks = stacks + 1
+        end)
+    end
+    for _, a in ipairs(agents_of(fac)) do
+        if pcall(function() a.char.movePoints = 0 end) then agents = agents + 1 end
+    end
+    return stacks, agents
+end
+
+function M.release_frozen(now, force)
     local ft = M.frozen_turn
-    if not ft or now - ft.since < M.FROZEN_TURN_LIMIT then return end
+    if not ft or (not force and now - ft.since < M.FROZEN_TURN_LIMIT) then return end
+    if ft.hold_moves and not force then
+        local snap = movers_snapshot(ft.fac)
+        if snap ~= ft.snap then ft.snap, ft.snap_at = snap, now end
+        if now - ft.snap_at < 1 and now - ft.since < M.FROZEN_REST_LIMIT then return end
+        local stacks, agents = spend_all_moves(ft.fac)
+        log(string.format("%s: movers at rest after %ds; spent the moves of %d stacks and %d agents so "
+            .. "the game AI moves none of them", ft.fac.name, now - ft.since, stacks, agents))
+    end
     M.frozen_turn = nil
     pcall(function()
         ft.fac.freezeFactionAI = 0
@@ -6840,7 +8386,24 @@ function M.release_frozen(now)
 end
 
 local next_tick = 0
+local frame_n = 0
 function M.on_frame()
+    -- control.txt is answered within a few frames, not on the 2 s tick: a QA bench reload made 7
+    -- control round trips at 2 s each (14 of its ~22 s; 11-05, agy's measurement). M.clock is
+    -- os.time (whole seconds), so this counts frames: every 5th, a file check that costs nothing
+    -- when there is no request.
+    frame_n = frame_n + 1
+    if root and frame_n % 5 == 0 then
+        local f = io.open(root .. "/control.txt", "r")
+        if f then
+            f:close()
+            pcall(control)
+        end
+        -- a frozen AI faction is let go as soon as its limit is up, not on the next 2 s tick: with ~18
+        -- AI factions a round of AI turns took ~72 s (11-05 phase 2: every bench reload after a
+        -- played turn waited 80-108 s for it)
+        if M.frozen_turn then pcall(M.release_frozen, M.clock()) end
+    end
     local now = M.clock()
     if now < next_tick then return end
     next_tick = now + 2
@@ -6848,10 +8411,134 @@ function M.on_frame()
     M.tick()
 end
 
+-- text for ImGui.Text/TextWrapped: on our fork ImGui passes text as "%s" (author/M2TWEOP-library PR #2),
+-- so text is passed unchanged (no "%" doubling needed; "80%." displays as "80%.")
+function M.imgui_text(s)
+    return tostring(s or "")
+end
+
+-- The access-violation catcher: a vectored exception handler in x86 machine code (no Lua runs in it;
+-- a Lua handler entered on every exception corrupted LuaJIT, 11-11). On every error-class exception
+-- (0xC...: access violations, a CRT call's invalid parameter c0000417 as 11-13 turn 705, ...) it
+-- records into parley_turns/fault.bin, a file mapping that outlives the process: +0 how many so
+-- far, +4 the address, +8 the stack words copied, +0xC the code, +0x10 the CONTEXT (204 bytes), +0xDC up to 4 KB of
+-- the faulting thread's stack (only when StackLimit <= esp < StackBase), +0x1200 the module map "base size
+-- name" lines. The last AV before a crash is the crash's: crash_report.py decodes it into the report.
+-- Why: 11-11 turn 272 and 11-13 turn 640 crashed at medieval2.exe eip=00eff4db, a ref-count copy with
+-- 1373 callers; only the stack names the caller. The bytes come from scripts/fault_catcher_stub.py.
+-- Off with fault_catcher=0 in bridge.txt (read at the first load of a game process).
+M.FAULT_STUB = {
+    252,139,68,36,4,139,8,139,17,129,226,0,0,0,240,129,250,0,0,0,192,117,104,86,87,186,68,51,34,17,
+    255,2,139,57,137,122,12,139,73,12,137,74,4,139,112,4,141,122,16,185,51,0,0,0,243,165,139,112,4,
+    139,182,196,0,0,0,100,139,13,8,0,0,0,57,206,114,42,100,139,13,4,0,0,0,57,206,115,31,41,241,193,
+    233,2,129,249,0,4,0,0,118,5,185,0,4,0,0,137,74,8,141,186,220,0,0,0,243,165,235,7,199,66,8,0,0,0,
+    0,95,94,49,192,194,4,0,
+}
+
+function M.fault_catcher(cfg)
+    if _G.__parley_fault_view then return "on (already)" end
+    if cfg and cfg.fault_catcher == false then return "off (fault_catcher=0)" end
+    local okf, ffi = pcall(require, "ffi")
+    if not okf then return "unavailable (no ffi)" end
+    local ok, err = pcall(function()
+        ffi.cdef[[
+            void* __stdcall VirtualAlloc(void* a, unsigned long n, unsigned long t, unsigned long p);
+            void* __stdcall CreateFileA(const char* n, unsigned long a, unsigned long s, void* sa,
+                                        unsigned long c, unsigned long f, void* t);
+            void* __stdcall CreateFileMappingA(void* h, void* sa, unsigned long p, unsigned long hi,
+                                               unsigned long lo, const char* n);
+            void* __stdcall MapViewOfFile(void* m, unsigned long a, unsigned long hi, unsigned long lo,
+                                          unsigned long n);
+            void* __stdcall AddVectoredExceptionHandler(unsigned long first, void* handler);
+            void* __stdcall GetCurrentProcess(void);
+            int __stdcall K32EnumProcessModules(void* p, void** mods, unsigned long cb, unsigned long* need);
+            unsigned long __stdcall K32GetModuleBaseNameA(void* p, void* mod, char* buf, unsigned long n);
+        ]]
+        local C, SIZE = ffi.C, 0x4000
+        local path = (root .. "/fault.bin"):gsub("/", "\\")
+        local h = C.CreateFileA(path, 0xC0000000, 3, nil, 2, 0x80, nil)
+        if h == nil or tonumber(ffi.cast("intptr_t", h)) == -1 then
+            -- 1224 ERROR_USER_MAPPED_FILE: the catcher installed at the game's launch still maps
+            -- fault.bin, and its handler is the process's (live 11-15, every reload logged
+            -- "unavailable" while the launch's catcher stood)
+            pcall(ffi.cdef, "unsigned long __stdcall GetLastError(void);")
+            local okl, e = pcall(function() return tonumber(C.GetLastError()) end)
+            if okl and e == 1224 then error("MAPPED") end
+            error("CreateFileA failed")
+        end
+        local m = C.CreateFileMappingA(h, nil, 4, 0, SIZE, nil)
+        if m == nil then error("CreateFileMappingA failed") end
+        local view = ffi.cast("uint8_t*", C.MapViewOfFile(m, 2, 0, 0, SIZE))
+        if view == nil then error("MapViewOfFile failed") end
+        ffi.fill(view, SIZE, 0)
+        local mods, need, lines = ffi.new("void*[512]"), ffi.new("unsigned long[1]"), {}
+        if C.K32EnumProcessModules(C.GetCurrentProcess(), mods, ffi.sizeof(mods), need) ~= 0 then
+            for i = 0, math.min(need[0] / 4, 512) - 1 do
+                local base = ffi.cast("uint8_t*", mods[i])
+                local pe = ffi.cast("uint32_t*", base + 0x3C)[0]
+                local size = ffi.cast("uint32_t*", base + pe + 0x50)[0]
+                local buf = ffi.new("char[260]")
+                C.K32GetModuleBaseNameA(C.GetCurrentProcess(), mods[i], buf, 260)
+                lines[#lines + 1] = string.format("%08x %08x %s",
+                    tonumber(ffi.cast("uintptr_t", base)), size, ffi.string(buf))
+            end
+        end
+        local text = table.concat(lines, "\n") .. "\n"
+        ffi.copy(view + 0x1200, text, math.min(#text, SIZE - 0x1200 - 1))
+        local code = M.FAULT_STUB
+        local exec = ffi.cast("uint8_t*", C.VirtualAlloc(nil, 4096, 0x3000, 0x40))
+        if exec == nil then error("VirtualAlloc failed") end
+        for i = 1, #code do exec[i - 1] = code[i] end
+        local patched = 0
+        for i = 0, #code - 4 do  -- BUF (marker 0x11223344) becomes the view's address
+            if exec[i] == 0x44 and exec[i + 1] == 0x33 and exec[i + 2] == 0x22 and exec[i + 3] == 0x11 then
+                ffi.cast("uint32_t*", exec + i)[0] = tonumber(ffi.cast("uintptr_t", view))
+                patched = patched + 1
+            end
+        end
+        if patched ~= 1 then error("stub marker found " .. patched .. " times") end
+        if C.AddVectoredExceptionHandler(1, exec) == nil then error("AddVectoredExceptionHandler failed") end
+        _G.__parley_fault_view, _G.__parley_fault_code = view, exec  -- installed: once per process
+    end)
+    if not ok and tostring(err):find("MAPPED", 1, true) then
+        return "on (installed at the game's launch; " .. root .. "/fault.bin still mapped by it)"
+    end
+    if not ok then return "unavailable (" .. tostring(err) .. ")" end
+    return "on (" .. root .. "/fault.bin)"
+end
+
+function M.record_build()
+    if not root then return end
+    local ok, text = pcall(function() return read_file(root .. "/parley_build.txt") end)
+    local stamp = "unknown"
+    if ok and text then
+        local s = text:match("^%s*(.-)%s*$")
+        if s and s ~= "" then stamp = s end
+    end
+    pcall(function() atomic_write(root .. "/bridge_loaded_build.txt", stamp .. "\n") end)
+    log("bridge build " .. stamp .. " loaded")
+end
+
 function M.setup(turn_root)
     root = turn_root
+    local refused = M.refusal()
+    if refused then
+        log(refused)
+        M.status = refused
+        return
+    end
     gd = gameDataAll.get()
+    -- The main menu draws a campaign map behind it and fires the load event for it: turn 0, no human
+    -- faction. It is no campaign: nothing is driven or announced on it (W47; a QA load sent on its
+    -- "loaded" line crashed the game on the loading screen, live 10-30 19:09)
+    local okh, humans = pcall(function() return gd.campaignStruct.numberOfHumanFactions end)
+    M.menu_map = okh and tonumber(humans) == 0 or nil
+    if M.menu_map then
+        log("main menu map loaded (no human faction): not a campaign; the bridge waits for one")
+        return
+    end
     M.trace_load()
+    for k in pairs(M.papal_results) do M.papal_results[k] = nil end
     M.papal_window_load()
     applied = {}
     edb_cache = nil
@@ -6859,11 +8546,19 @@ function M.setup(turn_root)
     -- reload) must not hand the bench's to the next report
     agent_news = {}
     proposals = {}
+    M.missions = {}
     -- nor this turn's orders: apply_orders resets them per orders file, but M.qa.order bypasses it
     -- and a bench load doesn't rerun the bridge (live 10-31: bribe_agent's spy "already has an order")
-    busy, ordered = {}, {}
+    busy, ordered, targeted = {}, {}, {}
+    -- nor the popups of the campaign that was on the map: a load (M2TWEOP.loadGame) keeps this Lua
+    -- state, and the QA runner deletes their request files after it (_clear_popup_requests), so an
+    -- entry left here would wait out its cap unanswered and hold End Turn as "deciding" (review 11-05)
+    pending, popups, choosing = {}, {}, {}
+    os.remove(root .. "/marriages_on.txt")  -- a case's family offers end with its campaign
+    os.remove(root .. "/quiet_off.txt")  -- as does a case's awake world
     if M.qa then M.qa.forget() end
     local cfg = config()
+    if cfg and not _G.__parley_fault_view then log("fault catcher: " .. M.fault_catcher(cfg)) end
     -- Reloaded mid-turn by the control file: orders already settled this turn stay settled.
     -- (Loading an older save has no marker, and its orders are applied again, on purpose.)
     local marker = read_file(root .. "/reloaded.txt")
@@ -6871,14 +8566,12 @@ function M.setup(turn_root)
         os.remove(root .. "/reloaded.txt")
         local turn = tonumber(marker:match("turn=(%d+)"))
         if cfg and turn and turn == gd.campaignStruct.turnNumber then
-            -- a real reload opened EOP's console to run; close it (a stale marker from a reload
-            -- that never ran must not: toggling would open it)
-            pcall(M2TWEOP.toggleConsole)
             for f in pairs(cfg.factions) do
                 local dir = turn_dir(cfg, turn - 1, f)
                 if exists(dir .. "/results.json") or exists(dir .. "/late.txt") then applied[dir] = true end
             end
             log("bridge reloaded at turn " .. turn)
+            M.record_build()
             -- a reload forgets the popups already open: close leftover result scrolls soon
             -- (live: a battle result sat a minute until stuck recovery found it)
             M.sweep_at = M.clock() + K.POPUP_DELAY
@@ -6887,14 +8580,205 @@ function M.setup(turn_root)
     -- every campaign map load (start, Continue, loadGame, reload) says so: the QA runner's restore
     -- waits for this after M.qa.load, and a plain load writes no reload marker
     pcall(function() log("bridge loaded campaign at turn " .. gd.campaignStruct.turnNumber) end)
+    M.record_build()
+    -- the turn loop makes turn folders from the heartbeat, and only a turn start wrote it: a load
+    -- of an older save left it at the old turn, so no folder, no report, and End Turn waited its
+    -- full 720 s (live 11-10 14:01: turn 5 loaded, heartbeat still turn=271)
+    if cfg and root then
+        pcall(function()
+            local turn = gd.campaignStruct.turnNumber
+            if turn and turn > 0 then atomic_write(root .. "/heartbeat.txt", "turn=" .. turn .. "\n") end
+        end)
+        -- a report is written at a turn's end, so a load with no report for the turn before (a new
+        -- run's first save, its folders archived) had nothing for the ruler to answer: End Turn
+        -- waited its 720 s and the turn went by with no orders (live 11-14 06:16, run 11 loaded
+        -- at turn 5). Write it now; apply_orders takes orders that come mid-turn. Autoplay only
+        -- (it's autoplay's End Turn that waits), and not under QA, whose runner times its own.
+        -- The folder is the turn loop's to make (from the heartbeat above), so M.tick writes each
+        -- report once its folder is there, for a minute.
+        -- A load under qa.lock waits for the lock to go, not skips: the bench restores the live
+        -- campaign while it still holds the lock (live 11-22 08:00:50, turn 3492: France had no
+        -- report and End Turn waited its 720 s)
+        M.load_reports = nil
+        if cfg.autoplay and not tostring(cfg.game_id):match("^qa%-") then
+            pcall(function()
+                local turn = gd.campaignStruct.turnNumber
+                if turn and turn > 0 then
+                    M.load_reports = { turn = turn, until_t = M.clock() + 60, done = {}, lock = root .. "/qa.lock" }
+                end
+            end)
+        end
+    end
     if cfg and cfg.autoplay then
         -- the game's own "auto-resolve all battles" (a hotseat option; may not apply otherwise,
         -- so on_pre_battle clicks the button too)
         local ok = pcall(function() M2TWEOP.getOptions2().autoresolveAllBattles = 1 end)
         log("autoplay: auto-resolve all battles " .. (ok and "on" or "unavailable"))
     end
+    -- a seated faction's admirals don't die of old age (M.spare_admirals): at the load too, as a save
+    -- can reach the year's end before that faction's next turn start (resume_t252.sav did, 6 of 6)
+    if cfg then
+        for name in pairs(cfg.factions) do
+            pcall(function() M.spare_admirals(gd.campaignStruct:getFaction(name)) end)
+        end
+    end
+    -- EOP's own campaign AI (globalEopAiConfig: its attack orders, army merges, aux-general transfers for
+    -- every AI faction) off, unless the game's bridge.txt says eop_ai=1. 11-11 14:21-14:30, turn 124: the
+    -- same autosave crashed 3 of 3 at one instruction (medieval2.exe eip=007193cf) in Denmark's turn, right
+    -- after EOP's AI logged "Try attack settlement order ... moveTactical: can not move army"; with it off it
+    -- played on. (Turn 265, 11:08: a crash inside EOP's own minorSettlementDb, during its naval scoring.)
+    -- A load turns it back on, so every load sets it. The game's own campaign AI still plays the AI factions.
+    if cfg then
+        local want = cfg.eop_ai == true
+        local ok, was = pcall(function()
+            local c = M2TWEOP.getEopAiConfig()
+            local before = c.enabled
+            c.enabled = want
+            return before
+        end)
+        log("EOP campaign AI: " .. (ok and ((want and "on" or "off") .. " (was " .. (was and "on" or "off") .. ")")
+                                      or "unavailable"))
+    end
     pcall(M.snapshot_stances)
     pcall(M.load_stance_orders)
+    -- a campaign loaded under any config but the bench's gets its marriage offers back
+    if not (cfg and cfg.freeze and cfg.freeze["*"]) then M.bench_marriages_restore() end
+end
+
+-- The QA bench's quiet world has no marriage offers. Answering one needs a screen click, and a click
+-- under a pending End Turn has crashed the game (live 10-30; 11-05 11:57:51 and 12:15:05). The game's
+-- marriage age limit (EOP M2TWEOP.getCampaignDb().familyTree.maxAgeForMarriageMale, LuaDocs 3.3.1:197,
+-- 7555; agy found it) is set to 0 on the bench. It lives in game memory, not in a save, so the original
+-- is written to marriage_age.txt and put back by the next load under a real config (M.setup).
+-- marriages_on.txt: a bench case asked for family offers (M.qa.marriage_offers_on); any load clears it
+function M.marriages_on()
+    if not root then return false end  -- before M.setup: no turn root yet (review 11-05)
+    return read_file(root .. "/marriages_on.txt") ~= nil
+end
+
+-- Marry a faction's unmarried adult men (characterRecord:marryWife, which calls the game's own
+-- marryCharacters, EOP characterRecord.cpp). The game offers a wife only to a man without one
+-- (patchesForGame.cpp createWife), so a married man draws no marriage offer, and the offer's scroll
+-- can't be answered without a screen click, which crashed the game 3 times on 11-05. Accepting an
+-- offer gives the man a wife; this gives him one before the offer comes. Returns the names wed and
+-- the first error, if any.
+-- A marriage under way is named in marrying.txt and cleared when marryWife returns, so one still
+-- named at the next call died with the game: live 11-14 16:44:59 "marrying Phillip Hasting age 16"
+-- was the last line before the 00C4E8BD crash. That man goes on marry_skip.txt and is never wed
+-- again, so one bad record can't crash every relaunch.
+function M.marry_skips()
+    local marker, list = root .. "/marrying.txt", root .. "/marry_skip.txt"
+    local skip = {}
+    for line in (read_file(list) or ""):gmatch("[^\r\n]+") do skip[line] = true end
+    local died = (read_file(marker) or ""):match("^%s*(.-)%s*$")
+    if died ~= "" and not skip[died] then
+        skip[died] = true
+        local f = io.open(list, "a")
+        if f then f:write(died, "\n") f:close() end
+        log(died .. " was being married when the game died; he is not married again (" .. list .. ")")
+    end
+    if died ~= "" then atomic_write(marker, "") end
+    return skip, marker
+end
+
+function M.marry_singles(fac)
+    local wed, why = {}, nil
+    local skip, marker = M.marry_skips()
+    for i = 0, (fac.numOfNamedCharacters or 0) - 1 do
+        local ok, err = pcall(function()
+            local r = fac:getNamedCharacter(i)
+            if r and skip[tostring(r.fullName or r.shortName or "?")] then return end
+            -- family men only: the game offers wives to no one else, and it frees an agent's or a
+            -- captain's record when he dies while his wife's record keeps pointing at it. Live 11-13:
+            -- assassin Michell Higgines was wed at 20:49; her natural death's message reads his name
+            -- through that pointer, the 00eff4db crash (turns 272, 640, 1252)
+            if r and r.isMale and r.isMale ~= 0 and (r.isFamily == true or (tonumber(r.isFamily) or 0) ~= 0)
+                and record_alive(r) ~= false
+                and r.spouse == nil and (tonumber(r.age) or 0) >= 16 then
+                local was_family = r.isFamily
+                local name = tostring(r.fullName or r.shortName or "?")
+                log("marrying " .. name .. " age " .. tostring(r.age))  -- a crash names him
+                atomic_write(marker, name)
+                local w = r:marryWife("random_name", 25)
+                atomic_write(marker, "")
+                if not w then error("marryWife returned nothing") end
+                wed[#wed + 1] = tostring(r.fullName or r.shortName or "?")
+                -- the bench reads whether a married non-family general turned family (11-06 risk)
+                M.last_wed = { name = wed[#wed], family_before = tostring(was_family),
+                               family_after = tostring(r.isFamily) }
+            end
+        end)
+        if not ok then why = why or tostring(err) end
+    end
+    return wed, why
+end
+
+function M.bench_marriages_off()
+    -- The age limit alone didn't stop them (live 11-05 12:31:34, 12:55: Loefwine, 55, still drew an
+    -- offer, and a click on that scroll preceded the 12:55:59 crash). The game offers a wife only to
+    -- a man without one (EOP patchesForGame.cpp createWife: "son is already married"), so England's
+    -- unmarried adult men are married here (characterRecord:marryWife, EOP master; logged when the
+    -- build lacks it). The bench save is reloaded for every case, so this never reaches a real game.
+    -- A case that wants offers (M.qa.marriage_offers_on: the marriage-click crash's repro) turns this off
+    -- until the next bench load
+    if M.marriages_on() then return end
+    pcall(function()
+        local wed, why = M.marry_singles(gd.campaignStruct:getFaction("england"))
+        if #wed > 0 or why then
+            log("qa: england's single men married on the bench: " .. #wed .. (why and ("; " .. why) or ""))
+        end
+    end)
+    pcall(function()
+        local ft = M2TWEOP.getCampaignDb().familyTree
+        local now = tonumber(ft.maxAgeForMarriageMale)
+        if not now or now == 0 then return end
+        if not read_file(root .. "/marriage_age.txt") then
+            atomic_write(root .. "/marriage_age.txt", tostring(now) .. "\n")
+        end
+        ft.maxAgeForMarriageMale = 0
+        log("qa: marriage offers off on the bench (maxAgeForMarriageMale " .. now .. " -> 0)")
+    end)
+    -- adoption offers likewise: the game offers to adopt only a man between minAdoptionAge and
+    -- maxAdoptionAge (EOP types/campaignDb.cpp; vanilla 20-30). Whether the man-of-the-hour offer
+    -- after a battle uses the same limit is unproven (games/interrupts.toml adoption_man_of_hour)
+    pcall(function()
+        local ft = M2TWEOP.getCampaignDb().familyTree
+        local now = tonumber(ft.maxAdoptionAge)
+        if not now or now == 0 then return end
+        if not read_file(root .. "/adoption_age.txt") then
+            atomic_write(root .. "/adoption_age.txt", tostring(now) .. "\n")
+        end
+        ft.maxAdoptionAge = 0
+        log("qa: adoption offers off on the bench (maxAdoptionAge " .. now .. " -> 0)")
+    end)
+    -- a suitor for a princess likewise (onOfferedForMarriage): live 11-14 06:50, the noclick bench's
+    -- turn 6 drew "marriage offer: Nicholas Went", a generated suitor no Lua call can answer, and the
+    -- turn hung on the refused click. The game offers suitors only to women up to this age.
+    pcall(function()
+        local ft = M2TWEOP.getCampaignDb().familyTree
+        local now = tonumber(ft.maxAgeForMarriageForFemale)
+        if not now or now == 0 then return end
+        if not read_file(root .. "/suitor_age.txt") then
+            atomic_write(root .. "/suitor_age.txt", tostring(now) .. "\n")
+        end
+        ft.maxAgeForMarriageForFemale = 0
+        log("qa: suitor offers off on the bench (maxAgeForMarriageForFemale " .. now .. " -> 0)")
+    end)
+end
+
+function M.bench_marriages_restore()
+    for _, k in ipairs({ { "marriage_age.txt", "maxAgeForMarriageMale", "marriage" },
+                         { "adoption_age.txt", "maxAdoptionAge", "adoption" },
+                         { "suitor_age.txt", "maxAgeForMarriageForFemale", "suitor" } }) do
+        local saved = tonumber((read_file(root .. "/" .. k[1]) or ""):match("%d+"))
+        if saved then
+            local ok = pcall(function() M2TWEOP.getCampaignDb().familyTree[k[2]] = saved end)
+            if ok then
+                os.remove(root .. "/" .. k[1])
+                log(k[3] .. " offers back on (" .. k[2] .. " -> " .. saved .. ")")
+            end
+        end
+    end
 end
 
 return M

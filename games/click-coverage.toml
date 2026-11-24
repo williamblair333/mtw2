@@ -1,0 +1,47 @@
+# Every kind of screen input the turn loop has ever made (`just click-census`, the `x-input:` lines)
+# and the bench cases that prove it now goes without one. `just click-coverage` fails while any kind
+# the census has seen matches no entry here, or an entry's cases haven't all passed in the newest
+# report of a `--kind noclick` run (every click refused). Fields match the census columns; "*" (or a
+# missing field) matches anything; the first matching entry wins. An entry with no cases is a known
+# gap: its `gap` says what's missing. Cases are "suite/case" (games/qa/<suite>.toml).
+# Added 11-21 after "no clicks for 18 hours" was reported as near-done while the marriage offer had
+# never been forced with clicks refused.
+
+[[kinds]]
+action = "open"
+kind = "marriage"
+cases = [
+    "family/forced_wife_declined_by_element",
+    "family/forced_suitor_declined_by_element",
+    "family/forced_wife_accepted_by_element",
+    "family/forced_suitor_accepted_by_element",
+]
+
+[[kinds]]
+action = "accept"
+kind = "read"
+event = "scroll:post_battle_scroll"  # the census logs a scroll's name in its event field
+cases = ["forced/forced_battle_result"]
+
+[[kinds]]
+action = "accept"
+kind = "read"
+cases = [
+    "popups/event_scroll_closed",
+    "forced/forced_flood",
+    "forced/forced_leader_death",
+    "forced/forced_war_on_ally",
+]
+
+[[kinds]]
+action = "open"
+kind = "minimized"
+# the reopen by element, and the stuck turn's own path that calls it (no click fallback since 11-21)
+cases = ["popups/minimized_message_reopened_by_element", "popups/stuck_turn_reopens_minimized_message"]
+
+[[kinds]]
+action = "escape"
+kind = "escape"
+# no code writes an escape request since 11-22; the stuck results scroll is closed by its gadget
+cases = ["popups/papal_results_turn_goes_on"]
+

@@ -21,6 +21,16 @@ def test_foreign_army_without_troops_is_one_line_and_truncation_noted():
     assert _foreign_army(a).endswith("20x Peasants (infantry), and 5 more")
 
 
+def test_an_own_army_with_no_units_is_said_to_be_going(venice_report):
+    # live 11-05 (scratch 77-78): France's Captain Garnot had 0 units, vanished, and the ruler guessed
+    # at an ambush; an empty garrison is a town's, not a vanishing army
+    from parley.prompt import _own_army
+    empty = Army(id="Captain Garnot", x=111, y=130, strength=0, units=0)
+    assert "no units left" in _own_army(empty, ("armies",))
+    assert "no units left" not in _own_army(Army(id="Captain X", x=1, y=1, strength=10, units=1), ("armies",))
+    assert "no units left" not in _own_army(Army(id="garrison:Paris", x=1, y=1, strength=0, units=0), ("armies",))
+
+
 def test_prompt_lists_ids(venice_report):
     p = build_prompt(venice_report, persona="You are Doge Enrico.")
     assert "hre (Holy Roman Empire)" in p
@@ -205,7 +215,7 @@ def test_prompt_answers_what_the_ruler_kept_asking(venice_report):
         "last_results": [OrderResult(index=0, type="merge_armies", ok=True,
                                      now="garrison:Caen has 15 units, in Caen; Paul has 1 units, at (100,130)")]})
     p = build_prompt(r, persona="p")
-    assert f"- {venice.id} ({venice.name}), region {venice.region} at (109,147), port at (110,147)" in p
+    assert f"- {venice.id} ({venice.name}), region {venice.region}: at (109,147), port at (110,147), garrison" in p
     assert "in training: Longbowmen (joins the garrison on turn 27)" in p
     assert "Admiral Nigel" in p and "beside the port of " + venice.id in p
     assert "Income items: taxes +3000, army upkeep -2100, trade +900." in p
@@ -282,7 +292,7 @@ def test_prompt_lists_family_the_dead_included(venice_report):
               Person(name="Laurence", age=40, kind="diplomat")]
     p = build_prompt(venice_report.model_copy(update={"family": family}), persona="p")
     assert "YOUR FAMILY" in p and "- Rufus, 37, leader, general" in p
-    assert "- Matilda, 60, married to William" in p and "- Cecilia: dead (at 36)" in p
+    assert "- Matilda, 60, married to William" in p and "- and 1 more dead relatives (not listed)" in p
     assert "- Agnese, 19, princess, unmarried" in p and "child of Rufus" in p
     assert "- Laurence" not in p  # agents outside the family stay in YOUR AGENTS
 
@@ -384,6 +394,31 @@ def test_settlements_say_what_retrain_would_refill(venice_report):
     p = build_prompt(venice_report.model_copy(update={"settlements": [s2], "armies": [g]}),
                      persona="p", areas=["recruit"])
     assert "retrain would refill nothing now" in p
+
+
+def test_armies_say_what_merge_units_would_combine(venice_report):
+    # live 11-11 turn 179: merge_units on 5 garrisons, each one worn unit beside full ones, all refused
+    from parley.protocol import Army, Unit
+    worn_pair = [Unit(type="Spear Militia", soldiers=51, max_soldiers=75),
+                 Unit(type="Spear Militia", soldiers=40, max_soldiers=75),
+                 Unit(type="Billmen", soldiers=60, max_soldiers=60)]
+    one_worn = [Unit(type="Welsh Spearmen Mercs", soldiers=75, max_soldiers=75),
+                Unit(type="Welsh Spearmen Mercs", soldiers=3, max_soldiers=75),
+                Unit(type="NE Bodyguard", soldiers=10, max_soldiers=20),
+                Unit(type="NE Bodyguard", soldiers=12, max_soldiers=20)]
+    upgraded = [Unit(type="Pike Militia", soldiers=64, max_soldiers=75, armour=1),
+                Unit(type="Pike Militia", soldiers=67, max_soldiers=75)]
+    for troops, want in ((worn_pair, "merge_units would combine: Spear Militia (51/75, 40/75)"),
+                         (one_worn, "merge_units would combine nothing"),
+                         (upgraded, "troops: Pike Militia (armour 1) 64/75 exp 0; Pike Militia 67/75 exp 0"),
+                         (upgraded, "merge_units would combine nothing")):
+        a = Army(id="Captain X", x=1, y=1, strength=1, units=len(troops), troops=troops)
+        p = build_prompt(venice_report.model_copy(update={"armies": [a]}), persona="p", areas=["armies"])
+        assert want in p, p
+    full = [Unit(type="Billmen", soldiers=60, max_soldiers=60)]
+    a = Army(id="Captain X", x=1, y=1, strength=1, units=1, troops=full)
+    assert "merge_units would" not in build_prompt(venice_report.model_copy(update={"armies": [a]}),
+                                                   persona="p", areas=["armies"])
 
 
 def test_prompt_lists_the_realms_news(venice_report):

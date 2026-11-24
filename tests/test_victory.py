@@ -48,6 +48,17 @@ def test_victory_line_states_the_goal_progress_and_turns_left(tmp_path):
     assert victory_line("england", 0, 3, tmp_path / "missing") is None
 
 
+def test_a_campaign_past_its_turn_limit_says_so_not_zero_turns_left(tmp_path):
+    # live 11-14, turns 675 and 677: England's ruler read "225: 0 turns left" and asked twice
+    # whether the campaign was over or the counter wrong. The game plays on past the limit.
+    (tmp_path / "descr_win_conditions.txt").write_text(WIN)
+    (tmp_path / "descr_strat.txt").write_text(STRAT)
+    line = victory_line("england", 677, 5, tmp_path)
+    assert "0 turns left" not in line
+    assert "turn limit (225) has passed" in line
+    assert "the game plays on" in line
+
+
 # --- the economy block ---
 import json
 from types import SimpleNamespace

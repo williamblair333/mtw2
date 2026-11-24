@@ -73,6 +73,48 @@ def test_claude_timeout_raises_seat_error(monkeypatch):
         ClaudeCodeSeat().decide("prompt", **IDS)
 
 
+@pytest.mark.parametrize("words", [
+    # live 11-20 11:30-13:00: this matched nothing, so ~66 turns passed with no ruler and no pause
+    "You've hit your 5-hour limit · resets 1pm (America/Kentucky/Louisville) · out of usage credits",
+    "You've hit your limit",
+    "You've hit your weekly limit",
+    "Claude AI usage limit reached",
+])
+def test_a_usage_limit_is_a_seat_limit_that_pauses(words):
+    from parley.seats.claude_code import LIMIT
+    assert LIMIT.search(words)
+
+
+def test_an_ordinary_failure_is_not_a_usage_limit():
+    from parley.seats.claude_code import LIMIT
+    assert not LIMIT.search("claude timed out after 300s")
+    assert not LIMIT.search("Argument list too long: 'claude'")
+
+
+def test_claude_gets_the_prompt_on_stdin_not_argv(monkeypatch):
+    # live 11-15 turn 1038: France's prompt passed 128 KB, one argv string's limit on Linux
+    # (MAX_ARG_STRLEN), and "Argument list too long: 'claude'" stopped the turn loop
+    seen = {}
+
+    def run(cmd, **kw):
+        seen["cmd"], seen["kw"] = cmd, kw
+        return _proc(_claude_stdout(ORDERS))
+    monkeypatch.setattr(subprocess, "run", run)
+    big = "x" * 200_000
+    ClaudeCodeSeat().decide(big, **IDS)
+    assert big not in seen["cmd"] and seen["kw"]["input"] == big
+
+
+def test_claude_os_error_is_a_seat_error_not_a_dead_loop(monkeypatch):
+    import errno
+
+    def boom(*a, **k):
+        raise OSError(errno.E2BIG, "Argument list too long")
+    monkeypatch.setattr(subprocess, "run", boom)
+    with pytest.raises(SeatError):
+        ClaudeCodeSeat().decide("prompt", **IDS)
+
+
 def test_claude_error_result_raises(monkeypatch):
     d = json.loads((FIX / "claude_result.json").read_text())
     d.update(is_error=True, subtype="error_max_turns")
@@ -170,6 +212,24 @@ def test_ollama_disables_thinking(monkeypatch):
     monkeypatch.setattr(httpx.Client, "post", fake_post)
     OllamaSeat(host="http://ollama.test").decide("prompt", **IDS)
     assert sent["think"] is False
+
+
+def test_ollama_context_fits_the_prompt(monkeypatch):
+    # Ollama's default context (4096 on CPU) silently cut a ~40 KB ruler prompt to its last third.
+    sent = []
+
+    def fake_post(self, url, **kw):
+        sent.append(kw["json"])
+        return httpx.Response(200, json={"message": {"content": json.dumps(ORDERS)}},
+                              request=httpx.Request("POST", url))
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    seat = OllamaSeat(host="http://ollama.test")
+    seat.decide("x" * 40_000, **IDS)
+    seat.decide("short", **IDS)
+    big, small = (b["options"]["num_ctx"] for b in sent)
+    assert big >= 40_000 // 3 + 2048
+    assert small == 8192
+    assert big % 1024 == 0
 
 
 def test_agy_fenced_response_without_structured_output(monkeypatch):

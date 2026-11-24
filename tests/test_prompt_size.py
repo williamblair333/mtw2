@@ -12,7 +12,7 @@ ALL_AREAS = ("diplomacy", "armies", "agents", "build", "recruit", "taxes")
 
 # England, turn 39 of run "scratch" (a real 45 KB prompt): code-generated parts only, a fixed persona
 # and adviser, no notes or diplomacy. Before the cuts this was 28012 characters.
-TURN39_BUDGET = 27538  # 25200 + 2238 (parley/strategy/england.md) + 100 margin (10-30); includes the primer's rules of thumb (1.5 KB); +1000 with the primer cap (playbook);
+TURN39_BUDGET = 27690  # +52 (11-23): the map's bounds line, once; +100 (11-11): an army's "merge_units would combine" line, only where a unit is worn; 25200 + 2238 (parley/strategy/england.md) + 100 margin (10-30); includes the primer's rules of thumb (1.5 KB); +1000 with the primer cap (playbook);
 # +400 (10-30): free-upkeep marks in recruit lists and the siege/reinforcement primer lines
 
 
@@ -35,9 +35,9 @@ def test_turn39_prompt_stays_within_its_size_budget():
 
 def test_turn39_prompt_keeps_what_the_ruler_acts_on():
     p = build_prompt(turn39(), persona="p", adviser="your_discord_name", areas=ALL_AREAS)
-    for fact in ("- London (London)", "- Nottingham (Nottingham)", "- Caen (Caen)",
+    for fact in ("\n- London", "\n- Nottingham", "\n- Caen",
                  "can build (florins/turns): mines 2000/2",
-                 "can recruit (florins/turns, upkeep a turn): Town Militia 290/1, free upkeep (3 left)",
+                 "can recruit: Town Militia", "- Town Militia 290/1",
                  "free-upkeep slots 3 of 3 left", "cog 500/1, upkeep 150",
                  "Haakon Svendsen (denmark): 14 units, 823 men", "- York (scotland): garrison 6 units, 402 men",
                  "- scotland (Scotland): alliance for 13 turns", "Income items: army upkeep -4563"):
@@ -94,6 +94,13 @@ def test_far_trade_resources_are_cut_off_with_a_count(venice_report):
     res = [TradeResource(kind="wool", x=i, y=i, distance=i + 1) for i in range(RESOURCES_SHOWN + 4)]
     p = build_prompt(venice_report.model_copy(update={"resources": res}), persona="p")
     assert p.count("- wool at") == RESOURCES_SHOWN and "(and 4 farther ones)" in p
+
+
+def test_the_map_bounds_are_printed_once_when_known(venice_report):
+    # live 11-22: England ordered moves to (100,200), (100,195), (98,190) on a 295x189 map
+    p = build_prompt(venice_report.model_copy(update={"map_width": 295, "map_height": 189}), persona="p")
+    assert p.count("Map: 295 x 189 tiles (x 0-294, y 0-188).") == 1
+    assert "Map: " not in build_prompt(venice_report, persona="p")
 
 
 def test_faction_note_is_empty_without_a_file():

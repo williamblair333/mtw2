@@ -1,4 +1,4 @@
-from test_popups import CHOICE, Recorder, Seat, _popups, _req
+from test_popups import CHOICE, Recorder, Seat, _answered, _popups, _req
 
 
 def test_all_zero_record_goes_to_the_ruler(tmp_path):
@@ -11,6 +11,7 @@ def test_all_zero_record_goes_to_the_ruler(tmp_path):
          suitor={"name": "Toby Fitzneale", "age": 31, "command": 0, "loyalty": 0, "piety": 0, "chivalry_or_dread": 0})
     p.poll()
     assert len(seat.prompts) == 1
-    assert "Command" in seat.prompts[0] and rec.clicks == ["accept"]
+    assert "Command" in seat.prompts[0]
+    assert _answered(tmp_path, "popup-1-1") == "accept\n" and rec.clicks == []
     [msg] = p.messages_for("england")
     assert "your steward decided by rule" not in msg

@@ -1,0 +1,23 @@
+# Quiet suite: the quiet world, read back from the game right after a bench load. The runner's
+# _quiet_world runs M.qa.quiet after every bench load and refuses the load if a write doesn't stick;
+# this case shows the result in the game itself: the Pope, England's leader and heir 45 or younger
+# (no papal election, no succession) and the family-tree limits at 0 (no marriage or adoption
+# offers, #412/#447). It is the bench proof games/interrupts.toml names for those holds (planned
+# 11-01 as instant/quiet_world_held, built 11-05). One instant case, seconds; `just qa quiet`.
+
+name = "quiet"
+faction = "england"
+
+[[cases]]
+name = "quiet_world_held"
+kind = "instant"
+act = ['return M.qa.current()']
+# (not the "qa: quiet ok" log line: it comes during the bench load, before the case's log window;
+# bench 11-05 19:14 failed on it alone)
+expect = [
+    { lua = 'return gameDataAll.get().campaignStruct.collegeOfCardinals.pope.age', below = "46" },
+    { lua = 'return gameDataAll.get().campaignStruct:getFaction("england").leader.age', below = "46" },
+    { lua = 'return gameDataAll.get().campaignStruct:getFaction("england").heir.age', below = "46" },
+    { lua = 'return M2TWEOP.getCampaignDb().familyTree.maxAgeForMarriageMale', equals = "0" },
+    { lua = 'return M2TWEOP.getCampaignDb().familyTree.maxAdoptionAge', equals = "0" },
+]

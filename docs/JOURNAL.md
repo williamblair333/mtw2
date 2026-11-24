@@ -1011,3 +1011,20 @@ The author watched Old Scratch (Claude Opus, full control) play England while ad
   `runs/qa/*-all.md` has an unexplained fail/inconclusive, and a hold counts only when its
   `bench` case's newest row is a pass. Against the 04:42 report it names exactly the three open
   cases. STANDARDS gained `phase-order` and `no-clicks-first`.
+
+## 2026-11-06 morning: reading the log corrected a decision
+
+- **A pass that proved nothing.** frozen_rival_offers_nothing passed in 23 s. Its report said one turn
+  where the case promised two, so the log got read: the rival, the Aztecs, took no turn in that round, and
+  the regex's `^` matched any line. Rewritten to need the rival's own turn twice. Lesson: read the
+  evidence of an absence-of-event pass before believing it.
+- **"Every marriage click crashes" was false.** It had hardened into a rule, and a decision was made on it.
+  While checking a different claim, the turn log showed accepts at 20:20 and 20:41 that survived, and a bench
+  decline survived too. The word "every" came from counting only the crashes.
+- **Two offers under one event.** A screenshot showed "a fitting suitor for your noble daughter", not the
+  wife scroll. The bridge's "for your princess" bug came from treating them as one.
+- **Escape.** A saved open offer made the scroll repeatable, so it could finally be probed. EOP can't find
+  it by name, but Escape closes it, 3 of 3, and the turn ends. Declines use it now.
+- **The bug that held QA up.** A ruler's answer lifted any pause, which was unsafe for the real campaign, yet
+  QA's bench turns were running only because of it. The first fix froze them, and a live run showed that
+  within minutes; unit tests had passed. Each accidental dependency got an explicit replacement.

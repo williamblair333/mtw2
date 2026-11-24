@@ -1,0 +1,142 @@
+# Family suite: family offers (marriage), which the other suites hold off (M.qa.quiet marries
+# England's men; #412, #447).
+#
+# marriage_offer_answered is the regression case for the crash seen three times on 11-05: a marriage
+# offer answered by the turn loop's screen click, and the game dead within a minute (bench 11:57 a
+# decline, 12:15; live 20:00 an accept, runs/crashes/2026-11-05-200049 on the test laptop). Since #645 the
+# bridge presses the ruler's answer on the scroll by its element (M.press_choice), no click. Offers are
+# turned back on for this case only (M.qa.marriage_offers_on: the limits restored, no wives handed out
+# until the next load) and an unmarried English general is spawned. Whether the game offers him a wife
+# within the turns is its own roll: no offer is inconclusive (chance), never a pass.
+# Run: `just qa family`.
+
+name = "family"
+faction = "england"
+
+# M.marry_singles (characterRecord:marryWife) marries England's single men on the bench so the other
+# suites draw no offers (M.bench_marriages_off). This case turns offers back on, spawns an unmarried
+# general, runs the same marriage and checks who is wed. The last expect
+# records whether a non-family general became family by it (a risk the author accepted 11-06; restrict
+# M.marry_singles to family men if family_after differs from family_before).
+[[cases]]
+name = "single_men_married_in_advance"
+kind = "instant"
+setup = [
+    'return M.qa.marriage_offers_on()',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "groom" },
+]
+# 11-13 (#592) settled that risk: M.marry_singles weds family men only (the game offers wives to no one
+# else, and a wed agent's or captain's freed record crashed the game, the 00eff4db crash). spawn_army
+# makes a non-family general, so he is left single, and a second pass weds nobody and errs nowhere.
+expect = [
+    { lua = 'local w = M.marry_singles(gameDataAll.get().campaignStruct:getFaction("england")) for _, n in ipairs(w) do if n == "$groom" then return "wed" end end return "left single"', equals = "left single" },
+    { lua = 'local w, why = M.marry_singles(gameDataAll.get().campaignStruct:getFaction("england")) return #w .. "/" .. tostring(why)', equals = "0/nil" },
+]
+
+[[cases]]
+name = "marriage_offer_answered"
+chance = true
+max_turns = 3
+choice = "accept"
+setup = [
+    'return M.qa.marriage_offers_on()',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "groom" },
+]
+expect = [
+    { log = 'marriage offer: [^\n]+ for england' },
+    { log = 'popup: a marriage offer: pressed accept on [^\n]+ by its element' },
+    { alive = 30, after = 'marriage offer: [^\n]+ for england' },
+]
+
+# Forced offers (11-06, EOP createMessageMarriageProposal): both scrolls on demand, no roll, so these
+# are never inconclusive. The bridge presses the ruler's answer, accept or decline, on the scroll by its
+# element (M.press_choice, #645): no click and no Escape. A crash there is a finding, not a bench bug.
+[[cases]]
+name = "forced_wife_declined_by_element"
+max_turns = 2
+choice = "decline"
+setup = [
+    'return M.qa.marriage_offers_on()',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "groom" },
+    { lua = 'return M.qa.force_offer("england", "wife")', bind = "offered" },
+]
+expect = [
+    { log = 'marriage offer: [^\n]+ for england \(a wife\)' },
+    { log = 'popup: a marriage offer answered by the ruler' },
+    { log = 'popup: a marriage offer: pressed decline on [^\n]+ by its element' },
+    { alive = 30, after = 'popup: a marriage offer answered by the ruler' },
+]
+
+[[cases]]
+name = "forced_suitor_declined_by_element"
+max_turns = 2
+choice = "decline"
+setup = [
+    'return M.qa.marriage_offers_on()',
+    { lua = 'return M.qa.force_offer("england", "suitor")', bind = "offered" },
+]
+expect = [
+    { log = 'marriage offer: [^\n]+ for england' },
+    { log = 'popup: a marriage offer answered by the ruler' },
+    { log = 'popup: a marriage offer: pressed decline on [^\n]+ by its element' },
+    { alive = 30, after = 'popup: a marriage offer answered by the ruler' },
+]
+
+[[cases]]
+name = "forced_wife_accepted_by_element"
+max_turns = 2
+choice = "accept"
+setup = [
+    'return M.qa.marriage_offers_on()',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "groom" },
+    { lua = 'return M.qa.force_offer("england", "wife")', bind = "offered" },
+]
+expect = [
+    { log = 'marriage offer: [^\n]+ for england \(a wife\)' },
+    { log = 'popup: a marriage offer answered by the ruler' },
+    { log = 'popup: a marriage offer: pressed accept on [^\n]+ by its element' },
+    { alive = 30, after = 'popup: a marriage offer answered by the ruler' },
+    # the accept took (11-06: three runs "passed" with a blank answer that declined). The game picks the
+    # groom: 11-21 the wife went to Captain Robin, not the spawned $groom, a second after the press
+    { log = 'character event: england: [^\n]+ married' },
+]
+
+[[cases]]
+name = "forced_suitor_accepted_by_element"
+max_turns = 2
+choice = "accept"
+setup = [
+    'return M.qa.marriage_offers_on()',
+    { lua = 'return M.qa.force_offer("england", "suitor")', bind = "offered" },
+]
+expect = [
+    { log = 'marriage offer: [^\n]+ for england' },
+    { log = 'popup: a marriage offer answered by the ruler' },
+    { log = 'popup: a marriage offer: pressed accept on [^\n]+ by its element' },
+    { alive = 30, after = 'popup: a marriage offer answered by the ruler' },
+    # the offer names him "Anthony of_Pickering", the event "Anthony of Pickering" (11-21)
+    { log = 'character event: england: [^\n]+ married a princess' },
+]
+
+# A decline through the whole loop: the bridge presses decline on the scroll by its element (#645), no
+# click and no Escape. A chance case: no offer in the turns is inconclusive, never a pass.
+[[cases]]
+name = "marriage_offer_declined_by_element"
+chance = true
+max_turns = 6  # 3 was too few on 11-06: the offer came one turn after the case stopped
+choice = "decline"
+setup = [
+    'return M.qa.marriage_offers_on()',
+    { lua = 'return M.qa.free_tile($garrison_town_x, $garrison_town_y, 1, 2)', bind = "at" },
+    { lua = 'return M.qa.spawn_army("england", $at_x, $at_y)', bind = "groom" },
+]
+expect = [
+    { log = 'marriage offer: [^\n]+ for england' },
+    { log = 'popup: a marriage offer answered by the ruler' },
+    { log = 'popup: a marriage offer: pressed decline on [^\n]+ by its element' },
+    { alive = 30, after = 'popup: a marriage offer answered by the ruler' },
+]

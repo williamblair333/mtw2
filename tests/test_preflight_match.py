@@ -79,3 +79,27 @@ def test_a_qa_run_after_a_heredoc_is_still_checked():
 
 def test_a_heredoc_fed_to_a_shell_is_checked_as_commands():
     assert gated("bash <<'EOF'\ncd .\njust qa towns\nEOF") == ["towns"]
+
+
+PIPED = re.compile(next(g for g in GATES if g["id"] == "merge-gate-game-smoke")["match"])
+
+
+@pytest.mark.parametrize("command", [
+    # 11-05 19:00, the one that merged #443 red
+    ".venv/bin/pytest -q tests/test_qa_checker.py 2>&1 | tail -1 && git add x && git commit -q -m y",
+    ".venv/bin/pytest -q 2>&1 | tail -1 && just reload-bridge",
+    "just test 2>&1 | tail -1 && git push -q origin HEAD",
+    "pytest -q | grep passed && python3 -c \"call('POST','/repos/x/pulls/1/merge')\"",
+])
+def test_piped_tests_before_a_merge_are_refused(command):
+    assert PIPED.search(command)
+
+
+@pytest.mark.parametrize("command", [
+    ".venv/bin/pytest -q >/dev/null 2>&1 || { echo TESTS RED; exit 1; }; git commit -q -m y",
+    ".venv/bin/pytest -q 2>&1 | tail -1",
+    "pytest -q > out 2>&1; s=$?; tail -1 out; [ $s -eq 0 ] && git commit -m y",
+    ".venv/bin/pytest -q 2>&1 | tail -1; git stash pop -q",
+])
+def test_gated_or_unchained_test_runs_pass(command):
+    assert not PIPED.search(command)

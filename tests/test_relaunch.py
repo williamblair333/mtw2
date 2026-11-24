@@ -139,6 +139,9 @@ def _game(tmp_path: Path, steam_body: str, extra: dict | None = None):
     bin_dir.mkdir()
     fakes = {
         "pgrep": "exit 1",  # nothing running
+        # no desktop sessions to read: the real host's lock state must not decide a test (11-05:
+        # nine relaunch tests failed while the main machine's screen was locked)
+        "loginctl": "exit 0",
         "pkill": 'echo "pkill $*" >>"$LOG"; exit 1',
         "sleep": "exec /bin/sleep 0.01",
         # every xdotool call is logged; a search for ^ERROR$ finds the box when $ERROR_UP exists
@@ -172,7 +175,7 @@ if [ "$1" = search ]; then case "$*" in *ERROR*) [ -e "$ERROR_UP" ] && echo 99 &
     return env, mod, calls
 
 
-LOADS = 'printf "bridge loaded campaign at turn 0\\nbridge loaded campaign at turn 49\\n" >>"$BRIDGE_LOG"'
+LOADS = 'printf "main menu map loaded (no human faction): not a campaign; the bridge waits for one\\nbridge loaded campaign at turn 49\\n" >>"$BRIDGE_LOG"'
 
 
 def _run(env, *args):
@@ -279,13 +282,13 @@ def test_relaunch_without_save_loads_the_newest_real_save(tmp_path):
     assert (mod / "parley.cfg").read_text() == CFG
 
 
-def test_the_menus_turn_0_and_old_log_lines_are_not_the_campaign(tmp_path):
-    # only the menu's turn 0 after the launch (the old turn-7 line is before it): a timeout
-    env, mod, calls = _game(tmp_path, 'echo "bridge loaded campaign at turn 0" >>"$BRIDGE_LOG"')
+def test_the_menu_map_and_old_log_lines_are_not_the_campaign(tmp_path):
+    # only the menu map's line after the launch (the old turn-7 line is before it): a timeout
+    env, mod, calls = _game(tmp_path, 'echo "main menu map loaded (no human faction): not a campaign; the bridge waits for one" >>"$BRIDGE_LOG"')
     env["PARLEY_RELAUNCH_TIMEOUT"] = "3"
     r = _run(env)
     assert r.returncode == 1
-    assert "no 'bridge loaded campaign at turn N' (N > 0)" in r.stderr
+    assert "no 'bridge loaded campaign at turn N' in" in r.stderr
     assert (mod / "parley.cfg").read_text() == CFG  # stripped after the failure too
     lines = calls.read_text().splitlines()
     assert "pkill -x medieval2.exe" in lines and "pkill -x M2TWEOP GUI.exe" in lines  # stopped
@@ -333,6 +336,30 @@ def test_under_the_crash_watch_unit_steam_starts_in_its_own_scope(tmp_path):
     assert "systemd-run --user --scope --collect --quiet steam steam://rungameid/4700" in calls.read_text()
 
 
+def test_with_nobody_logged_in_the_relaunch_fails_at_once(tmp_path):
+    # the test laptop 11-05: after its nightly power-off it sat at the login screen and each restore
+    # waited the full 240 s for a Steam that could never start (moved here from the deleted
+    # --clicks tests, 11-21)
+    env, _, calls = _game(tmp_path, LOADS)
+    env.pop("DISPLAY")
+    r = _run(env)
+    assert r.returncode == 1
+    assert "nobody is logged in to the desktop" in r.stderr
+    assert "steam " not in calls.read_text()
+
+
+def test_over_ssh_the_steam_url_comes_from_environment_d(tmp_path):
+    # Steam already up takes the URL (moved here from the deleted --clicks tests, 11-21)
+    env, _, calls = _game(tmp_path, LOADS, extra={
+        "pgrep": 'name=""; for a in "$@"; do name="$a"; done; [ "$name" = steam ] && echo 4242 && exit 0; exit 1'})
+    env.pop("DISPLAY")
+    conf = Path(env["HOME"]) / ".config" / "environment.d"
+    conf.mkdir(parents=True)
+    (conf / "parley.conf").write_text("PARLEY_STEAM_URL=steam://launch/4700/option0\n")
+    _run(env)
+    assert "steam steam://launch/4700/option0" in calls.read_text().splitlines()
+
+
 # --- the QA restore relaunches with the kept save ---------------------------------------------
 
 def test_the_restore_relaunches_with_the_keep_save_in_a_no_click_run(tmp_path, monkeypatch):
@@ -355,3 +382,77 @@ def test_the_restore_relaunches_with_the_keep_save_in_a_no_click_run(tmp_path, m
     )
     assert saves == ["parley_keep_scratch.sav"]
     assert not (turn_root / "qa.lock").exists()
+
+
+# --- Steam updating itself first (the test laptop 11-10 07:01: after the 03:00 boot Steam downloaded an
+# update and restarted, and started the game ~5 min after the launch; the 240 s wait had already
+# given up and stopped it) -----------------------------------------------------------------------
+
+LATE_GAME = r'''[ "$*" = "-x medieval2.exe" ] || exit 1
+n=$(( $(cat "$COUNT" 2>/dev/null || echo 0) + 1 )); echo $n >"$COUNT"
+[ $n -lt 30 ] && exit 1
+[ $n -eq 30 ] && printf "bridge loaded campaign at turn 49\n" >>"$BRIDGE_LOG"
+exit 0'''
+
+
+# tc 11-19 13:30: the game reached the main menu map, hit "unspecified error and will now exit" while
+# loading the save, and the relaunch waited out its whole 240 s for a game that was gone
+EXITS_AFTER_MENU = r'''[ "$*" = "-x medieval2.exe" ] || exit 1
+grep -q "^steam " "$LOG" || exit 1
+n=$(( $(cat "$COUNT" 2>/dev/null || echo 0) + 1 )); echo $n >"$COUNT"
+[ $n -le 5 ]'''
+
+
+def test_a_game_that_exits_while_loading_fails_at_once(tmp_path):
+    menu_only = 'printf "main menu map loaded (no human faction): not a campaign\\n" >>"$BRIDGE_LOG"'
+    env, mod, calls = _game(tmp_path, menu_only, extra={"pgrep": EXITS_AFTER_MENU})
+    # the fake sleep is 0.01 s: a timeout this long can't pass in the test's 60 s on the old path
+    env.update(COUNT=str(tmp_path / "count"), PARLEY_RELAUNCH_TIMEOUT="100000")
+    r = _run(env, "--save", "parley_keep_scratch.sav")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "the game exited while loading parley_keep_scratch.sav" in r.stderr
+    assert (mod / "parley.cfg").read_text() == CFG
+
+
+def test_the_load_wait_starts_when_steam_starts_the_game(tmp_path):
+    env, mod, calls = _game(tmp_path, "", extra={"pgrep": LATE_GAME})
+    env.update(COUNT=str(tmp_path / "count"), PARLEY_RELAUNCH_TIMEOUT="10", PARLEY_STEAM_START_TIMEOUT="200")
+    r = _run(env, "--save", "parley_keep_scratch.sav")
+    assert r.returncode == 0, r.stderr
+    assert "campaign loaded at turn 49" in r.stdout
+    assert (mod / "parley.cfg").read_text() == CFG
+
+
+def test_a_steam_that_never_starts_the_game_fails_and_says_so(tmp_path):
+    env, mod, calls = _game(tmp_path, "")
+    env["PARLEY_STEAM_START_TIMEOUT"] = "5"
+    r = _run(env)
+    assert r.returncode == 1
+    assert "Steam didn't start the game within 5 s" in r.stderr
+    assert "pkill -x medieval2.exe" in calls.read_text().splitlines()
+    assert (mod / "parley.cfg").read_text() == CFG
+    _no_x_input(calls)
+
+
+def test_parley_ui_cfg_is_written_when_the_zip_ships_none(tmp_path):
+    # W53: our fork's zip carries no eopData/config (fork #10); the installer writes ours
+    path = relaunch.parley_ui_cfg(tmp_path)
+    data = json.loads(path.read_text())
+    assert path == tmp_path / "eopData/config/uiCfg.json"
+    assert data == relaunch.PARLEY_UI_CFG
+
+
+def test_parley_ui_cfg_corrects_an_old_zips_default_and_keeps_other_keys(tmp_path):
+    # live 11-15: the zip's default (modCfgFile "", useVanillaCfg true) started the game without parley.cfg
+    cfg = tmp_path / "eopData/config/uiCfg.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(json.dumps({"modCfgFile": "", "useVanillaCfg": True, "hideLauncher": False, "musicVolume": 15}))
+    relaunch.parley_ui_cfg(tmp_path)
+    data = json.loads(cfg.read_text())
+    assert data["modCfgFile"] == "parley.cfg" and data["useVanillaCfg"] is False
+    assert data["hideLauncher"] is True and data["musicVolume"] == 15
+
+
+def test_parley_ui_cfg_cli(tmp_path):
+    assert relaunch.main(["ui-cfg", str(tmp_path)]) == 0
+    assert (tmp_path / "eopData/config/uiCfg.json").exists()
