@@ -411,6 +411,7 @@ def validate_orders(report: StateReport, orders: Orders,
     # Alfred Gryffin's hire took it and Aston Morgan's was refused by the bridge as "offers: nothing"
     hired: dict[tuple[str, str], list[str]] = {}
     hires_into: dict[str, int] = {}  # units hired into each army this turn
+    recruited: dict[tuple[str, str], int] = {}  # (settlement, unit) recruits ordered this turn
     own = _own_names(report)
     cap = order_cap(report)
     for i, order in enumerate(orders.orders):
@@ -449,6 +450,18 @@ def validate_orders(report: StateReport, orders: Orders,
                 reason = f"{order.agent} limit reached: {lim.have} of {lim.limit}, plus {training[order.agent]} ordered this turn"
             else:
                 training[order.agent] = training.get(order.agent, 0) + 1
+        # live 11-24 (England turn 4863): six Town Militia queued at Dijon, its pool held two, the
+        # game refused four at turn start
+        if not reason and isinstance(order, Recruit):
+            s = next(x for x in report.settlements if x.id == order.settlement)
+            offer = next(u for u in s.can_recruit if u.unit == order.unit)
+            before = recruited.get((s.id, order.unit), 0)
+            if offer.available is not None and before >= offer.available:
+                reason = (f"{s.id}'s pool holds {offer.available} {order.unit} this turn and the "
+                          f"{before} recruit{'s' if before != 1 else ''} before this one take "
+                          f"{'them' if offer.available != 1 else 'it'}")
+            else:
+                recruited[(s.id, order.unit)] = before + 1
         if not reason and isinstance(order, HireMercenary):
             army = next(x for x in report.armies if x.id == order.army)
             offer = next(m for m in army.can_hire if m.unit == order.unit)

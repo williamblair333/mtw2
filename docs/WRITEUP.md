@@ -224,19 +224,19 @@ The native Feral Linux port can't run mods.
 ```
 git clone <this repo> && cd mtw2
 just setup            # Python dependencies
-just install-eop      # EOP into <game>/mods/parley (3.3.1; EOP_BUILD=master for what we test on)
+just install-eop      # our EOP fork build into <game>/mods/parley (the build we test on)
 just install-bridge   # the Lua bridge into the mod
 ```
-**Which EOP:** `install-eop` installs the last release, 3.3.1. We test on a newer build of EOP's
-master branch (commit b525628, from EOP's own CI), because it adds calls the bridge uses when it
-finds them: treaties, a settlement's recruitment queue, and the land links between regions. The
-bridge checks which version it runs on (`eop_master()` in `lua/parley_bridge.lua`) and leaves
-those parts out of the report on 3.3.1. We test mostly on master, so 3.3.1 is less proven.
+**Which EOP:** `install-eop` installs our fork's build, the one every campaign and test runs on:
+[`parley-fork6`](https://github.com/williamblair333/M2TWEOP-library/releases/tag/parley-fork6).
+It is EOP's master branch (commit b525628) plus fixes for two crashes and the Lua calls the bridge
+uses to answer the game's message scrolls without screen clicks. The script downloads it and
+checks its sha256; no GitHub login is needed.
 
-To install the master build we test on: `EOP_BUILD=master just install-eop`. It downloads that
-build from EOP's CI and checks its checksum. Two limits: `gh` must be logged in to GitHub
-(`gh auth login`), and GitHub deletes the build on 2027-01-17, unless EOP releases a newer version
-before then.
+Upstream builds still install, but they are less proven: `EOP_BUILD=3.3.1 just install-eop` (the
+last release) or `EOP_BUILD=master just install-eop` (EOP's CI build of b525628; `gh` must be logged
+in, and GitHub deletes it on 2027-01-17). On those, the bridge leaves out what it can't call
+(`eop_master()` and the fork checks in `lua/parley_bridge.lua`), and some scrolls need a click.
 
 `install-eop` downloads a pinned, checksummed release. If M2EX is also installed, it copies the
 vanilla campaign files into the mod (M2EX's `descr_strat.txt` breaks the vanilla engine), and it

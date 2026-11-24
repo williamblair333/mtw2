@@ -1,5 +1,44 @@
 # Handoff
 
+## 2026-11-24 (07:50): 100-turn run passed; recruit pool counts
+
+- **Clean run:** turns 4641-4857 (217 turns), both seats every turn, 0 orders refused at turn start
+  by the validator's misses until 4863. It survived the 23:59 power-off (crash-watch relaunched at 03:02)
+  and one real game crash at turn 4826 (06:06, access violation at 12135e12, no module: new site;
+  report runs/crashes/2026-11-24-060628 on tc). Not yet diagnosed.
+- **#719:** England queued six Town Militia at Dijon (turn 4863), its pool held two, the game refused
+  four; the watch's applied-share alarm stopped it. The bridge now sends each pool's count, the report
+  shows `Unit ×N` when N < 9 (the queue limit), and the validator sums a turn's recruits against it.
+  Live from turn 4873: England's report shows e.g. `Heavy the author Militia ×6`.
+- **Lesson:** the session sat idle from 23:59 to 07:10; arm a wait for the 03:00 boot when the watch dies.
+- **Next:** the turn-4826 crash; France's prompt to 60 KB; clean-install test.
+
+## 2026-11-23 (21:10): orders carried out, the bridge can't run old Lua, public refresh, Discussions
+
+**Running on tc:** campaign `scratch`, turn 4698 at 23:00 on `main` (#716). The watch runs from this machine.
+**Clean run so far (checked 23:01):** turns 4641-4698, 58 turns, both seats answered every turn, 1,010 orders,
+0 refused by the validator, no ERROR or traceback in the loop log, no hand fix. tc powers off at 23:59, so the
+100th clean turn (4740) falls after the 03:00 power-on; the count holds only if the loop comes back on its own.
+
+- **Order audit, turns 4330-4633:** the game ran 3,910 orders, about 120 failed. #713/#716: a fleet sent
+  onto land sails to the nearest sea within 12 tiles; an army or agent aimed at sea goes to land
+  within 3; an agent sent into a foreign town stops beside it. The validator now sums a turn's hires
+  against 20 units, treats a garrison and its general as one army, and refuses moves into a full own
+  town. Orders it refuses get **one same-turn correction ask** (`answer_refused.txt`,
+  `rejected_first.json`); an empty correction keeps what passed. Left: stale names (an agent died or an
+  army merged since the report), and far fleet guesses with no sea within 12 (not measured).
+  Bench on the real game: navy (instant) and envoys all pass (runs/qa/2026-11-23-2058-navy.md, -2105-envoys.md).
+- **Lookups fixes:** #711 town keys match whatever their case (live turn 4632: `town:corinth` etc. came
+  back in full); #712 the short garrison keeps its `merge_units would combine` line.
+- **No old Lua (#715):** `parley/bridge_build.py` compares this checkout's bridge with the installed and
+  loaded stamps; any difference installs and reloads. The bench checks before it parks the real run; the
+  turn loop checks at start and once a minute. Proven live: a git-only deploy of #716 was installed and
+  reloaded by the loop in 2 s. (The stamp files are CRLF under Wine: compare stripped.)
+- **Public:** GitHub williamblair333/mtw2 and Gitea mtw2-public both at 4da37d8 (scrub problems=0;
+  William approved 11-23). Replies go to GitHub Discussions, "Start here" #4.
+- **Next:** the 100-turn clean run (count from #716's deploy, turn ~4640); France's prompt (~71 KB) to
+  60 KB (primer, output rules, field-army troops); a clean-install test on a fresh machine.
+
 ## 2026-11-23 (15:25): France's prompt 135 → 80 KB with lookups; `just seat-set`; outreach draft rewritten
 
 **Running on tc:** campaign `scratch`, turn ~4476 on `main` (#709). France has `lookups = true`

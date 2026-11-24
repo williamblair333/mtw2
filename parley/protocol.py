@@ -28,6 +28,9 @@ class RecruitOption(BaseModel):
     cost: int
     turns: int
     upkeep: int | None = None  # florins a turn while it lives (live: knights bought broke England)
+    # how many the town's pool holds now (None: not reported). Live 11-24 (turn 4863): England
+    # queued six Town Militia at Dijon, the pool held two, and the game refused four
+    available: int | None = None
 
 
 class AgentOption(BaseModel):
