@@ -41,8 +41,13 @@ rulers' notes still hold the lost turns 4827-5045; the loop archives each old an
   upkeep. **#732 (live 10:44):** the bridge counts EOP's `onUnitTrained` for seated factions (a ruler's
   recruits bypass the game's queue, so all are the AI's) and the prompt says what was trained and the
   upkeep it adds ("Your game AI trained 4 units ... they add 700 upkeep a turn: ..."). 15 min live with
-  the new event, no crash. **Next (William's call: a public fork release):** a ruler switch to stop its
-  AI's recruiting needs a fork binding to remove queue items (EOP can only add).
+  the new event, no crash.
+- **#734 (live 11:20): order `game_ai_recruiting` on/off.** No fork change: with it off the bridge holds
+  the realm's recruitment pools at 0 from the AI's unfreeze to the faction's next turn start
+  (`pool_hold.json` beside `training.json`), then gives them back with their regrowth before the
+  ruler's orders. The recruit help no longer says "Nobody recruits for you" (false for an AI-run realm).
+  France hasn't used it yet; its AI trained 0-1 units a report since 11:20 (treasury low). Live proof
+  of the hold waits on a ruler's order: look for "game AI recruiting off (the ruler's order): held".
 - **Next:** ruler play quality.
 
 ## 2026-11-24 (07:50): 100-turn run passed; recruit pool counts
