@@ -7,18 +7,18 @@ Parley is a small project. Below are the places where help matters most, then ho
 ### 1. EOP and Medieval II internals (the biggest need)
 
 Parley's rulers act through EOP, a library that lets Lua scripts read and change the
-running game. Two game actions still need a mouse click, because we found no way to do them from
-Lua:
+running game. Every game pop-up is now answered from Lua, with no screen clicks: the papal vote,
+marriage and adoption offers, notices and minimized messages. Some of that needed new bindings in
+our EOP fork (`docs/no-click-challenges.md` says which). What we still lack:
 
-- **Casting a papal election vote.** When the election scroll opens, our script finds the Vote
-  buttons in a screenshot and clicks them. That only works at one screen size.
-- **Answering a family offer**: a marriage or adoption the game offers your faction, on a scroll
-  with accept and decline. We think pressing the scroll's own parts with `execute()` could work,
-  but we haven't seen a live offer's parts yet.
+- **Lua bindings** for active missions, hiring mercenaries, diplomatic proposals and siege
+  equipment ([issue #89](https://github.com/EOP-Labs/M2TWEOP-library/issues/89)).
+- **Game crashes we can't explain yet.** An admiral dying of old age crashes the game at the next
+  round's start; we work around it by keeping our rulers' admirals at 50. Other crashes land in
+  the game's own code at the end of a round. If you know `medieval2.exe`'s internals, the crash
+  reports have stacks and saves.
 
-If you know an EOP call, a game function, or a way to press a scroll's button from Lua, that
-would remove our last clicks. See `lua/parley_bridge.lua` (search for `papal_election_scroll`) and
-`docs/eop-api-notes.md` for what we already know.
+See `lua/parley_bridge.lua` and `docs/eop-api-notes.md` for what we already know.
 
 Smaller open questions:
 - Which game message is event id 160? (We believe it is the "Princess Disgraced!" message after
