@@ -14,14 +14,15 @@
 
 ## Next
 - [x] **QA restore drops a ruler's report** (2026-11-23): the bench restored the live campaign while it
-      held qa.lock, and a load under the lock skipped the missing-report write (France waited 720 s at
-      turn 3492). The write now waits for the lock to go, then runs.
-- [x] **Bench refuses a stale bridge** (2026-11-22, #694): install-bridge stamps parley_build.txt, the
-      bridge writes bridge_loaded_build.txt, and the runner reloads on a mismatch or refuses. Live 08:46
-      on tc: installed without a reload, the bench reloaded and ran on 62f7a60edcd0.
+      held qa.lock. A load under the lock skipped writing the missing report, so France waited 720 s at
+      turn 3492. The write now waits for the lock to clear, then runs.
+- [x] **Bench refuses a stale bridge** (2026-11-22, #694): install-bridge stamps parley_build.txt and the
+      bridge writes bridge_loaded_build.txt. On a mismatch the runner reloads or refuses to run. Checked
+      live on tc at 08:46: after an install with no reload, the bench reloaded and ran on 62f7a60edcd0.
 - [x] **Rulers move off the map and into the sea** (2026-11-23): England ordered moves to (100,200) on a
-      295x189 map and onto sea one step from land. The prompt now prints the map's bounds once, and a walk
-      aimed at sea with land 1 tile off goes to that land, saying so (M.to_coast; farther stays refused).
+      295x189 map, and onto sea one step from land. The prompt now prints the map's bounds once. A walk
+      aimed at sea with land 1 tile away goes to that land and says so (M.to_coast). Farther out is still
+      refused.
 - [x] **Trend alarm on few orders** (2026-11-23, #698): England's 1-4 orders a turn woke the watch twice
       on varied ruler mistakes (92% to 56%); a share fall now needs 3 refusals of one order type.
 - [x] **Settlements compacted** (2026-11-22, #696): "same as X, plus/without" lists; France's section
@@ -75,8 +76,8 @@
 - [ ] Delegate by default (the author, 2026-10-25): research, first drafts, bounded code slices, reviews
       and second opinions go to agy (`gemini-4-argon-high`) or other models via the delegate MCP,
       with the check written first and `just test` as the gate. Claude keeps diagnosis, specs,
-      reviews and merges. agy runs concurrent calls fine, each in its own workdir, so a Gemini
-      seat in play is no reason to hold back.
+      reviews and merges. agy handles concurrent calls, each in its own workdir, so delegating is
+      fine while a Gemini seat is playing.
 - [ ] Gemini as ruler, in progress (2026-10-26: The author moved play to agy to save usage). flash-low
       collapsed England (no thinking; an every-turn merge loop; debt with no free lever); #176 fixed
       the prompt causes. Next: a fresh campaign with the fixes from turn 1, `just play-review` watching.
@@ -98,10 +99,9 @@
 - [x] Fix Gemini seats (agy). Measured 2026-10-25 offline on England's real turns 166-167 (45 KB
       prompts, every area): `agy:gemini-4-argon-medium` answered in 28 s and 95 s, valid, no rejected
       or malformed orders, and it reasoned well (AI-run factions' peace doesn't lift sieges);
-      `-low` 47-57 s, also clean; `-high` ran past 300 s, the same empty answer as Flash's: the
-      empty answers are timeouts. Next: a live turn on argon-medium (the author's call which seat).
-      The history: Live, scratch
-      turns 77, 80, 88: `gemini-3.8-flash-low` timed out at 120 s and 240 s and returned empty answers
+      `-low` 47-57 s, also clean; `-high` ran past 300 s and gave the same empty answer as
+      Flash, so the empty answers are timeouts. Next: a live turn on argon-medium (the author's call which
+      seat). The history: live on scratch turns 77, 80, 88, `gemini-3.8-flash-low` timed out at 120 s and 240 s and returned empty answers
       on England's full report, and misread the stats behind a 4-star general. To do: find agy's
       stronger models (`agy --help` / model list), measure one full ruler turn on each (time, valid
       JSON, sensible orders), fix the empty-answer cause (timeout vs schema vs headless tool denial),

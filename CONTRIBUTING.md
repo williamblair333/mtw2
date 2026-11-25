@@ -1,13 +1,14 @@
 # Helping with Parley
 
-Thanks for looking. Parley is a small project, and a little expert help goes a long way. Below
-are the places where help matters most, then how to send it.
+Parley is a small project. Below are the places where help matters most, then how to send it.
 
 ## Where help matters most
 
 ### 1. EOP and Medieval II internals (the biggest need)
 
-Two game actions still need a mouse click, because we found no way to do them from Lua:
+Parley's rulers act through EOP, a library that lets Lua scripts read and change the
+running game. Two game actions still need a mouse click, because we found no way to do them from
+Lua:
 
 - **Casting a papal election vote.** When the election scroll opens, our script finds the Vote
   buttons in a screenshot and clicks them. That only works at one screen size.
