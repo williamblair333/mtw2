@@ -140,7 +140,7 @@ standards:
     bar: A clean-machine install is tested before every release
     why: the community's first contact is the installer
     status: partial
-    evidence: "scripts/preflight_vm_headroom.py (gate: a VM on the main machine needs 14 GiB free; one hung the main machine 11-24). PRODUCT.md verify block passes first_run_gate.py on clean python:3.13 (11-05). The game install ran on a fresh Debian 13 VM 11-24 (found #722), not yet end to end"
+    evidence: "scripts/install_eop.sh ran end to end on a fresh Debian 13 VM 11-25, to a ruler's turn (#722 found and fixed). PRODUCT.md verify block passes first_run_gate.py. the main machine VM starts: Refinery ram-gate"
   - id: versioned-releases
     area: release
     bar: Releases are versioned, tagged and have notes

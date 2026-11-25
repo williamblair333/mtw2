@@ -4085,11 +4085,18 @@ end
 -- A decision scroll's check and X: two square buttons side by side under one part (live 11-15, a
 -- suitor offer: an unnamed part with two 42x42 buttons at 466,515 and 516,515; the left one the
 -- check). Returns accept, decline (elements) or nil. Found by shape: their names are empty.
+-- Papal UI classes (by vtable, fork level 5+): never a decision's check and X. The results scroll
+-- shows as "unnamed", so the by-name K.PAPAL_SCROLLS can't skip it, and its square vote buttons
+-- match the shape below. Live 11-25 09:49:44 (turn 4877): an adoption "accept" pressed a
+-- DECIDED_VOTE_BUTTON and the game crashed at medieval2.exe+0x7f47bc (the 11-20 08:36 crash too).
+K.PAPAL_CLASSES = { PAPAL_ELECTION_SCROLL = true, PAPAL_ELECTION_RESULTS_SCROLL = true }
+K.VOTE_CLASSES = { VOTE_BUTTON = true, UNDECIDED_VOTE_BUTTON = true, DECIDED_VOTE_BUTTON = true }
 function M.choice_buttons(el)
     local found
     local function square(b)
         local w, h = tonumber(b.xSize) or 0, tonumber(b.ySize) or 0
         return w >= 30 and w <= 60 and math.abs(w - h) <= 4
+            and not K.VOTE_CLASSES[M.ui_class(b) or ""]
     end
     local function walk(e, depth)
         if found or depth > 6 then return end
@@ -4117,7 +4124,7 @@ end
 function M.open_choices()
     local out = {}
     for _, w in ipairs(M.open_ui() or {}) do
-        if not K.PAPAL_SCROLLS[w.name] then
+        if not K.PAPAL_SCROLLS[w.name] and not K.PAPAL_CLASSES[M.ui_class(w.el) or ""] then
             local a, d = M.choice_buttons(w.el)
             if a then out[#out + 1] = { name = w.name, el = w.el, accept = a, decline = d } end
         end
@@ -4152,6 +4159,12 @@ function M.press_choice(which, what, el)
         if el == nil or o.el == el then c = o break end
     end
     if not c then return false, (#list > 0) and "other" or "none" end
+    local cls = M.ui_class(c[which])
+    if K.VOTE_CLASSES[cls or ""] then  -- last guard: a vote button's execute() crashes the game
+        log("popup: " .. tostring(what) .. ": " .. which .. " not pressed: the part is a " .. cls
+            .. " on a papal scroll, not a decision's button")
+        return false, "vote_button"
+    end
     local ok, err = pcall(function() c[which]:execute() end)
     log("popup: " .. tostring(what) .. ": pressed " .. which .. " on " .. c.name .. " by its element"
         .. (ok and "" or (" (failed: " .. tostring(err) .. ")")))

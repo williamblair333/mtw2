@@ -1,5 +1,39 @@
 # Handoff
 
+## 2026-11-25 (09:00): clean install proven; docs plain and public; call to arms ready
+
+**Running on tc:** campaign `scratch` from turn 4826 on `main` (1507a71), bridge 158f76ad6d20, rulers
+claude:haiku; turn loop, crash-watch and `WATCH_BOT=0 just watch scratch` up since 08:51. The turn-5045
+save was lost: 12 crash replays overwrote all 6 autosaves (memory `replay-trials-eat-autosaves`). The
+rulers' notes still hold the lost turns 4827-5045; the loop archives each old answer as it reaches it.
+
+- **Clean install (#5) done:** fresh Debian 13 VM (parley-fresh on the main machine, 4 vCPU / 6 GB): `just
+  install-eop` from the public `parley-fork6` release wrote EOP's config (#722 proven), main menu with
+  EOP, new campaign, the loop reloaded a stale bridge on its own, and France (`ollama:qwen3.5:9b`, host
+  GPU via tunnel) answered: 1 move, 1 refused assassination (a priest). The VM is shut off.
+- **#723:** a preflight gate refuses a local `virsh start`/`virt-install` with < 14 GiB available (11-24
+  a test VM hung the main machine). It passed this morning's start at 26 GiB.
+- **Turn-4826 crash:** 0 crashes in 12 replays from its save (plus the 11-24 relaunch: 13 passes). In
+  `medieval2.exe`: a loop at 0x719320 calls 0x749fd0 on each item of a list; one item was bad and the
+  call jumped to 12135e12. Same routine as turn 124's crash (11-11, eip 007193cf). It fired 0.4 s into
+  the rebels' turn, 3 h after launch. Not reproducible from the save, so likely state built up in the
+  long-running process. Watch for a repeat; crash-watch recovers it.
+- **Docs (#724, #725):** plain wording for players; stale claims fixed (no screen clicks since 11-22,
+  2,123 tests). Public GitHub refreshed to 03a61a6 (scrub problems=0); Gitea mtw2-public mirrors it.
+- **Call to arms:** `review/CALL-TO-ARMS-DISCORD.md` (1,721 chars, one Discord message, links wrapped
+  in `< >`); suggested channel EOP Discord `#lua-scripting`. William posts it.
+- **tc disk:** deleted the t1447 archive (26 GB) and `scratch.run1-9` (16 GB); 33 GB free.
+- **Ollama container** lost the GPU twice (NVML error after a systemd daemon-reload); Uncle J restarts it
+  and plans the CDI fix with a Docker restart.
+- **#728 (10:00, live on tc, bridge e86bbe7f0e2d):** crash at turn 4877 (09:49:44, report
+  `runs/crashes/2026-11-25-095032`): England's adoption "accept" pressed a `DECIDED_VOTE_BUTTON` on the
+  papal results scroll (it shows as "unnamed", so the by-name skip missed it; `choice_buttons` finds a
+  check and X by shape). Same site as the 11-20 08:36 crash (`medieval2.exe+0x7f47bc`), which closes
+  that open item too. Three class guards (open_choices, choice_buttons, press_choice). Live proof waits
+  on the next papal election during an offer.
+- **#727:** mtw2's VM memory gate retired; the Refinery's ram-gate hook covers every session.
+- **Next:** France's prompt to 60 KB (deferred by William); ruler play quality.
+
 ## 2026-11-24 (07:50): 100-turn run passed; recruit pool counts
 
 - **Clean run:** turns 4641-4857 (217 turns), both seats every turn, 0 orders refused at turn start
