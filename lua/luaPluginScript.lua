@@ -145,6 +145,12 @@ onFactionBreakAlliance = news("{faction} broke its alliance with {targetFaction}
 onCapturedCharacterRansomed = befell("was captured and ransomed")
 onCapturedCharacterReleased = befell("was captured and released")
 
+-- a unit the game trained (its own queue: a faction's game AI; a ruler's recruits bypass it)
+function onUnitTrained(eventData)
+    local ok, err = pcall(bridge.on_unit_trained, eventData)
+    if not ok then print("parley: on_unit_trained failed: " .. tostring(err)) end
+end
+
 function onPreBattlePanelOpen(eventData)
     local ok, err = pcall(bridge.on_pre_battle)
     if not ok then print("parley: on_pre_battle failed: " .. tostring(err)) end
