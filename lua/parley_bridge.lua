@@ -1445,6 +1445,7 @@ function M.report(fac, cfg)
         human_slot = fac.isPlayerControlled == 1, map_width = map.mapWidth, map_height = map.mapHeight,
         popups = fac.isPlayerControlled == 1 and M.take_popups() or nil,
         agent_results = M.take_agent_news(fac.name),
+        game_recruits = M.take_game_recruits(fac.name),
         family = family, character_events = M.take_character_news(fac.name),
         news = M.take_faction_news(fac.name),
         income_parts = income_parts(fac),
@@ -3726,6 +3727,7 @@ function M.on_turn_start(fac)
         M.frozen_turn = want == 1 and { fac = fac, since = M.clock(),
             hold_moves = (cfg.freeze[fac.name] and cfg.factions[fac.name]) and true or nil } or nil
     end
+    M.seats = cfg.factions  -- for event handlers, which must not read bridge.txt (M.on_unit_trained)
     if not cfg.factions[fac.name] then return end
     local turn = gd.campaignStruct.turnNumber
     -- the orchestrator makes turn folders from this (Lua can't create directories)
@@ -8022,6 +8024,38 @@ function M.take_agent_news(faction)
     local list = agent_news[faction] or {}
     agent_news[faction] = nil
     return list
+end
+
+-- Units the game itself trained in a ruler's settlements: its game AI's recruiting. A ruler's own
+-- recruits never use the game's queue (handlers.recruit keeps its own list), so every one of these
+-- is the AI's. Live 11-25: France's AI trained 175 units in French towns in 43 minutes while its
+-- ruler disbanded units to pay upkeep, and nothing told the ruler. EOP's onUnitTrained exports
+-- settlement, faction, eduEntry: read one at a time, each in a pcall, and nothing more for a faction
+-- with no ruler (a batch of event field reads crashed the game at turn 67).
+M.game_recruits = {}  -- faction -> { ["unit|town"] = count } (on M: the main chunk is at its local limit)
+function M.on_unit_trained(e)
+    local seats = M.seats
+    if not seats then return end
+    local okf, faction = pcall(function() return e.faction.name end)
+    if not okf or not faction or not seats[faction] then return end
+    local oku, unit = pcall(function() return e.eduEntry.eduType end)
+    local oks, town = pcall(function() return e.settlement.name end)
+    local key = tostring(oku and unit or "a unit") .. "|" .. tostring(oks and town or "a settlement")
+    local t = M.game_recruits[faction] or {}
+    t[key] = (t[key] or 0) + 1
+    M.game_recruits[faction] = t
+end
+
+function M.take_game_recruits(faction)
+    local t = M.game_recruits[faction]
+    M.game_recruits[faction] = nil
+    local out = {}
+    for key, n in pairs(t or {}) do
+        local unit, town = key:match("^(.*)|(.*)$")
+        out[#out + 1] = { unit = unit, settlement = town, count = n }
+    end
+    table.sort(out, function(a, b) return a.unit .. a.settlement < b.unit .. b.settlement end)
+    return out
 end
 
 -- what take_agent_news would hand the next report, left in place (the QA bench's M.qa.news)

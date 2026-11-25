@@ -36,7 +36,14 @@ rulers' notes still hold the lost turns 4827-5045; the loop archives each old an
   morning; France answered 20 orders, 0 refused):** garrisons whose short line repeated their town's
   fold into one line naming them; "str N" (defined at the top of each section) replaces "(strength
   rating N, not men)", 113 times. Lossless. Headroom is thin: France's size moves with its town count.
-- **Next:** ruler play quality (France sits near zero florins).
+- **France's money (found 10:35):** income -3,496 to -4,693 a turn, army upkeep 174,183 (84% of costs).
+  France's own game AI trained 175 units in French towns 09:51-10:34 while its ruler disbanded to pay
+  upkeep. **#732 (live 10:44):** the bridge counts EOP's `onUnitTrained` for seated factions (a ruler's
+  recruits bypass the game's queue, so all are the AI's) and the prompt says what was trained and the
+  upkeep it adds ("Your game AI trained 4 units ... they add 700 upkeep a turn: ..."). 15 min live with
+  the new event, no crash. **Next (William's call: a public fork release):** a ruler switch to stop its
+  AI's recruiting needs a fork binding to remove queue items (EOP can only add).
+- **Next:** ruler play quality.
 
 ## 2026-11-24 (07:50): 100-turn run passed; recruit pool counts
 

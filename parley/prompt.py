@@ -251,6 +251,26 @@ def _turns(n: int) -> str:
     return f"{n} turn" if n == 1 else f"{n} turns"
 
 
+def game_recruits_line(report) -> str:
+    """What the realm's own game AI trained since the last report, and the upkeep it adds where the
+    recruit lists name it. Live 11-25: France's AI trained 175 units in 43 minutes while its ruler,
+    told only that upkeep was 84% of costs, disbanded units to pay for them."""
+    if not report.game_recruits:
+        return ""
+    upkeep = {u.unit: u.upkeep for s in report.settlements for u in s.can_recruit if u.upkeep is not None}
+    total = sum(r.count for r in report.game_recruits)
+    known = [(r.count, upkeep[r.unit]) for r in report.game_recruits if r.unit in upkeep]
+    items = ", ".join(f"{r.count}x {r.unit} in {r.settlement}" if r.count > 1 else f"{r.unit} in {r.settlement}"
+                      for r in report.game_recruits)
+    cost = ""
+    if known:
+        add = sum(n * u for n, u in known)
+        cost = (f"; they add {add} upkeep a turn" if len(known) == len(report.game_recruits)
+                else f"; those with a known price add {add} upkeep a turn")
+    return (f"Your game AI trained {total} unit{'s' if total != 1 else ''} in your settlements since your last "
+            f"turn (not your orders){cost}: {items}.")
+
+
 # live: a ruler read "strength 2494" as 2494 men and stormed a city with 54. Each section that prints
 # "str N" defines it in its heading, once (11-25: "(strength rating N, not men)" 113 times, 3.5 KB)
 STR_NOTE = "str N: the game's strength rating, not a head count"
@@ -648,6 +668,8 @@ def state_summary(report: StateReport, areas: tuple[str, ...] = PRESETS["ruler"]
         parts[0] += (f" Last turn you also spent {report.spent_last_turn} on buildings, recruits and diplomacy (bribes, gifts)"
                      + (f" and received {report.received_last_turn} in gifts" if report.received_last_turn else "")
                      + ".")
+    if line := game_recruits_line(report):
+        parts[0] += "\n" + line
     clock_by_settlement: dict[str, str] = {}
     try:
         clock_by_settlement = {a.settlement: a.line for a in siege_clock(report)}

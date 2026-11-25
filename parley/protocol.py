@@ -279,6 +279,12 @@ class MoveNotMade(BaseModel):
     target_y: int | None = None
 
 
+class GameRecruit(BaseModel):
+    unit: str
+    settlement: str
+    count: int = 1
+
+
 class StateReport(BaseModel):
     protocol: int
     game_id: str
@@ -306,6 +312,10 @@ class StateReport(BaseModel):
     human_slot: bool = False  # the campaign's player faction: no game AI acts for it
     popups: list[str] = []  # game popups since the last report, and the button pressed for you
     agent_results: list[str] = []  # how your agents' missions turned out since the last report
+    # units the game itself trained in your settlements since the last report: your game AI's
+    # recruiting (a ruler's own recruits never use the game's queue). Live 11-25: France's AI
+    # trained 175 units in 43 minutes while its ruler disbanded to pay upkeep, unaware
+    game_recruits: list[GameRecruit] = []
     family: list[Person] = []  # every named character on record, the dead included
     character_events: list[str] = []  # what befell your characters since the last report
     news: list[str] = []  # what the game told the realm by message: missions, riots, treaties, crusades
