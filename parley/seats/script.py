@@ -14,7 +14,7 @@ from pathlib import Path
 from parley.protocol import Orders
 from parley.seats.base import to_orders
 
-_FIELD_ARMY = re.compile(r"^- (.+?): \d+ units(?:, \d+ men)?,? \(?strength(?: rating)? \d+(?:, not men\))?, "
+_FIELD_ARMY = re.compile(r"^- (.+?): \d+ units(?:, \d+ men)?,? (?:str|\(?strength(?: rating)?) \d+(?:, not men\))?, "
                          r"at \(-?\d+,-?\d+\), led by ",
                          re.M)
 

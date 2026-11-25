@@ -265,7 +265,7 @@ def test_a_garrison_drops_its_town_and_moves_stay_on_the_army_line(venice_report
              can_hire=[MercOption(unit="Pikemen", cost=500, available=1, max=2, exp=0, pool="Normandy")])
     p = build_prompt(venice_report.model_copy(update={"armies": [g, f]}), persona="p", areas=AREAS)
     caen = p.split("\n- garrison:Caen: ", 1)[1].split("\n", 1)[0]
-    assert caen == "3 units, 180 men (strength rating 900, not men)"
+    assert caen == "3 units, 180 men, str 900"
     paul, hire = p.split("\n- Paul: ", 1)[1].split("\n", 2)[:2]
     assert paul.endswith("moves 5/80") and hire.startswith("  mercenaries for hire here")
     assert "moves" not in hire

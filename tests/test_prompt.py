@@ -111,7 +111,7 @@ def test_leaderless_field_stack_has_no_fake_position(venice_report):
     from parley.protocol import Army
     stray = Army(id="stack:8", x=0, y=0, strength=300, units=2)
     p = build_prompt(venice_report.model_copy(update={"armies": [stray]}), persona="p")
-    assert "stack:8: 2 units (strength rating 300, not men), position unknown (fleet, fort or no general)" in p
+    assert "stack:8: 2 units, str 300, position unknown (fleet, fort or no general)" in p
     assert "(0,0)" not in p
 
 
@@ -135,10 +135,10 @@ def test_prompt_shows_own_agents(venice_report):
 def test_prompt_shows_what_is_in_sight(venice_report):
     p = build_prompt(_sighted(venice_report), persona="p")
     assert ("FOREIGN ARMIES IN SIGHT" in p
-            and "Heinrich (hre): 7 units, 280 men (strength rating 1100, not men), at (110,70), 4 tiles away" in p)
+            and "Heinrich (hre): 7 units, 280 men, str 1100, at (110,70), 4 tiles away" in p)
     assert "FOREIGN AGENTS IN SIGHT" in p and "- hre spy at (119,87), 2 tiles away: Ulrich" in p
     assert ("SETTLEMENTS NEAR YOU" in p
-            and "Milan (milan): garrison 3 units, 120 men (strength rating 900, not men), at (100,90), 20 tiles away" in p)
+            and "Milan (milan): garrison 3 units, 120 men, str 900, at (100,90), 20 tiles away" in p)
 
 
 def test_prompt_marks_a_settlement_across_the_sea(venice_report):
@@ -229,11 +229,11 @@ def test_prompt_names_a_besieged_settlement_and_its_besieger(venice_report):
     s = venice_report.settlements[0].model_copy(update={
         "siege": Siege(by="Captain Anselm", faction="slave", units=4, men=180, strength=792, turns=1, holdout=6)})
     p = build_prompt(venice_report.model_copy(update={"settlements": [s]}), persona="p")
-    assert ("UNDER SIEGE by Captain Anselm (slave), 4 units, 180 men (strength rating 792, not men), "
+    assert ("UNDER SIEGE by Captain Anselm (slave), 4 units, 180 men, str 792, "
             "for 1 turn so far; it can hold out 6 turns") in p
     s_men_only = venice_report.settlements[0].model_copy(update={
         "siege": Siege(by="Captain Anselm", faction="slave", men=180, strength=792, turns=1, holdout=6)})
-    assert ("UNDER SIEGE by Captain Anselm (slave), 180 men (strength rating 792, not men), "
+    assert ("UNDER SIEGE by Captain Anselm (slave), 180 men, str 792, "
             "for 1 turn so far; it can hold out 6 turns") in build_prompt(
                 venice_report.model_copy(update={"settlements": [s_men_only]}), persona="p")
 
@@ -320,7 +320,7 @@ def test_prompt_lists_settlements_seen_before(venice_report):
                              garrison_strength=400, garrison_men=75, garrison_units=2, seen_turn=12)
     p = build_prompt(venice_report.model_copy(update={"remembered": [cork]}), persona="p")
     assert "SETTLEMENTS SEEN BEFORE" in p
-    assert "- Cork (slave): garrison 2 units, 75 men (strength rating 400, not men), at (80,160), seen turn 12" in p
+    assert "- Cork (slave): garrison 2 units, 75 men, str 400, at (80,160), seen turn 12" in p
 
 
 def test_settlement_garrison_shows_units_men_and_strength_rating(venice_report):
@@ -330,7 +330,7 @@ def test_settlement_garrison_shows_units_men_and_strength_rating(venice_report):
     empty = venice_report.settlements[1].model_copy(update={
         "garrison_units": 0, "garrison_men": 0, "garrison_strength": 0})
     p = build_prompt(venice_report.model_copy(update={"settlements": [york, empty]}), persona="p")
-    assert "garrison 19 units, 961 men (strength rating 13953, not men)" in p
+    assert "garrison 19 units, 961 men, str 13953" in p
     assert f"- {empty.id} ({empty.name}), region {empty.region}: garrison none," in p
 
 
@@ -349,8 +349,8 @@ def test_own_armies_count_men_and_call_strength_a_rating(venice_report):
                          Unit(type="NE Bodyguard", soldiers=20, max_soldiers=20)])
     plain = Army(id="Prince Robert", leader="Prince Robert", x=100, y=170, strength=1800, men=84, units=3)
     p = build_prompt(venice_report.model_copy(update={"armies": [henry, plain]}), persona="p")
-    assert "- King Henry: 2 units, 52 men (strength rating 2494, not men), at (101,174), led by King Henry" in p
-    assert "- Prince Robert: 3 units, 84 men (strength rating 1800, not men), at (100,170), led by Prince Robert" in p
+    assert "- King Henry: 2 units, 52 men, str 2494, at (101,174), led by King Henry" in p
+    assert "- Prince Robert: 3 units, 84 men, str 1800, at (100,170), led by Prince Robert" in p
     assert "not a head count" in p
 
 

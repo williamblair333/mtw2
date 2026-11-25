@@ -32,7 +32,11 @@ rulers' notes still hold the lost turns 4827-5045; the loop archives each old an
   that open item too. Three class guards (open_choices, choice_buttons, press_choice). Live proof waits
   on the next papal election during an offer.
 - **#727:** mtw2's VM memory gate retired; the Refinery's ram-gate hook covers every session.
-- **Next:** France's prompt to 60 KB (deferred by William); ruler play quality.
+- **#730, France's prompt under 60 KB (live 10:30, turn 4937: 59,941 bytes, was 68.6 KB this
+  morning; France answered 20 orders, 0 refused):** garrisons whose short line repeated their town's
+  fold into one line naming them; "str N" (defined at the top of each section) replaces "(strength
+  rating N, not men)", 113 times. Lossless. Headroom is thin: France's size moves with its town count.
+- **Next:** ruler play quality (France sits near zero florins).
 
 ## 2026-11-24 (07:50): 100-turn run passed; recruit pool counts
 
