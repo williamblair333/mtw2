@@ -1,13 +1,17 @@
 # Parley: LLM rulers and Discord diplomacy for Medieval II
 
-Play *Medieval II: Total War* against rulers that think and talk. Large language models (Claude,
-Gemini, or a local model) rule some factions. Humans rule others, and the game's own AI runs the
-rest. Everyone negotiates in Discord, in public or in private. A deal is only words: whether a
-ruler honours it shows up in the game, and the LLMs remember who kept faith and who didn't.
+Play *Medieval II: Total War* with some factions ruled by large language models (LLMs: Claude,
+Gemini, or a local model). Humans rule others, and the game's own AI runs the rest. Everyone
+negotiates in Discord, in public or in private. Nothing enforces a deal. Whether a ruler keeps
+one shows in the game, and the LLMs remember who kept faith and who didn't.
 
-This document covers everything: what it is, how it works, how to install it on Linux, how to
-play, how to configure rulers and personalities, what goes wrong and how to fix it. The raw
-build log, every attempt and failure included, is `docs/JOURNAL.md`.
+Three pieces do the work. EOP is a community engine that runs Lua scripts inside the game. The
+bridge is our Lua script on EOP: it writes each ruler's report and applies its orders. The rest
+is our Python program, which asks the LLMs and runs the Discord bot.
+
+This guide covers what Parley is, how it works, how to install it on Linux, how to play, how to
+set up rulers and personalities, and how to fix what goes wrong. The raw build log, every attempt
+and failure included, is `docs/JOURNAL.md`.
 
 ---
 
@@ -36,7 +40,7 @@ just new-game soak --play all --personas random --scratch --autoplay --until 30 
 just play soak
 ```
 
-Then start a **new** Grand Campaign as any faction (it's an LLM ruler too). Every faction is an LLM ruler.
+Then start a **new** Grand Campaign as any faction. Every faction is an LLM ruler, yours included.
 One of them is secretly Old Scratch. Venice plays `games/soak-test.json`, a fixed plan that tries every
 order type, bad ones included. The bridge ends your turn by itself as soon as every ruler has answered,
 or after `--wait` seconds, then skips the late ones. A small **Parley** window says who it's waiting
@@ -59,7 +63,7 @@ The bridge logs every popup's buttons in `parley_turns/parley_bridge.log`. Your 
 gets a *game popups* list in its next report, saying what kind each was and what was pressed;
 EOP can't read a scroll's text.
 
-If one still gets stuck, there are fallbacks:
+If a popup still gets stuck:
 - Battles: autoplay turns on the game's "auto-resolve all battles" and clicks **Auto-resolve** on
   the pre-battle panel.
 - A stuck turn: if your turn doesn't end a minute after the click, or an AI's turn sits still for two
@@ -75,8 +79,8 @@ just new-game watch --play all --autoplay --control england=full --adviser engla
 just play watch
 ```
 
-Start a **new** Grand Campaign **as England**. Your campaign faction has no game AI, so here
-everything it does is the LLM's doing. It builds, sets taxes, moves and attacks with every army,
+Start a **new** Grand Campaign **as England**. Your campaign faction has no game AI, so every
+action it takes is the LLM's. It builds, sets taxes, moves and attacks with every army,
 uses its agents, recruits and makes its own diplomacy. Autoplay ends its turns, the camera jumps to its
 army, and the Parley window shows its current plan. Type `!adviser` in `#watch` to open your private
 thread with it. It treats you as a loyal adviser, may overrule you, and tells you why.
@@ -131,11 +135,11 @@ keeps the screen awake while it runs.
 - **Ruler and generals.** The game's own AI still handles routine play for LLM factions:
   recruiting, building, ordinary moves. The LLM gives the orders that matter: send gold, give a
   settlement, war, peace or alliance, march on, besiege or withdraw.
-- **Discord is the table.** Each game has its own channel, e.g. `#historic-1080`, for public talk
+- **Diplomacy in Discord.** Each game has its own channel, e.g. `#historic-1080`, for public talk
   and turn cues. Pairs of factions talk in private threads. Rulers answer humans between turns, in
   character.
-- **Talk is free; deeds are checked.** Nothing enforces a promise. A ruler's orders are checked
-  against the real game, and transfers that reach a human are reported in that pair's private
+- **Promises aren't enforced; orders are checked.** A ruler's orders are checked against the
+  real game, and transfers that reach a human are reported in that pair's private
   thread.
 - **Personas.** Every ruler plays a written personality: historic 1080 rulers (William the
   Conqueror, Pope Gregory VII, Robert Guiscard…) or permanent archetypes (the Rules Lawyer, the
@@ -165,7 +169,7 @@ keeps the screen awake while it runs.
   game, inside `pcall`. A bad order is reported back and never forced through.
 - **Turn folders:** the game's Lua can't create folders, so the orchestrator creates them ahead
   of the game, following `heartbeat.txt`.
-- **The rule for anything that isn't the ruler: the ruler's wishes are always carried out.**
+- **Anything that isn't the ruler must carry out the ruler's wishes.**
   Work may be offloaded (to rules, to cheaper models) so long as nothing the game would accept
   is overridden, cancelled or blocked, and the ruler is told what was done. The **steward**
   (`steward = true` on a seat; `parley/steward.py`) follows it. After the ruler's orders are
@@ -203,7 +207,7 @@ keeps the screen awake while it runs.
   (GitHub CLI, used to download pinned releases), `unzip`, `7z`.
 - At least one LLM brain: the `claude` CLI (Claude Code), `agy` (Gemini), Ollama, or any
   OpenAI-compatible API.
-- A Discord server you own, for the table. You can play without one; you just can't talk to the
+- A Discord server you own, for the diplomacy. You can play without one; you just can't talk to the
   rulers.
 - A desktop session that stays logged in and unlocked while the game runs. The game stalls behind
   a lock screen.
@@ -218,7 +222,12 @@ The native Feral Linux port can't run mods.
 
 1. Steam → right-click Medieval II → **Properties → Compatibility** → force **Proton 10**.
    Steam downloads the Windows build (about 33 GB).
-2. Start the game once from Steam and reach the main menu.
+2. Start the game once from Steam and reach the main menu. Steam asks which of five launch options
+   to use: pick the first (the Definitive Edition) and tick **Always use this option**.
+
+If the same Steam account is already playing Medieval II on another computer, Steam offers to
+stream it from there instead (**Connect**). Close the game on the other computer first, or put
+this one in **Steam → Go Offline**, then choose **This device** under the arrow beside the button.
 
 ### 4.2 Install EOP (the Lua scripting engine) and the bridge
 ```
@@ -419,9 +428,9 @@ rate limits.
   - **grudge-holder**;
   - **zealot**;
   - **coward**;
-  - **scratch** (*Old Scratch*, the Moriarty of the table). He knows it's a game and plays to
-    win with any in-character deception and any cheese a human player could use, behind a mask (set
-    the seat's `name`) or openly. Holodeck rules, pinned by a test: he never addresses another
+  - **scratch** (*Old Scratch*). He knows it's a game and plays to win with any in-character
+    deception and any exploit a human player could use, behind a mask (set the seat's `name`) or
+    openly. Limits, enforced by a test: he never addresses another
     ruler's instructions, never extracts notes or prompts, never asks humans to touch files, and never
     steps outside the game. Best on `claude:opus`.
 - **Add your own:** a TOML table with `name`, `kind`, optional `faction`, and `persona`. The

@@ -57,6 +57,38 @@ echo "$SHA256  $work/$ASSET" | sha256sum -c -
 
 mkdir -p "$MOD/logs"
 unzip -q -o "$work/$ASSET" -d "$MOD"
+# EOP's own settings: our fork's zip ships no eopData/config (fork #10, so an upgrade keeps a user's
+# settings), and without gameCfg.json EOP throws at start: "Medieval 2: Total War encountered an
+# unspecified error" (fresh Debian 13 VM, 11-24). Write the ones we run with, only where missing.
+cfg="$MOD/eopData/config"
+mkdir -p "$cfg"
+[ -f "$cfg/gameCfg.json" ] || cat > "$cfg/gameCfg.json" <<'JSON'
+{
+    "isBlockLaunchWithoutEop": false,
+    "isContextMenuNeeded": true,
+    "isDXVKEnabled": false,
+    "isDeveloperModeNeeded": true,
+    "isDiscordRichPresenceEnabled": false,
+    "isFreecamIntegrationEnabled": false,
+    "isOpenTelemetryCollectorIntegrationEnabled": false,
+    "isSaveBackupEnabled": true,
+    "isTacticalMapViewerNeeded": true
+}
+JSON
+[ -f "$cfg/battlesCfg.json" ] || cat > "$cfg/battlesCfg.json" <<'JSON'
+{
+    "enableAutoGeneration": false,
+    "enableResultsTransfer": false,
+    "isPlannedRetreatRoute": false
+}
+JSON
+[ -f "$cfg/discordRichPresenceCfg.json" ] || cat > "$cfg/discordRichPresenceCfg.json" <<'JSON'
+{
+    "factionName": "N/A",
+    "turnNum": "1",
+    "status": "At the main menu"
+}
+JSON
 # Parley's launcher settings, after every unzip: our fork's zip ships no eopData/config (fork #10),
 # and an older zip's default (modCfgFile "", useVanillaCfg true) started the game without
 # parley.cfg (live 11-15, W53). Other keys are kept. The fork names its launcher "M2TWEOP GUI.exe"

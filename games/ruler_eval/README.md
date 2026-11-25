@@ -14,6 +14,6 @@ them.
 | run9-90-england | England | 90 | three towns, low money, war on two fronts |
 | run9-94-france | France | 94 | late game, steady state |
 
-Score seats with `just ruler-eval-fixed <seat spec>...` (e.g. `heretic:think agy:gemini-3.8-flash-low`):
-legal-order rate, answered or not, and time, per seat per scenario (runs/ruler-eval/). Outcome scoring
-beyond legality is still open.
+Score seats with `just ruler-eval-fixed <seat spec>...` (e.g. `heretic:think agy:gemini-3.8-flash-low`).
+For each seat and scenario it records the legal-order rate, whether the seat answered, and the time
+(runs/ruler-eval/). Scoring how good the orders are, beyond whether they are legal, is still open.
