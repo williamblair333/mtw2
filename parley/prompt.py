@@ -73,7 +73,7 @@ ORDER_HELP = {
     "build": '- "build": queue a building from a settlement\'s "can build" list. It costs its price when queued; a settlement builds one thing at a time. Never order what is already in its queue.\n'
              '- "repair": queue the repair of a damaged building in a settlement (from its damaged buildings list).',
     "recruit": ('- "recruit": a unit from a settlement\'s "can recruit" list. You pay now; it joins that garrison when '
-                'trained (usually next turn). Nobody recruits for you. "retrain" (a settlement) refills its damaged '
+                'trained (usually next turn). In a realm with a game AI, that AI recruits too (your report says what it trained and its upkeep); "game_ai_recruiting" with "recruiting": "off" stops it from your next turn, "on" lets it recruit again. "retrain" (a settlement) refills its damaged '
                 'garrison units whose type its pool still offers, for the missing share of the price; the men arrive '
                 'next turn. Bring damaged units into a settlement that can recruit their type first. "hire_mercenary" '
                 '(an army with a general, a unit from its "mercenaries for hire" list) pays now, takes one from the pool of the '
@@ -256,7 +256,8 @@ def game_recruits_line(report) -> str:
     recruit lists name it. Live 11-25: France's AI trained 175 units in 43 minutes while its ruler,
     told only that upkeep was 84% of costs, disbanded units to pay for them."""
     if not report.game_recruits:
-        return ""
+        return ("Your game AI's recruiting is off (your order): only your own recruits are trained."
+                if report.game_ai_recruiting == "off" else "")
     upkeep = {u.unit: u.upkeep for s in report.settlements for u in s.can_recruit if u.upkeep is not None}
     total = sum(r.count for r in report.game_recruits)
     known = [(r.count, upkeep[r.unit]) for r in report.game_recruits if r.unit in upkeep]
@@ -267,8 +268,10 @@ def game_recruits_line(report) -> str:
         add = sum(n * u for n, u in known)
         cost = (f"; they add {add} upkeep a turn" if len(known) == len(report.game_recruits)
                 else f"; those with a known price add {add} upkeep a turn")
+    switch = (' Order "game_ai_recruiting" with "recruiting": "off" to stop it.'
+              if report.game_ai_recruiting == "on" else "")
     return (f"Your game AI trained {total} unit{'s' if total != 1 else ''} in your settlements since your last "
-            f"turn (not your orders){cost}: {items}.")
+            f"turn (not your orders){cost}: {items}.{switch}")
 
 
 # live: a ruler read "strength 2494" as 2494 men and stormed a city with 54. Each section that prints

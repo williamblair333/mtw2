@@ -24,6 +24,7 @@ from parley.protocol import (
     Recruit,
     Retrain,
     SetTax,
+    GameAiRecruiting,
     Sabotage,
     Spy,
     CedeSettlement,
@@ -221,6 +222,9 @@ def _check(report: StateReport, order, gold_left: int) -> str:
                 return f"'{a}' already holds 20 units"
             if offer.cost > gold_left:
                 return f"treasury too low ({gold_left} left, needs {offer.cost})"
+        case GameAiRecruiting():
+            if report.human_slot:
+                return "no game AI acts for your realm: there is nothing to switch"
         case SetTax(settlement=s):
             if s not in owned:
                 return f"settlement '{s}' not owned"

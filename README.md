@@ -20,9 +20,10 @@ promises to them.
    game's normal rules apply: cost, movement points, building requirements, build time. When an
    order is refused, the ruler gets the reason.
 
-The bridge handles 27 kinds of order: moving, attacking and besieging; building, repairing,
-recruiting and retraining; ships, boarding and landing; tax, gold and diplomacy; and agent
-missions (spy, assassinate, sabotage, bribe, marry).
+The bridge handles 28 kinds of order: moving, attacking and besieging; building, repairing,
+recruiting and retraining; ships, boarding and landing; tax, gold and diplomacy; agent missions
+(spy, assassinate, sabotage, bribe, marry); and switching off the faction's own game AI's
+recruiting, so only the ruler raises troops.
 
 ## Status: it works, but setup is hard
 

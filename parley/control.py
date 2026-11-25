@@ -20,7 +20,7 @@ ORDER_AREA = {
     "move_army": "armies", "attack": "armies", "merge_armies": "armies", "merge_units": "armies", "disband": "armies",
     "board": "armies", "land": "armies", "blockade": "armies",
     "move_agent": "agents", "marry": "agents",
-    "build": "build", "repair": "build", "recruit": "recruit", "retrain": "recruit", "recruit_agent": "recruit", "hire_mercenary": "recruit", "set_tax": "taxes",
+    "build": "build", "repair": "build", "recruit": "recruit", "retrain": "recruit", "recruit_agent": "recruit", "hire_mercenary": "recruit", "set_tax": "taxes", "game_ai_recruiting": "recruit",
     "assassinate": "agents", "spy": "agents", "bribe": "agents", "sabotage": "agents",
 }
 

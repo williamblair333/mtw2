@@ -1446,6 +1446,7 @@ function M.report(fac, cfg)
         popups = fac.isPlayerControlled == 1 and M.take_popups() or nil,
         agent_results = M.take_agent_news(fac.name),
         game_recruits = M.take_game_recruits(fac.name),
+        game_ai_recruiting = fac.isPlayerControlled ~= 1 and M.ai_recruiting(fac.name) or nil,
         family = family, character_events = M.take_character_news(fac.name),
         news = M.take_faction_news(fac.name),
         income_parts = income_parts(fac),
@@ -3769,7 +3770,9 @@ function M.on_turn_start(fac)
         log("turn start " .. fac.name .. ": apply_orders")
     end
     ordered = {}
+    pcall(M.release_pools, fac)  -- pools held from the AI come back before the ruler's orders
     if apply_orders(fac, cfg, turn, not waits) then pcall(M.keep_sieges, fac) end
+    if not cfg.freeze[fac.name] then pcall(M.hold_pools, fac) end  -- a frozen AI's are held at its unfreeze
     if human then log("turn start " .. fac.name .. ": done") end
 end
 
@@ -8046,6 +8049,95 @@ function M.on_unit_trained(e)
     M.game_recruits[faction] = t
 end
 
+-- A ruler may switch its game AI's recruiting off (order "game_ai_recruiting": "off"). The AI queues
+-- a unit only from a town's recruitment pool, so while the AI acts (from its unfreeze to the
+-- faction's next turn start) the bridge holds the faction's pools at 0, and gives them back, with
+-- what regrew meanwhile, before the ruler's next orders. Both files sit beside training.json, so a
+-- reload loses no held pool. Live 11-25: France's AI trained 175 units in 43 minutes while its
+-- ruler disbanded units to pay upkeep (84% of its costs).
+function M.game_file(name)
+    local cfg = config()
+    return root .. (cfg and ("/" .. cfg.game_id) or "") .. "/" .. name
+end
+
+function M.read_json_file(path)
+    local ok, t = pcall(json.decode, read_file(path) or "{}")
+    return (ok and type(t) == "table") and t or {}
+end
+
+function M.ai_recruiting(faction)
+    return M.read_json_file(M.game_file("ai_recruiting.json"))[faction] == "off" and "off" or "on"
+end
+
+function M.each_pool(fac, fn)
+    for i = 0, (fac.settlementsNum or 0) - 1 do
+        local s = fac:getSettlement(i)
+        if s then
+            for j = 0, (s.recruitmentPoolCount or 0) - 1 do
+                local p = s:getSettlementRecruitmentPool(j)
+                if p then fn(s, p) end
+            end
+        end
+    end
+end
+
+function M.hold_pools(fac)
+    if M.ai_recruiting(fac.name) ~= "off" then return end
+    local path = M.game_file("pool_hold.json")
+    local all = M.read_json_file(path)
+    if all[fac.name] then return end  -- held already this turn
+    local held, n = {}, 0
+    M.each_pool(fac, function(s, p)
+        local v = tonumber(p.availablePool) or 0
+        if v > 0 then
+            held[s.name] = held[s.name] or {}
+            held[s.name][tostring(p.eduIndex)] = v
+            n = n + v
+        end
+    end)
+    all[fac.name] = held
+    atomic_write(path, encode(all))  -- written before the pools are emptied: a crash between loses nothing
+    M.each_pool(fac, function(s, p)
+        if held[s.name] and held[s.name][tostring(p.eduIndex)] then p.availablePool = 0 end
+    end)
+    log(string.format("%s: game AI recruiting off (the ruler's order): held %.1f units of recruitment pools "
+        .. "until its next turn", fac.name, n))
+end
+
+function M.release_pools(fac)
+    local path = M.game_file("pool_hold.json")
+    local all = M.read_json_file(path)
+    local held = all[fac.name]
+    if not held then return end
+    all[fac.name] = nil
+    atomic_write(path, encode(all))  -- cleared first: a crash between can lose a pool, never double it
+    local back = 0
+    M.each_pool(fac, function(s, p)
+        local v = held[s.name] and held[s.name][tostring(p.eduIndex)]
+        if v then
+            local now = tonumber(p.availablePool) or 0
+            -- a pool already at or above what was held was never emptied (the game stopped between
+            -- the file and the write): leave it as it is
+            if now < v then p.availablePool = now + v; back = back + v end
+        end
+    end)
+    log(string.format("%s: recruitment pools given back before its orders (%.1f units)", fac.name, back))
+end
+
+function M.game_ai_recruiting_order(fac, o)
+    if fac.isPlayerControlled == 1 then return "no game AI acts for your realm: there is nothing to switch" end
+    local v = o.recruiting == "off" and "off" or (o.recruiting == "on" and "on" or nil)
+    if not v then return "recruiting must be \"on\" or \"off\"" end
+    local path = M.game_file("ai_recruiting.json")
+    local all = M.read_json_file(path)
+    all[fac.name] = v
+    atomic_write(path, encode(all))
+    log(fac.name .. ": game AI recruiting " .. v .. " (the ruler's order)")
+    return nil
+end
+
+handlers.game_ai_recruiting = M.game_ai_recruiting_order
+
 function M.take_game_recruits(faction)
     local t = M.game_recruits[faction]
     M.game_recruits[faction] = nil
@@ -8426,6 +8518,7 @@ function M.release_frozen(now, force)
             .. "the game AI moves none of them", ft.fac.name, now - ft.since, stacks, agents))
     end
     M.frozen_turn = nil
+    pcall(M.hold_pools, ft.fac)  -- before the AI moves: a ruler who switched its recruiting off
     pcall(function()
         ft.fac.freezeFactionAI = 0
         log(ft.fac.name .. ": turn still running after " .. (now - ft.since)

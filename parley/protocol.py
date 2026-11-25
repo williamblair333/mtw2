@@ -316,6 +316,7 @@ class StateReport(BaseModel):
     # recruiting (a ruler's own recruits never use the game's queue). Live 11-25: France's AI
     # trained 175 units in 43 minutes while its ruler disbanded to pay upkeep, unaware
     game_recruits: list[GameRecruit] = []
+    game_ai_recruiting: str | None = None  # "on"/"off" for a realm with a game AI (your order sets it)
     family: list[Person] = []  # every named character on record, the dead included
     character_events: list[str] = []  # what befell your characters since the last report
     news: list[str] = []  # what the game told the realm by message: missions, riots, treaties, crusades
@@ -453,6 +454,12 @@ class SetTax(BaseModel):
     level: TaxLevel
 
 
+class GameAiRecruiting(BaseModel):
+    """Switch your game AI's own recruiting off or on (a ruler-run realm's AI recruits too)."""
+    type: Literal["game_ai_recruiting"] = "game_ai_recruiting"
+    recruiting: Literal["on", "off"]
+
+
 class MoveArmy(BaseModel):
     """Move an army toward a map tile (it goes as far as its moves allow this turn)."""
     type: Literal["move_army"] = "move_army"
@@ -533,7 +540,7 @@ class Blockade(BaseModel):
 
 Order = Annotated[
     Union[SendGold, CedeSettlement, SetStance, MarchOn, Besiege, Withdraw,
-          Assassinate, Spy, Bribe, Sabotage, Build, Repair, Recruit, RecruitAgent, HireMercenary, Retrain, SetTax, MoveArmy, Attack,
+          Assassinate, Spy, Bribe, Sabotage, Build, Repair, Recruit, RecruitAgent, HireMercenary, Retrain, SetTax, GameAiRecruiting, MoveArmy, Attack,
           MoveAgent, Marry, MergeArmies, MergeUnits, Disband, Board, Land, Blockade],
     Field(discriminator="type"),
 ]
