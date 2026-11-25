@@ -206,7 +206,7 @@ def _army(a: Army, hire_seen: dict[str, str] | None = None) -> str:
         where += f", besieging {a.besieging} (turn {a.siege_turns or 0}: {built}{left}{can})"
     if a.id == f"garrison:{a.in_settlement}" and not a.besieging:
         where = ""  # the id already names the town (live 11-23: 59 garrisons ended "in <town>")
-    line = f"- {a.id}: {a.units} units{men} (strength rating {a.strength}, not men){', ' + where if where else ''}{leader}"
+    line = f"- {a.id}: {a.units} units{men}, str {a.strength}{', ' + where if where else ''}{leader}"
     if a.can_hire:
         offers = "; ".join(
             f"{m.unit} {m.cost}, {m.available}/{m.max or m.available}, exp {m.exp}" for m in a.can_hire)
@@ -251,9 +251,23 @@ def _turns(n: int) -> str:
     return f"{n} turn" if n == 1 else f"{n} turns"
 
 
+# live: a ruler read "strength 2494" as 2494 men and stormed a city with 54. Each section that prints
+# "str N" defines it in its heading, once (11-25: "(strength rating N, not men)" 113 times, 3.5 KB)
+STR_NOTE = "str N: the game's strength rating, not a head count"
+
+
+def _garrison_as_town(a, s, line: str) -> bool:
+    """A garrison whose short line says only what its town's line already says: no general, no siege,
+    no mercenaries, no merge note, and the same units, men and strength."""
+    men = a.men or sum(t.soldiers for t in a.troops)
+    return (s is not None and a.id == f"garrison:{s.id}" and not a.leader and not a.besieging
+            and not a.can_hire and "\n" not in line and (s.garrison_units or s.garrison_men)
+            and (s.garrison_units, s.garrison_men, s.garrison_strength) == (a.units, men, a.strength))
+
+
 def _garrison(s) -> str:
     if s.garrison_units or s.garrison_men:
-        return f"garrison {s.garrison_units} units, {s.garrison_men} men (strength rating {s.garrison_strength}, not men)"
+        return f"garrison {s.garrison_units} units, {s.garrison_men} men, str {s.garrison_strength}"
     if s.garrison_strength:
         return f"garrison strength rating {s.garrison_strength} (men unknown; not a head count)"
     return "garrison none"
@@ -372,8 +386,8 @@ def _settlement(s, areas: tuple[str, ...], garrison: list | None = None,
     if s.siege:
         g = s.siege
         head = ", ".join(f"{n} {w}" for n, w in ((g.units, "units"), (g.men, "men")) if n)
-        tail = f"(strength rating {g.strength}, not men)" if g.strength is not None else ""
-        size = f"{head} {tail}".strip()
+        tail = f"str {g.strength}" if g.strength is not None else ""
+        size = ", ".join(x for x in (head, tail) if x)
         line += ("\n  UNDER SIEGE by " + (f"{g.by} ({g.faction})" if g.by else "an enemy army")
                  + (f", {size}" if size else "")
                  + (f", for {_turns(g.turns)} so far" if g.turns is not None else "")
@@ -658,14 +672,25 @@ def state_summary(report: StateReport, areas: tuple[str, ...] = PRESETS["ruler"]
         if lookups:
             settlement_lines.insert(0, LOOKUP_LEGEND)
         all_lines = (table_lines + settlement_lines) if table_lines else settlement_lines
-        parts.append("YOUR SETTLEMENTS\n" + "\n".join(all_lines))
+        parts.append("YOUR SETTLEMENTS\n" + "\n".join([f"({STR_NOTE})"] + all_lines))
     else:
         parts.append("YOUR SETTLEMENTS\n- none")
     hire_seen: dict[str, str] = {}  # offers text -> the first army that printed it
-    parts.append("YOUR ARMIES (a strength rating is not a head count: a general's bodyguard of a few dozen "
-                 "men rates in the thousands. Count men; walls need siege equipment before you storm)\n" + ("\n".join(_own_army(a, areas, report.settlements, hire_seen,
-                                                        brief=lookups and a.id.startswith("garrison:"))
-                                              for a in report.armies) or "- none"))
+    towns = {s.id: s for s in report.settlements}
+    army_lines, in_town = [], []
+    for a in report.armies:
+        line = _own_army(a, areas, report.settlements, hire_seen,
+                         brief=lookups and a.id.startswith("garrison:"))
+        if lookups and _garrison_as_town(a, towns.get(a.in_settlement), line):
+            in_town.append(a.in_settlement)  # live 11-25: 56 such lines (~3.5 KB) repeated the town's
+            continue                          # own "garrison N units, M men" word for word
+        army_lines.append(line)
+    if in_town:
+        army_lines.append("- garrison:<town> for " + ", ".join(in_town) + ": each one's units, men and "
+                          "strength are on its town's line in YOUR SETTLEMENTS (no general, no other notes)")
+    parts.append(f"YOUR ARMIES ({STR_NOTE}: a general's bodyguard of a few dozen "
+                 "men rates in the thousands. Count men; walls need siege equipment before you storm)\n"
+                 + ("\n".join(army_lines) or "- none"))
     if report.agent_results:
         parts.append("YOUR AGENTS' MISSIONS SINCE YOUR LAST TURN (from the game itself)\n"
                      + "\n".join(f"- {a}" for a in report.agent_results))
@@ -704,7 +729,7 @@ def state_summary(report: StateReport, areas: tuple[str, ...] = PRESETS["ruler"]
                  "not stop its armies: judge it by what its armies do\n"
                  + (_factions(report, ruled) or "- none"))
     parts.append(SIGHT_NOTE)
-    parts.append("FOREIGN ARMIES IN SIGHT\n" + ("\n".join(map(_foreign_army, report.visible_enemies)) or "- none"))
+    parts.append(f"FOREIGN ARMIES IN SIGHT\n({STR_NOTE})\n" + ("\n".join(map(_foreign_army, report.visible_enemies)) or "- none"))
     parts.append("FOREIGN AGENTS IN SIGHT\n" + (_foreign_agents(report.seen_agents) or "- none"))
     if report.crossings:
         parts.append("LAND CROSSINGS NEAR YOU (an army walks across the water here, no ships needed: "
@@ -720,11 +745,11 @@ def state_summary(report: StateReport, areas: tuple[str, ...] = PRESETS["ruler"]
                                  for r in shown)
                      + (f"\n(and {len(report.resources) - len(shown)} farther ones)"
                         if len(report.resources) > len(shown) else ""))
-    parts.append("SETTLEMENTS NEAR YOU\n" + ("\n".join(
+    parts.append(f"SETTLEMENTS NEAR YOU\n({STR_NOTE})\n" + ("\n".join(
         f"- {s.id} ({s.faction}): {_garrison(s)}, at ({s.x},{s.y}){_away(s.distance)}{_by_sea(s)}"
         for s in report.nearby_settlements) or "- none"))
     if report.remembered:
-        parts.append("SETTLEMENTS SEEN BEFORE (out of sight now, as last seen; the rest of the map is "
+        parts.append(f"SETTLEMENTS SEEN BEFORE (out of sight now, as last seen; the rest of the map is "
                      "unexplored)\n" + "\n".join(
             f"- {s.id} ({s.faction}): {_garrison(s)}, at ({s.x},{s.y}), seen turn {s.seen_turn}"
             for s in report.remembered))
@@ -883,7 +908,7 @@ def _foreign_army(a: Army) -> str:
     if a.aboard:
         where = f"at sea aboard {a.aboard}, {where}"
     men = f", {a.men} men" if a.men else ""
-    line = f"- {who}: {a.units} units{men} (strength rating {a.strength}, not men), {where}{_away(a.distance)}"
+    line = f"- {who}: {a.units} units{men}, str {a.strength}, {where}{_away(a.distance)}"
     if a.troops:
         line += "\n  troops: " + _foreign_troops(a.troops)
         if a.units > len(a.troops):
