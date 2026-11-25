@@ -64,8 +64,8 @@ gets a *game popups* list in its next report, saying what kind each was and what
 EOP can't read a scroll's text.
 
 If a popup still gets stuck:
-- Battles: autoplay turns on the game's "auto-resolve all battles" and clicks **Auto-resolve** on
-  the pre-battle panel.
+- Battles: autoplay turns on the game's "auto-resolve all battles" and presses **Auto-resolve** on
+  the pre-battle panel with the game's own script command.
 - A stuck turn: if your turn doesn't end a minute after the click, or an AI's turn sits still for two
   minutes, it tries the known popup buttons one at a time and logs `stuck?` in
   `parley_turns/parley_bridge.log`.
@@ -534,9 +534,9 @@ what is enforceable.
 
 ## 11. Known limitations
 
-- **Two kinds of popup still need a mouse click:** the papal election vote, and family offers (a
-  marriage or adoption your faction must accept or decline). Our scripts click them from a
-  screenshot, which works only at one screen size. Help wanted (`CONTRIBUTING.md`).
+- **No-click play needs our EOP fork.** Every popup is answered from Lua since 2026-11-22, but
+  some of it uses bindings only our fork has. With an upstream EOP build, some scrolls stop the
+  turn until you answer them yourself.
 - **Cheap models play poorly.** Strong models rule well but cost money each turn. Small and local
   models leave armies idle and forget their plans.
 - **Sight is a fixed radius, not the game's fog of war.** EOP tells us which tiles a faction has
@@ -553,7 +553,7 @@ what is enforceable.
 
 ## 12. Development
 
-- `just test`: about 1,600 tests, including the **real Lua bridge running in LuaJIT** (via
+- `just test`: about 2,100 tests, including the **real Lua bridge running in LuaJIT** (via
   `lupa`) against a fake of the EOP API (`tests/lua/fake_game.lua`). No game needed.
 - `just qa <suite>`: the **test bench** in the real game. About 100 scripted cases in
   `games/qa/*.toml` each set up a situation (spawn an army, teleport a spy), give an order and
@@ -574,7 +574,8 @@ what is enforceable.
 ## 13. Roadmap
 
 See `ROADMAP.md`. In order:
-1. **No clicks at all:** every game action through EOP, so it runs the same on any screen.
+1. **No clicks at all** (done 2026-11-22): every game action goes through EOP, so it runs the
+   same on any screen.
 2. **Cheap rulers that play well:** prompts and rules until a small model holds its own over a
    campaign.
 3. **A one-command installer**, then games with friends.

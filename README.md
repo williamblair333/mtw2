@@ -32,8 +32,10 @@ This is a hobby project, not a finished product. Expect to read log files.
 - Full campaigns with several LLM rulers, on Linux, through Steam's Proton. Our test campaign
   passed turn 5,000 and once ran 217 turns in a row with nobody touching it.
 - The Discord table: one public channel per game, private threads, replies between turns.
-- Game pop-ups (marriage and adoption offers, the papal vote, notices) are answered through EOP,
-  with no mouse click. A click from a screenshot is kept only as a fallback.
+- No screen clicks. Every game pop-up (marriage and adoption offers, the papal vote and its
+  results, notices, minimized messages) is answered through EOP. The screen-click code was
+  deleted on 2026-11-22. The one thing done from outside the game is closing Windows' error box
+  after a crash, so the game can be relaunched.
 - Tests: a bench of about 100 scripted cases, each of which sets up a situation in the running
   game, gives an order and checks the result; and 2,123 offline tests, which run the real bridge
   against a fake game.
