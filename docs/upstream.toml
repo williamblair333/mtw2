@@ -1,0 +1,39 @@
+# What we asked or offered upstream, and where we stand. scripts/upstream_check.py compares this with
+# GitHub before every public publish (preflight gate upstream-current): an item we solved must not stay
+# open upstream, and every open item of ours must be listed here.
+# Why: 11-25 an EOP developer answered issue #91 (papal vote and family offers from Lua) in Discord;
+# we had solved both by 11-20 and never said so upstream.
+#
+# state: "waiting" (we still need it from upstream) or "solved" (we no longer need an answer:
+# comment where we got to, then close it upstream)
+
+[[item]]
+repo = "EOP-Labs/M2TWEOP-library"
+number = 88
+kind = "issue"
+ask = "buildingsQueue:getBuildingInQueue off by one on master"
+state = "waiting"
+note = "fix offered in PR #90; our fork carries it"
+
+[[item]]
+repo = "EOP-Labs/M2TWEOP-library"
+number = 89
+kind = "issue"
+ask = "Lua bindings: active missions, hiring mercenaries, diplomatic proposals, games/races, agent recruit cost, siege equipment"
+state = "waiting"
+note = "Fynn (EOP Discord, 11-25): most should be possible; diplomatic proposals the hardest (inlined in the exe)"
+
+[[item]]
+repo = "EOP-Labs/M2TWEOP-library"
+number = 90
+kind = "pr"
+ask = "fix getBuildingInQueue off-by-one"
+state = "waiting"
+
+[[item]]
+repo = "EOP-Labs/M2TWEOP-library"
+number = 91
+kind = "issue"
+ask = "casting a papal vote and answering family-offer scrolls from Lua"
+state = "solved"
+note = "offers pressed by element 11-15; papal vote by element 11-20 (#659); results scroll by its close gadget (#693); unnamed parts need the fork's getOpenUiElements, readBytes and activate()"
