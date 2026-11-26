@@ -141,6 +141,12 @@ standards:
     why: the community's first contact is the installer
     status: partial
     evidence: "scripts/install_eop.sh ran end to end on a fresh Debian 13 VM 11-25, to a ruler's turn (#722 found and fixed). PRODUCT.md verify block passes first_run_gate.py. the main machine VM starts: Refinery ram-gate"
+  - id: upstream-current
+    area: release
+    bar: Every issue or PR we opened upstream says where we stand; one we solved ourselves is answered and closed within a day
+    why: an open-source contributor never leaves a maintainer answering a question already settled (11-25, EOP issue #91)
+    status: partial
+    evidence: "scripts/upstream_check.py (gate upstream-current before every public publish; register docs/upstream.toml). #91 still to close: William posts"
   - id: versioned-releases
     area: release
     bar: Releases are versioned, tagged and have notes

@@ -5,6 +5,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### 2026-11-24/26: clean install proven, papal-vote crash fixed, game AI recruiting reported and switchable
+
+#### Added
+- Order `game_ai_recruiting` on/off: with it off, the bridge holds the realm's recruitment pools at 0 from the AI's unfreeze to the faction's next turn start (`pool_hold.json`), then gives them back (#734).
+- The prompt reports what the faction's own game AI trained since the last turn and the upkeep it adds, from EOP's `onUnitTrained` (#732).
+- `docs/upstream.toml` and `scripts/upstream_check.py`: our upstream issues and PRs, checked before every public publish (preflight gate `upstream-current`) (#736).
+
+#### Fixed
+- Turn-4877 crash: an offer's "accept" pressed a vote button on the papal results scroll; class guards in `open_choices`, `choice_buttons` and `press_choice` (#728, `tests/test_choice_not_papal.py`).
+- `scripts/install_eop.sh` writes EOP's config files when missing; proven on a fresh Debian 13 VM (#722).
+- France's prompt under 60 KB: garrisons folded into their town's line, "str N" defined once per section (#730).
+
+#### Changed
+- Docs rewritten in plain wording for players; stale screen-click claims removed (#724, #725).
+- mtw2's VM memory gate retired; the Refinery's ram-gate covers it (#727).
+
 ### 2026-11-22/23: smaller prompts, papal scroll closed by element, three watch wakes fixed at the cause
 
 #### Fixed

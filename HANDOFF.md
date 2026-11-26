@@ -1,5 +1,30 @@
 # Handoff
 
+## 2026-11-26 (06:00): campaign stopped; tc desktop focus theft; waiting on the community
+
+**tc: campaign `scratch` stopped on William's word at turn ~5380** ("I thought we were good for now").
+Turn loop, crash-watch and resume-at-boot are off; `paused.txt` is in place; the game window is still
+open. `just play scratch` (plus `just crash-watch`, `just resume-at-boot scratch`) starts it again.
+Don't restart the campaign or its watch until William asks for more live testing.
+
+- **Crash 05:33, turn 5379** (`runs/crashes/2026-11-26-053336`): eip in the heap (1d1fea74), the saved
+  stack holds pixel values, no game frames. Suspected cause: KDE restored William's session at the 03:00
+  boot, and a Claude Code session started at 04:20 in its Konsole took focus from the game 13 times;
+  each crash-watch focus grab made the game reload its campaign map (5 reloads in 6 min before the
+  crash). One crash, so an inference. The crash-watch relaunch then failed (main menu, no save load in
+  240 s); `just relaunch-game` by hand worked at 05:41. Fix applied: KDE on tc now starts with an
+  empty session (`~/.config/ksmserverrc` loginMode=emptySession, Plasma 5). Memory `tc-focus-theft`.
+- **Limit-pause #666 proven live 11-25:** the Claude quota ran out at 14:11; the campaign paused and
+  resumed by itself at 16:45.
+- **Upstream:** Fynn [AGO] answered the call to arms in Discord (press any button by name via
+  `getUiElement`/`execute`; most #89 asks possible; diplomatic proposals hardest). EOP #91 is solved
+  on our side but still open: William posts the drafted comment and closes it. Until then the
+  `upstream-current` gate refuses public publishes; then set #91's state in `docs/upstream.toml` and
+  push the pending public refresh (#734, #736).
+- **Not yet proven live:** #728 (needs a papal election during an offer) and #734's hold (needs a
+  ruler's order; log line "game AI recruiting off (the ruler's order): held").
+- **Next:** check GitHub Discussions #4, issues and stars; ruler play quality when testing resumes.
+
 ## 2026-11-25 (09:00): clean install proven; docs plain and public; call to arms ready
 
 **Running on tc:** campaign `scratch` from turn 4826 on `main` (1507a71), bridge 158f76ad6d20, rulers
